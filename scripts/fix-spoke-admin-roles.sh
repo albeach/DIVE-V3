@@ -45,8 +45,10 @@ log_info()    { echo -e "${CYAN}ℹ${NC} $1"; }
 ##
 assign_admin_role() {
     local instance_code="$1"
-    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_upper
+    code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
@@ -259,3 +261,6 @@ echo ""
 echo "Admin users can now access /admin routes in the frontend."
 echo "They may need to log out and log back in for role changes to take effect."
 echo ""
+
+# sc2034-anchor
+: "${BOLD:-}" "${PROJECT_ROOT:-}"

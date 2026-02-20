@@ -205,6 +205,7 @@ if [ -z "${NATO_COUNTRIES_LOADED:-}" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/d
     fi
 
     if [ -n "$_NATO_DB_PATH" ] && [ -f "$_NATO_DB_PATH" ]; then
+        # shellcheck source=../nato-countries.sh
         source "$_NATO_DB_PATH"
         NATO_COUNTRIES_LOADED=1  # Don't export - just use as local flag
     fi
@@ -333,14 +334,18 @@ if [ -z "${INSTANCE_PRIVATE_IP:-}" ]; then
         -H "X-aws-ec2-metadata-token-ttl-seconds: 300" -m 2 2>/dev/null || echo "")
     if [ -n "$_imds_token" ]; then
         # IMDSv2 (required on newer AWS instances)
-        export INSTANCE_PRIVATE_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
+        INSTANCE_PRIVATE_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
             -m 2 http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null || echo "")"
-        export INSTANCE_PUBLIC_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
+        export INSTANCE_PRIVATE_IP
+        INSTANCE_PUBLIC_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
             -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+        export INSTANCE_PUBLIC_IP
     elif curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
         # IMDSv1 fallback
-        export INSTANCE_PRIVATE_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/local-ipv4)"
-        export INSTANCE_PUBLIC_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+        INSTANCE_PRIVATE_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/local-ipv4)"
+        export INSTANCE_PRIVATE_IP
+        INSTANCE_PUBLIC_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+        export INSTANCE_PUBLIC_IP
     fi
     unset _imds_token
 fi
@@ -531,7 +536,8 @@ dive_get_provisioned_spokes() {
     if [ -z "$spokes" ] && [ -d "${DIVE_ROOT}/instances" ]; then
         for dir in "${DIVE_ROOT}/instances"/*/; do
             [ -d "$dir" ] || continue
-            local code=$(basename "$dir")
+            local code
+            code=$(basename "$dir")
             [ "$code" = "usa" ] && continue
             [[ "$code" == .* ]] && continue
             if [ -f "${dir}.env" ] || [ -f "${dir}docker-compose.yml" ]; then
@@ -951,10 +957,12 @@ check_certs() {
         hostnames="$hostnames *.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
     fi
 
-    # shellcheck disable=SC2086
+    local -a hostnames_args=()
+    local _hostname
+    read -r -a hostnames_args <<<"$hostnames"
     if mkcert -key-file "$cert_dir/key.pem" \
               -cert-file "$cert_dir/certificate.pem" \
-              $hostnames 2>/dev/null; then
+              "${hostnames_args[@]}" 2>/dev/null; then
         chmod 644 "$cert_dir/key.pem" "$cert_dir/certificate.pem"
         log_success "Hub certificates generated to $cert_dir"
         _sync_mkcert_ca_to_hub
@@ -1160,8 +1168,10 @@ spoke_config_get() {
     local field="$2"
     local default="${3:-}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Load port assignments from SSOT
     eval "$(get_instance_ports "$code_upper")"
@@ -1288,4 +1298,3 @@ json_get_field() {
 
 # Ensure DIVE_ROOT is set when common.sh is sourced
 ensure_dive_root
-

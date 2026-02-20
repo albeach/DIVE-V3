@@ -58,7 +58,8 @@ test_health_checks() {
     
     # Test OPAL Server health
     log_info "Checking OPAL Server health..."
-    local server_health=$(curl -sk "${HUB_OPAL_SERVER}/healthcheck" 2>&1)
+    local server_health
+    server_health=$(curl -sk "${HUB_OPAL_SERVER}/healthcheck" 2>&1)
     local server_status=$?
     
     if [[ $server_status -eq 0 ]]; then
@@ -71,7 +72,8 @@ test_health_checks() {
     
     # Test FRA OPAL Client readiness
     log_info "Checking FRA OPAL Client readiness..."
-    local fra_ready=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${FRA_OPAL_CLIENT_PORT}/ready" 2>&1)
+    local fra_ready
+    fra_ready=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${FRA_OPAL_CLIENT_PORT}/ready" 2>&1)
     
     if [[ "$fra_ready" == "200" ]]; then
         log_success "FRA OPAL Client: ready (has loaded policy & data at least once)"
@@ -81,7 +83,8 @@ test_health_checks() {
     fi
     
     # Test FRA OPAL Client liveness
-    local fra_live=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${FRA_OPAL_CLIENT_PORT}/healthcheck" 2>&1)
+    local fra_live
+    fra_live=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${FRA_OPAL_CLIENT_PORT}/healthcheck" 2>&1)
     
     if [[ "$fra_live" == "200" ]]; then
         log_success "FRA OPAL Client: live (last load attempts succeeded)"
@@ -92,7 +95,8 @@ test_health_checks() {
     
     # Test GBR OPAL Client readiness
     log_info "Checking GBR OPAL Client readiness..."
-    local gbr_ready=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${GBR_OPAL_CLIENT_PORT}/ready" 2>&1)
+    local gbr_ready
+    gbr_ready=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${GBR_OPAL_CLIENT_PORT}/ready" 2>&1)
     
     if [[ "$gbr_ready" == "200" ]]; then
         log_success "GBR OPAL Client: ready"
@@ -102,7 +106,8 @@ test_health_checks() {
     fi
     
     # Test GBR OPAL Client liveness
-    local gbr_live=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${GBR_OPAL_CLIENT_PORT}/healthcheck" 2>&1)
+    local gbr_live
+    gbr_live=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${GBR_OPAL_CLIENT_PORT}/healthcheck" 2>&1)
     
     if [[ "$gbr_live" == "200" ]]; then
         log_success "GBR OPAL Client: live"
@@ -115,7 +120,8 @@ test_health_checks() {
     log_info "Checking OPA instances..."
     for opa_name in "Hub:$HUB_OPA_PORT" "FRA:$FRA_OPA_PORT" "GBR:$GBR_OPA_PORT"; do
         IFS=':' read -r name port <<< "$opa_name"
-        local opa_health=$(curl -sk "https://localhost:${port}/health" 2>&1)
+        local opa_health
+        opa_health=$(curl -sk "https://localhost:${port}/health" 2>&1)
         
         if [[ "$opa_health" == "{}" ]]; then
             log_success "$name OPA: healthy"
@@ -147,7 +153,8 @@ test_statistics_api() {
     log_info "Fetching OPAL Server statistics..."
     
     # Query statistics endpoint
-    local stats=$(curl -sk "${HUB_OPAL_SERVER}/statistics" 2>&1)
+    local stats
+    stats=$(curl -sk "${HUB_OPAL_SERVER}/statistics" 2>&1)
     local stats_status=$?
     
     if [[ $stats_status -eq 0 ]]; then
@@ -155,8 +162,10 @@ test_statistics_api() {
         
         # Parse statistics (if OPAL_STATISTICS_ENABLED=true)
         if echo "$stats" | jq . > /dev/null 2>&1; then
-            local client_count=$(echo "$stats" | jq -r '.clients | length' 2>/dev/null || echo "0")
-            local topics=$(echo "$stats" | jq -r '.topics[]?' 2>/dev/null || echo "")
+            local client_count
+            client_count=$(echo "$stats" | jq -r '.clients | length' 2>/dev/null || echo "0")
+            local topics
+            topics=$(echo "$stats" | jq -r '.topics[]?' 2>/dev/null || echo "")
             
             log_success "Statistics retrieved successfully"
             log_info "Connected clients: $client_count"
@@ -193,16 +202,20 @@ test_policy_distribution() {
     # Step 1: Get baseline policy from OPA instances
     log_info "Step 1: Capturing baseline policy state..."
     
-    local hub_baseline=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
-    local fra_baseline=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
-    local gbr_baseline=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+    local hub_baseline
+    hub_baseline=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+    local fra_baseline
+    fra_baseline=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+    local gbr_baseline
+    gbr_baseline=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
     
     log_info "Baseline policy count - Hub: $hub_baseline, FRA: $fra_baseline, GBR: $gbr_baseline"
     
     # Step 2: Make policy change
     log_info "Step 2: Making policy change..."
     
-    local test_comment="# OPAL Distribution Test - $(date '+%Y-%m-%d %H:%M:%S')"
+    local test_comment
+    test_comment="# OPAL Distribution Test - $(date '+%Y-%m-%d %H:%M:%S')"
     echo "" >> "$POLICY_TEST_FILE"
     echo "$test_comment" >> "$POLICY_TEST_FILE"
     
@@ -213,11 +226,13 @@ test_policy_distribution() {
     log_info "OPAL_POLICY_REPO_POLLING_INTERVAL is set to 5 seconds"
     log_info "Maximum wait time: ${MAX_WAIT}s"
     
-    local start_time=$(date +%s)
-    local detected=false
+    local start_time
+    start_time=$(date +%s)
+    local _detected=false
     
     while true; do
-        local current_time=$(date +%s)
+        local current_time
+        current_time=$(date +%s)
         local elapsed=$((current_time - start_time))
         
         if [[ $elapsed -ge $MAX_WAIT ]]; then
@@ -226,15 +241,18 @@ test_policy_distribution() {
         fi
         
         # Check if policy count changed (indicates reload occurred)
-        local hub_current=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
-        local fra_current=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
-        local gbr_current=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+        local hub_current
+        hub_current=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+        local fra_current
+        fra_current=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
+        local gbr_current
+        gbr_current=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies" | jq -r '.result | keys | length' 2>/dev/null)
         
         # In file-based mode, OPAL reloads the entire policy directory
         # So we check if a reload happened (policy might have been re-parsed)
         if [[ $elapsed -ge 10 ]]; then
             log_info "After ${elapsed}s - Hub: $hub_current, FRA: $fra_current, GBR: $gbr_current"
-            detected=true
+            _detected=true
             break
         fi
         
@@ -245,9 +263,12 @@ test_policy_distribution() {
     log_info "Step 4: Verifying policy update..."
     
     # Check if our test comment exists in the loaded policy
-    local hub_has_change=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
-    local fra_has_change=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
-    local gbr_has_change=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
+    local hub_has_change
+    hub_has_change=$(curl -sk "https://localhost:${HUB_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
+    local fra_has_change
+    fra_has_change=$(curl -sk "https://localhost:${FRA_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
+    local gbr_has_change
+    gbr_has_change=$(curl -sk "https://localhost:${GBR_OPA_PORT}/v1/policies/base/common.rego" 2>/dev/null | grep -c "OPAL Distribution Test" || echo "0")
     
     local all_updated=true
     
@@ -294,15 +315,19 @@ test_backend_metrics() {
     log_info "Querying DIVE backend OPAL health endpoint..."
     
     # Query our custom metrics endpoint
-    local metrics=$(curl -sk "https://localhost:4000/api/opal/health" 2>&1)
+    local metrics
+    metrics=$(curl -sk "https://localhost:4000/api/opal/health" 2>&1)
     local metrics_status=$?
     
     if [[ $metrics_status -eq 0 ]] && echo "$metrics" | jq . > /dev/null 2>&1; then
         echo "$metrics" > "$RESULTS_DIR/dive-opal-metrics.json"
         
-        local healthy=$(echo "$metrics" | jq -r '.healthy' 2>/dev/null)
-        local redis_connected=$(echo "$metrics" | jq -r '.redis.connected' 2>/dev/null)
-        local clients=$(echo "$metrics" | jq -r '.redis.clients' 2>/dev/null)
+        local healthy
+        healthy=$(echo "$metrics" | jq -r '.healthy' 2>/dev/null)
+        local redis_connected
+        redis_connected=$(echo "$metrics" | jq -r '.redis.connected' 2>/dev/null)
+        local clients
+        clients=$(echo "$metrics" | jq -r '.redis.clients' 2>/dev/null)
         
         log_success "Backend metrics retrieved"
         log_info "Overall health: $healthy"
@@ -329,7 +354,8 @@ run_full_test_suite() {
     echo ""
     
     local results=()
-    local test_start=$(date +%s)
+    local test_start
+    test_start=$(date +%s)
     
     # Pre-flight check
     log_info "Pre-flight: Verifying OPAL containers are running..."
@@ -372,7 +398,8 @@ run_full_test_suite() {
     fi
     echo ""
     
-    local test_end=$(date +%s)
+    local test_end
+    test_end=$(date +%s)
     local total_duration=$((test_end - test_start))
     
     # Summary

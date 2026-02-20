@@ -60,7 +60,8 @@ run_single_deployment() {
     sleep 5
 
     log_benchmark "Run $iteration/$ITERATIONS: Starting deployment..."
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Run deployment
     local exit_code=0
@@ -70,7 +71,8 @@ run_single_deployment() {
         ./dive deploy spoke "$SPOKE_CODE" >/dev/null 2>&1 || exit_code=$?
     fi
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     if [ $exit_code -eq 0 ]; then
@@ -94,7 +96,8 @@ calculate_stats() {
     local values=("$@")
 
     # Sort values
-    local sorted=($(printf '%s\n' "${values[@]}" | sort -n))
+    local -a sorted=()
+    mapfile -t sorted < <(printf '%s\n' "${values[@]}" | sort -n)
 
     local count=${#sorted[@]}
     local sum=0
@@ -174,12 +177,12 @@ generate_report() {
     for data in "${durations_with_status[@]}"; do
         local duration="${data%%:*}"
         local exit_code="${data##*:}"
-        durations_only+=($duration)
+        durations_only+=("$duration")
         [ "$exit_code" = "0" ] && ((success_count++))
     done
 
     # Calculate statistics
-    read min avg p50 p95 max <<< $(calculate_stats "${durations_only[@]}")
+    read -r min avg p50 p95 max <<<"$(calculate_stats "${durations_only[@]}")"
 
     local success_rate=$(( (success_count * 100) / ITERATIONS ))
 
@@ -302,16 +305,19 @@ main() {
     echo ""
 
     local durations=()
-    local overall_start=$(date +%s)
+    local overall_start
+    overall_start=$(date +%s)
 
     # Run benchmarks
     for i in $(seq 1 $ITERATIONS); do
-        local result=$(run_single_deployment $i)
+        local result
+        result=$(run_single_deployment $i)
         durations+=("$result")
         echo ""
     done
 
-    local overall_end=$(date +%s)
+    local overall_end
+    overall_end=$(date +%s)
     local overall_duration=$((overall_end - overall_start))
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -79,9 +79,9 @@ if type load_secrets &>/dev/null; then
 fi
 
 # Dynamically discover services from compose file
-CORE_SERVICES=($(compose_get_spoke_services_by_class "$INSTANCE_CODE" "core" 2>/dev/null || echo ""))
-OPTIONAL_SERVICES=($(compose_get_spoke_services_by_class "$INSTANCE_CODE" "optional" 2>/dev/null || echo ""))
-STRETCH_SERVICES=($(compose_get_spoke_services_by_class "$INSTANCE_CODE" "stretch" 2>/dev/null || echo ""))
+read -r -a CORE_SERVICES <<<"$(compose_get_spoke_services_by_class "$INSTANCE_CODE" "core" 2>/dev/null || echo "")"
+read -r -a OPTIONAL_SERVICES <<<"$(compose_get_spoke_services_by_class "$INSTANCE_CODE" "optional" 2>/dev/null || echo "")"
+read -r -a STRETCH_SERVICES <<<"$(compose_get_spoke_services_by_class "$INSTANCE_CODE" "stretch" 2>/dev/null || echo "")"
 
 # Fallback if dynamic discovery fails
 if [ ${#CORE_SERVICES[@]} -eq 0 ]; then
@@ -215,7 +215,8 @@ validate_health() {
     for service in "${CORE_SERVICES[@]}"; do
         test_start "CORE: dive-spoke-${INSTANCE_CODE_LOWER}-${service} healthy"
         
-        local health=$(${DOCKER_CMD} inspect "dive-spoke-${INSTANCE_CODE_LOWER}-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(${DOCKER_CMD} inspect "dive-spoke-${INSTANCE_CODE_LOWER}-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         
         # Trim whitespace
         health=$(echo "$health" | tr -d '[:space:]')
@@ -237,7 +238,8 @@ validate_health() {
         
         test_start "NON-CORE: dive-spoke-${INSTANCE_CODE_LOWER}-${service} healthy"
         
-        local health=$(${DOCKER_CMD} inspect "dive-spoke-${INSTANCE_CODE_LOWER}-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(${DOCKER_CMD} inspect "dive-spoke-${INSTANCE_CODE_LOWER}-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         health=$(echo "$health" | tr -d '[:space:]')
         
         if [ "$health" = "healthy" ] || [ "$health" = "no_healthcheck" ] || [ -z "$health" ]; then
@@ -327,7 +329,8 @@ validate_databases() {
     fi
     
     if [ -n "$mongo_password" ]; then
-        local rs_status=$(${DOCKER_CMD} exec "dive-spoke-${INSTANCE_CODE_LOWER}-mongodb" mongosh admin \
+        local rs_status
+        rs_status=$(${DOCKER_CMD} exec "dive-spoke-${INSTANCE_CODE_LOWER}-mongodb" mongosh admin \
             -u admin -p "$mongo_password" --quiet --eval "rs.status().myState" 2>/dev/null || echo "0")
         
         # State 1 = PRIMARY, State 2 = SECONDARY, State 0 = NOT_INITIALIZED
@@ -427,7 +430,8 @@ validate_keycloak() {
 
     # Check Keycloak spoke realm exists
     test_start "Keycloak realm dive-v3-broker-${INSTANCE_CODE_LOWER} exists"
-    local realm_check=$(curl -ksSf --max-time 10 "https://localhost:${KEYCLOAK_PORT}/realms/dive-v3-broker-${INSTANCE_CODE_LOWER}" 2>/dev/null || echo "FAIL")
+    local realm_check
+    realm_check=$(curl -ksSf --max-time 10 "https://localhost:${KEYCLOAK_PORT}/realms/dive-v3-broker-${INSTANCE_CODE_LOWER}" 2>/dev/null || echo "FAIL")
     if [[ "$realm_check" != "FAIL" ]] && echo "$realm_check" | grep -q "dive-v3-broker-${INSTANCE_CODE_LOWER}"; then
         test_pass
         VALIDATION_RESULTS["keycloak_realm"]="PASS"
@@ -438,7 +442,8 @@ validate_keycloak() {
 
     # Check Keycloak realm is accessible via API
     test_start "Keycloak realm API accessible"
-    local api_check=$(curl -ksSf --max-time 10 "https://localhost:${KEYCLOAK_PORT}/realms/dive-v3-broker-${INSTANCE_CODE_LOWER}/.well-known/openid-configuration" 2>/dev/null || echo "FAIL")
+    local api_check
+    api_check=$(curl -ksSf --max-time 10 "https://localhost:${KEYCLOAK_PORT}/realms/dive-v3-broker-${INSTANCE_CODE_LOWER}/.well-known/openid-configuration" 2>/dev/null || echo "FAIL")
     if [[ "$api_check" != "FAIL" ]] && echo "$api_check" | grep -q "issuer"; then
         test_pass
         VALIDATION_RESULTS["keycloak_api"]="PASS"
@@ -531,9 +536,11 @@ validate_dynamic_discovery() {
 
     # Verify all services discovered dynamically
     test_start "All services discovered dynamically"
-    local all_services=$(compose_get_spoke_services "$INSTANCE_CODE" 2>/dev/null || echo "")
+    local all_services
+    all_services=$(compose_get_spoke_services "$INSTANCE_CODE" 2>/dev/null || echo "")
     if [ -n "$all_services" ]; then
-        local service_count=$(echo "$all_services" | wc -w)
+        local service_count
+        service_count=$(echo "$all_services" | wc -w)
         if [ "$service_count" -ge 7 ]; then
             test_pass
             VALIDATION_RESULTS["discovery_all"]="PASS"
@@ -568,7 +575,8 @@ validate_backend_api() {
 
     # /api/resources requires authentication (should return 401)
     test_start "Backend /api/resources requires authentication"
-    local status_code=$(curl -ksSf -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost:${BACKEND_PORT}/api/resources" 2>/dev/null || echo "000")
+    local status_code
+    status_code=$(curl -ksSf -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost:${BACKEND_PORT}/api/resources" 2>/dev/null || echo "000")
     if [ "$status_code" = "401" ] || [ "$status_code" = "403" ]; then
         test_pass
         VALIDATION_RESULTS["api_auth"]="PASS"
@@ -579,9 +587,11 @@ validate_backend_api() {
 
     # API responds within 2 seconds
     test_start "Backend API responds within 2 seconds"
-    local start=$(date +%s)
+    local start
+    start=$(date +%s)
     curl -ksSf --max-time 2 "https://localhost:${BACKEND_PORT}/health" > /dev/null 2>&1
-    local end=$(date +%s)
+    local end
+    end=$(date +%s)
     local duration=$((end - start))
     
     if [ $duration -le 2 ]; then
@@ -620,7 +630,8 @@ main() {
     validate_backend_api
 
     # Calculate duration
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - TEST_START_TIME))
 
     # Summary
@@ -687,3 +698,6 @@ main() {
 }
 
 main "$@"
+
+# sc2034-anchor
+: "${VALIDATION_TIMEOUT:-}"

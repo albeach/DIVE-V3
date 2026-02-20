@@ -12,6 +12,10 @@ on:
       - '.github/workflows/test-e2e.yml'
       - '.github/actions/e2e-setup/**'
 
+concurrency:
+  group: test-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # Common env vars shared by all test runner steps
 env:
   NEXTAUTH_URL: https://localhost:3000

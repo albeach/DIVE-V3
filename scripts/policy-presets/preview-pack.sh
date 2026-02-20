@@ -43,7 +43,7 @@ if [ -z "$PACK_NAME" ]; then
   echo "Usage: $0 <PACK_NAME> --tenant <TENANT>"
   echo ""
   echo "Available packs:"
-  ls -1 "$(dirname "$0")/packs/"*.json 2>/dev/null | xargs -n 1 basename | sed 's/.json$//' || echo "  (none)"
+  find "$(dirname "$0")/packs" -maxdepth 1 -type f -name '*.json' -exec basename {} .json \; 2>/dev/null || echo "  (none)"
   exit 1
 fi
 

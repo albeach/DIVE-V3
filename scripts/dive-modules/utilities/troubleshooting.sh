@@ -75,7 +75,8 @@ diagnose() {
         docker ps -a --filter "name=dive-spoke" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
         echo ""
     elif [ "$target" != "hub" ] && [ "$target" != "all" ]; then
-        local code_lower=$(lower "$target")
+        local code_lower
+        code_lower=$(lower "$target")
         echo "Spoke $target containers:"
         docker ps -a --filter "name=dive-spoke-${code_lower}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
         echo ""
@@ -84,7 +85,8 @@ diagnose() {
     # Health check
     echo "=== Health Status ==="
     for container in $(docker ps --filter "name=dive" --format '{{.Names}}'); do
-        local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         printf "  %-40s %s\n" "$container" "$health"
     done
     echo ""
@@ -103,8 +105,10 @@ diagnose() {
 ##
 diagnose_federation() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo "═══════════════════════════════════════════════════════════════"
     echo "Federation Diagnostics: $code_upper"
@@ -160,7 +164,8 @@ diagnose_federation() {
     echo "=== Certificate Check ==="
     local cert_file="${DIVE_ROOT}/instances/${code_lower}/certs/certificate.pem"
     if [ -f "$cert_file" ]; then
-        local expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+        local expiry
+        expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
         echo "  Certificate: $cert_file"
         echo "  Expires:     $expiry"
     else
@@ -180,7 +185,8 @@ diagnose_federation() {
 collect_logs() {
     local target="$1"
     local lines="${2:-100}"
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local output_dir="${DIVE_ROOT}/logs/diagnostics/${timestamp}"
 
     mkdir -p "$output_dir"
@@ -192,7 +198,8 @@ collect_logs() {
             docker logs --tail "$lines" "$container" > "${output_dir}/${container}.log" 2>&1
         done
     else
-        local code_lower=$(lower "$target")
+        local code_lower
+        code_lower=$(lower "$target")
         for container in $(docker ps -a --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}'); do
             docker logs --tail "$lines" "$container" > "${output_dir}/${container}.log" 2>&1
         done
@@ -248,8 +255,10 @@ fix_hub() {
 ##
 fix_spoke() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_info "Running fixes for Spoke $code_upper..."
 
@@ -264,12 +273,14 @@ fix_spoke() {
     local cert_file="${DIVE_ROOT}/instances/${code_lower}/certs/certificate.pem"
     if [ -f "$cert_file" ]; then
         # Portable date parsing (macOS + Linux)
-        local expiry_date=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+        local expiry_date
+        expiry_date=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
         local expiry_epoch=0
         if [ -n "$expiry_date" ]; then
             expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry_date" +%s 2>/dev/null || date -d "$expiry_date" +%s 2>/dev/null || echo 0)
         fi
-        local now_epoch=$(date +%s)
+        local now_epoch
+        now_epoch=$(date +%s)
 
         if [ "${expiry_epoch:-0}" -lt "$now_epoch" ]; then
             log_warn "Certificate expired, regenerating..."
@@ -293,7 +304,8 @@ fix_spoke() {
 ##
 fix_hostname() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
 
@@ -301,7 +313,8 @@ fix_hostname() {
         log_info "Checking Keycloak hostname configuration..."
 
         # Get current hostname
-        local hostname=$(docker exec "$kc_container" printenv KC_HOSTNAME 2>/dev/null)
+        local hostname
+        hostname=$(docker exec "$kc_container" printenv KC_HOSTNAME 2>/dev/null)
 
         if [ "$hostname" != "localhost" ]; then
             log_warn "Hostname mismatch detected, may cause redirect issues"

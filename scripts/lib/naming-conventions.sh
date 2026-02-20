@@ -33,8 +33,10 @@ get_realm_name() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    local pattern=$(jq -r '.conventions.keycloak.realmPattern' "$NAMING_CONFIG")
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local pattern
+    pattern=$(jq -r '.conventions.keycloak.realmPattern' "$NAMING_CONFIG")
     echo "${pattern//\{instance\}/$code_lower}"
 }
 
@@ -50,8 +52,10 @@ get_client_id() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    local pattern=$(jq -r '.conventions.keycloak.clientIdPattern' "$NAMING_CONFIG")
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local pattern
+    pattern=$(jq -r '.conventions.keycloak.clientIdPattern' "$NAMING_CONFIG")
     echo "${pattern//\{instance\}/$code_lower}"
 }
 
@@ -67,8 +71,10 @@ get_keycloak_admin_password_var() {
         return 1
     fi
 
-    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
-    local pattern=$(jq -r '.conventions.keycloak.adminPasswordEnvPattern' "$NAMING_CONFIG")
+    local code_upper
+    code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local pattern
+    pattern=$(jq -r '.conventions.keycloak.adminPasswordEnvPattern' "$NAMING_CONFIG")
     echo "${pattern//\{INSTANCE\}/$code_upper}"
 }
 
@@ -84,8 +90,10 @@ get_keycloak_client_secret_var() {
         return 1
     fi
 
-    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
-    local pattern=$(jq -r '.conventions.keycloak.clientSecretEnvPattern' "$NAMING_CONFIG")
+    local code_upper
+    code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local pattern
+    pattern=$(jq -r '.conventions.keycloak.clientSecretEnvPattern' "$NAMING_CONFIG")
     echo "${pattern//\{INSTANCE\}/$code_upper}"
 }
 
@@ -109,7 +117,8 @@ get_container_name() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local prefix
 
     if [ "$is_hub" = "true" ] || [ "$instance_code" = "USA" ]; then
@@ -118,7 +127,8 @@ get_container_name() {
         prefix=$(jq -r '.conventions.docker.spokePrefix' "$NAMING_CONFIG")
     fi
 
-    local pattern=$(jq -r '.conventions.docker.containerNamePattern' "$NAMING_CONFIG")
+    local pattern
+    pattern=$(jq -r '.conventions.docker.containerNamePattern' "$NAMING_CONFIG")
     pattern="${pattern//\{prefix\}/$prefix}"
     pattern="${pattern//\{instance\}/$code_lower}"
     pattern="${pattern//\{service\}/$service}"
@@ -138,8 +148,10 @@ get_network_name() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    local pattern=$(jq -r '.conventions.docker.networkNamePattern' "$NAMING_CONFIG")
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local pattern
+    pattern=$(jq -r '.conventions.docker.networkNamePattern' "$NAMING_CONFIG")
     echo "${pattern//\{instance\}/$code_lower}"
 }
 
@@ -157,8 +169,10 @@ get_volume_name() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    local pattern=$(jq -r '.conventions.docker.volumeNamePattern' "$NAMING_CONFIG")
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local pattern
+    pattern=$(jq -r '.conventions.docker.volumeNamePattern' "$NAMING_CONFIG")
     pattern="${pattern//\{instance\}/$code_lower}"
     pattern="${pattern//\{service\}/$service}"
 
@@ -181,8 +195,10 @@ get_nextauth_secret_var() {
         return 1
     fi
 
-    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
-    local pattern=$(jq -r '.conventions.nextauth.sessionSecretEnvPattern' "$NAMING_CONFIG")
+    local code_upper
+    code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local pattern
+    pattern=$(jq -r '.conventions.nextauth.sessionSecretEnvPattern' "$NAMING_CONFIG")
     echo "${pattern//\{INSTANCE\}/$code_upper}"
 }
 
@@ -203,7 +219,8 @@ validate_instance_code() {
         return 1
     fi
 
-    local expected_length=$(jq -r '.validation.instanceCodeLength' "$NAMING_CONFIG")
+    local expected_length
+    expected_length=$(jq -r '.validation.instanceCodeLength' "$NAMING_CONFIG")
 
     if [ ${#code} -ne "$expected_length" ]; then
         echo "ERROR: Instance code must be $expected_length characters (ISO 3166-1 alpha-3)" >&2

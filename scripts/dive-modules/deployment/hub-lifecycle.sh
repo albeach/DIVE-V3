@@ -117,7 +117,8 @@ hub_init() {
             chmod 400 "$keyfile_path"
 
             # Verify file size (MongoDB requires 6-1024 characters)
-            local file_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+            local file_size
+            file_size=$(wc -c < "$keyfile_path" | tr -d ' ')
             if [ "$file_size" -lt 6 ] || [ "$file_size" -gt 1024 ]; then
                 log_error "KeyFile size ($file_size bytes) outside valid range (6-1024)"
                 rm -f "$keyfile_path"
@@ -164,14 +165,14 @@ hub_init() {
             log_verbose "Certificates generated with OpenSSL (cloud mode)"
         elif command -v mkcert >/dev/null 2>&1; then
             log_verbose "Generating hub certificates with mkcert..."
-            cd "$cert_dir"
+            cd "$cert_dir" || return 1
             mkcert -cert-file certificate.pem -key-file key.pem \
                 localhost "*.localhost" 127.0.0.1 \
                 hub.dive.local \
                 backend keycloak opa mongodb postgres redis kas opal-server frontend \
                 >/dev/null 2>&1
             cp "$(mkcert -CAROOT)/rootCA.pem" mkcert-rootCA.pem 2>/dev/null || true
-            cd - >/dev/null
+            cd - >/dev/null || return 1
             log_verbose "Certificates generated with mkcert"
         else
             log_verbose "Generating hub certificates with OpenSSL (fallback)..."
@@ -213,7 +214,7 @@ hub_up() {
     echo "DEBUG [hub_up]: ENTRY" >&2
     log_info "Starting hub services..."
 
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
 
     if [ "$DRY_RUN" = "true" ]; then
         log_info "[DRY RUN] Would run: ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d"
@@ -248,7 +249,8 @@ hub_up() {
     # This prevents build delays during service health checks (frontend, backend, etc.)
     echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
-    local build_log="/tmp/hub-docker-build-$(date +%s).log"
+    local build_log
+    build_log="/tmp/hub-docker-build-$(date +%s).log"
     if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build --parallel > "$build_log" 2>&1; then
         log_success "Docker images built successfully"
         echo "DEBUG [hub_up]: Docker images built" >&2
@@ -360,7 +362,7 @@ hub_up() {
 hub_down() {
     log_info "Stopping hub services..."
 
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
 
     # CRITICAL: Load secrets before running docker-compose down
     # Docker Compose needs variable interpolation even for shutdown
@@ -396,11 +398,13 @@ calculate_service_level() {
     local visited_path="${2:-}"  # For cycle detection
 
     # Cycle detection
-    if [[ " $visited_path " =~ " $service " ]]; then
-        log_warn "Circular dependency detected: $visited_path -> $service"
-        echo "0"
-        return
-    fi
+    case " $visited_path " in
+        *" $service "*)
+            log_warn "Circular dependency detected: $visited_path -> $service"
+            echo "0"
+            return
+            ;;
+    esac
 
     # Get dependencies for this service
     local deps="${service_deps[$service]}"
@@ -419,7 +423,8 @@ calculate_service_level() {
             continue
         fi
 
-        local dep_level=$(calculate_service_level "$dep" "$visited_path $service")
+        local dep_level
+        dep_level=$(calculate_service_level "$dep" "$visited_path $service")
         if [ $dep_level -gt $max_dep_level ]; then
             max_dep_level=$dep_level
         fi
@@ -510,7 +515,8 @@ circuit_breaker_check() {
 
     local threshold="${CIRCUIT_BREAKER_THRESHOLD:-3}"
     local timeout="${CIRCUIT_BREAKER_TIMEOUT:-60}"
-    local now=$(date +%s)
+    local now
+    now=$(date +%s)
 
     # Check if circuit was opened recently
     local last_failure="${CIRCUIT_BREAKER_LAST_FAILURE[$key]:-0}"

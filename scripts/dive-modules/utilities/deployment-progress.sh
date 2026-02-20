@@ -99,10 +99,12 @@ progress_update() {
     fi
 
     # Read current state
-    local current_state=$(cat "$PROGRESS_STATE_FILE")
+    local current_state
+    current_state=$(cat "$PROGRESS_STATE_FILE")
 
     # Update field using jq
-    local updated_state=$(echo "$current_state" | jq \
+    local updated_state
+    updated_state=$(echo "$current_state" | jq \
         --arg field "$field" \
         --arg value "$value" \
         'if ($field == "services_healthy" or $field == "services_total" or $field == "current_phase" or $field == "total_phases") then
@@ -219,38 +221,51 @@ progress_start_monitor() {
             break
         fi
 
-        local state=$(cat "$PROGRESS_STATE_FILE" 2>/dev/null)
+        local state
+        state=$(cat "$PROGRESS_STATE_FILE" 2>/dev/null)
         if [ -z "$state" ]; then
             sleep "$PROGRESS_UPDATE_INTERVAL"
             continue
         fi
 
         # Extract state fields
-        local status=$(echo "$state" | jq -r '.status')
+        local status
+        status=$(echo "$state" | jq -r '.status')
         if [ "$status" = "complete" ] || [ "$status" = "failed" ]; then
             break
         fi
 
-        local deploy_type=$(echo "$state" | jq -r '.deploy_type')
-        local instance=$(echo "$state" | jq -r '.instance')
-        local current_phase=$(echo "$state" | jq -r '.current_phase')
-        local total_phases=$(echo "$state" | jq -r '.total_phases')
-        local phase_name=$(echo "$state" | jq -r '.phase_name')
-        local services_healthy=$(echo "$state" | jq -r '.services_healthy')
-        local services_total=$(echo "$state" | jq -r '.services_total')
-        local start_time=$(echo "$state" | jq -r '.start_time')
-        local phase_start_time=$(echo "$state" | jq -r '.phase_start_time')
+        local deploy_type
+        deploy_type=$(echo "$state" | jq -r '.deploy_type')
+        local instance
+        instance=$(echo "$state" | jq -r '.instance')
+        local current_phase
+        current_phase=$(echo "$state" | jq -r '.current_phase')
+        local total_phases
+        total_phases=$(echo "$state" | jq -r '.total_phases')
+        local phase_name
+        phase_name=$(echo "$state" | jq -r '.phase_name')
+        local services_healthy
+        services_healthy=$(echo "$state" | jq -r '.services_healthy')
+        local services_total
+        services_total=$(echo "$state" | jq -r '.services_total')
+        local start_time
+        start_time=$(echo "$state" | jq -r '.start_time')
+        local phase_start_time
+        phase_start_time=$(echo "$state" | jq -r '.phase_start_time')
 
         # Calculate elapsed time
-        local now=$(date +%s)
+        local now
+        now=$(date +%s)
         local total_elapsed=$((now - start_time))
-        local phase_elapsed=$((now - phase_start_time))
+        local _phase_elapsed=$((now - phase_start_time))
 
         # Calculate ETA (simple linear projection)
         # FIX: Handle decimal phase numbers (e.g., "2.5") by converting to integer for arithmetic
         local eta="..."
         # Convert current_phase to integer (strip decimal part if present)
-        local current_phase_int=$(echo "$current_phase" | cut -d'.' -f1)
+        local current_phase_int
+        current_phase_int=$(echo "$current_phase" | cut -d'.' -f1)
         if [ "$current_phase_int" -gt 0 ] && [ "$total_phases" -gt 0 ]; then
             local avg_phase_time=$((total_elapsed / current_phase_int))
             local remaining_phases=$((total_phases - current_phase_int))
@@ -344,10 +359,10 @@ show_deployment_progress() {
     local services_total="$4"
     local elapsed="$5"
 
-    local phase_percent=$((current_phase * 100 / total_phases))
-    local service_percent=0
+    local _phase_percent=$((current_phase * 100 / total_phases))
+    local _service_percent=0
     if [ "$services_total" -gt 0 ]; then
-        service_percent=$((services_healthy * 100 / services_total))
+        _service_percent=$((services_healthy * 100 / services_total))
     fi
 
     echo ""

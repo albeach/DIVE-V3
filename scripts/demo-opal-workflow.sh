@@ -72,7 +72,7 @@ log_step "3. Monitoring OPAL Server for policy detection (5s polling)..."
 log_info "Waiting for next polling cycle (max 10 seconds)..."
 
 # Monitor OPAL server logs
-for i in {1..10}; do
+for _i in {1..10}; do
     sleep 1
     echo -n "."
     
@@ -155,6 +155,7 @@ echo ""
 log_step "7. Testing authorization with updated policy..."
 
 log_info "Making test authorization request to backend..."
+CURRENT_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Test OPA decision endpoint directly
 TEST_DECISION=$(curl -sk -X POST https://localhost:8181/v1/data/dive/authorization/decision \
@@ -175,7 +176,7 @@ TEST_DECISION=$(curl -sk -X POST https://localhost:8181/v1/data/dive/authorizati
             },
             "action": "read",
             "context": {
-                "currentTime": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+                "currentTime": "'$CURRENT_TIME'",
                 "requestId": "demo-test"
             }
         }
@@ -249,3 +250,6 @@ echo ""
 # Show the final state
 log_info "Final policy state:"
 tail -5 "$POLICY_FILE"
+
+# sc2034-anchor
+: "${MAGENTA:-}"

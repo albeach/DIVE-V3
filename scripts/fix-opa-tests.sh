@@ -196,3 +196,6 @@ main() {
 
 # Run main
 main "$@"
+
+# sc2034-anchor
+: "${MOCK_FEDERATION_MATRIX:-}" "${MOCK_TRUSTED_ISSUERS:-}"

@@ -44,8 +44,10 @@ export DIVE_TERRAFORM_APPLY_LOADED=1
 # =============================================================================
 spoke_terraform_apply() {
     local code="${1:?Instance code required}"
-    local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
-    local code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+    local code_lower
+    code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+    local code_upper
+    code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
 
     log_step "Applying Terraform configuration for ${code_upper}..."
 
@@ -172,7 +174,8 @@ hub_terraform_apply() {
 # =============================================================================
 _export_terraform_vars() {
     local code_upper="${1:?Instance code required}"
-    local code_lower=$(echo "$code_upper" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$code_upper" | tr '[:upper:]' '[:lower:]')
 
     # Instance-specific password variable name
     local password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
@@ -187,7 +190,8 @@ _export_terraform_vars() {
 
     # Local development ports (from NATO database if available)
     if type -t get_country_offset >/dev/null 2>&1; then
-        local offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
+        local offset
+        offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
         export TF_VAR_local_keycloak_port=$((8443 + offset))
         export TF_VAR_local_frontend_port=$((3000 + offset))
     fi
@@ -212,7 +216,8 @@ _export_terraform_vars() {
 # =============================================================================
 terraform_state_exists() {
     local code="${1:?Instance code required}"
-    local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
 
     ensure_dive_root
     local tf_dir="${DIVE_ROOT}/terraform/spoke"
@@ -221,12 +226,13 @@ terraform_state_exists() {
         return 1
     fi
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     # Check if workspace exists and has state
     if terraform workspace list 2>/dev/null | grep -qE "^\*?\s+${code_lower}$"; then
         terraform workspace select "$code_lower" >/dev/null 2>&1
-        local resources=$(terraform state list 2>/dev/null | wc -l)
+        local resources
+        resources=$(terraform state list 2>/dev/null | wc -l)
         if [ "$resources" -gt 0 ]; then
             log_verbose "Terraform state exists for ${code_lower} (${resources} resources)"
             return 0
@@ -250,7 +256,8 @@ terraform_state_exists() {
 # =============================================================================
 terraform_check_drift() {
     local code="${1:?Instance code required}"
-    local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
 
     log_step "Checking for Terraform drift (${code})..."
 

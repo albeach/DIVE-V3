@@ -141,7 +141,8 @@ multi_deploy_instance() {
     local instance_name
     instance_name=$(multi_get_instance_name "$instance_code")
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     log_info "Starting deployment: $instance_code ($instance_name)"
 
@@ -151,7 +152,8 @@ multi_deploy_instance() {
 
     # Execute deployment
     if spoke_deploy "$instance_code" "$instance_name"; then
-        local end_time=$(date +%s)
+        local end_time
+        end_time=$(date +%s)
         local duration=$((end_time - start_time))
 
         DEPLOYMENT_RESULTS["$instance_code"]="SUCCESS"
@@ -161,7 +163,8 @@ multi_deploy_instance() {
         log_success "✅ Deployment completed: $instance_code (${duration}s)"
         return 0
     else
-        local end_time=$(date +%s)
+        local end_time
+        end_time=$(date +%s)
         local duration=$((end_time - start_time))
 
         DEPLOYMENT_RESULTS["$instance_code"]="FAILED"
@@ -336,7 +339,8 @@ multi_validate_instance() {
 # Generate multi-instance test report
 #
 multi_generate_report() {
-    local report_file="${DIVE_ROOT}/logs/multi-instance-test-report-$(date +%Y%m%d-%H%M%S).txt"
+    local report_file
+    report_file="${DIVE_ROOT}/logs/multi-instance-test-report-$(date +%Y%m%d-%H%M%S).txt"
 
     {
         echo "================================================================================"
@@ -511,7 +515,12 @@ multi_test_concurrent_all() {
     log_success "All test instances configured"
 
     # Execute concurrent deployment with timeout
-    timeout $MULTI_INSTANCE_TIMEOUT bash -c "multi_deploy_concurrent \"${NATO_TEST_INSTANCES[@]}\"" || {
+    local deploy_cmd="multi_deploy_concurrent"
+    local inst
+    for inst in "${NATO_TEST_INSTANCES[@]}"; do
+        printf -v deploy_cmd '%s %q' "$deploy_cmd" "$inst"
+    done
+    timeout "$MULTI_INSTANCE_TIMEOUT" bash -c "$deploy_cmd" || {
         log_warn "Concurrent deployment timed out after ${MULTI_INSTANCE_TIMEOUT}s"
     }
 
@@ -680,7 +689,8 @@ multi_load_test_concurrent_health_checks() {
     log_step "Load Testing: Concurrent Health Checks"
 
     local concurrent_checks=50
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     log_info "Executing $concurrent_checks concurrent health checks..."
 
@@ -692,7 +702,8 @@ multi_load_test_concurrent_health_checks() {
 
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     log_info "Concurrent health checks completed in ${duration}s"

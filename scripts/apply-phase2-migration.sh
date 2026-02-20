@@ -105,7 +105,8 @@ else
 fi
 
 # Check indexes created
-local index_count=$(docker exec dive-hub-postgres psql -U postgres -d orchestration \
+index_count
+index_count=$(docker exec dive-hub-postgres psql -U postgres -d orchestration \
     -tAc "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'deployment_locks';" | xargs)
 
 if [ "$index_count" -ge 2 ]; then
@@ -116,7 +117,7 @@ fi
 
 # Verify all expected tables
 log_step "Verifying all tables..."
-local expected_tables=(
+expected_tables=(
     "deployment_states"
     "state_transitions"
     "deployment_steps"
@@ -127,7 +128,7 @@ local expected_tables=(
     "checkpoints"
 )
 
-local missing_tables=0
+missing_tables=0
 for table in "${expected_tables[@]}"; do
     if docker exec dive-hub-postgres psql -U postgres -d orchestration \
         -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '$table';" | grep -q "1"; then

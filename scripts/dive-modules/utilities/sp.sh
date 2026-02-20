@@ -77,10 +77,12 @@ sp_register() {
     fi
 
     # Generate client secret
-    local client_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)
+    local client_secret
+    client_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)
 
     # Create client configuration
-    local client_config=$(cat << EOF
+    local client_config
+    client_config=$(cat << EOF
 {
   "clientId": "$client_id",
   "name": "$client_name",
@@ -183,7 +185,8 @@ sp_status() {
     log_info "Getting status for SP client: $client_id..."
 
     # Get admin token
-    local admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
+    local admin_pass
+    admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
 
     local token
     token=$(curl -sf -X POST "${HUB_KC_URL}/realms/master/protocol/openid-connect/token" \
@@ -229,7 +232,8 @@ sp_credentials() {
     log_info "Getting credentials for SP client: $client_id..."
 
     # Get admin token
-    local admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
+    local admin_pass
+    admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
 
     local token
     token=$(curl -sf -X POST "${HUB_KC_URL}/realms/master/protocol/openid-connect/token" \
@@ -287,7 +291,8 @@ sp_delete() {
     log_warn "Deleting SP client: $client_id..."
 
     # Get admin token
-    local admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
+    local admin_pass
+    admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
 
     local token
     token=$(curl -sf -X POST "${HUB_KC_URL}/realms/master/protocol/openid-connect/token" \

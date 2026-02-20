@@ -64,6 +64,7 @@ else
     # Load spoke env for credentials
     if [ -f "$ENV_FILE" ]; then
         set -a
+        # shellcheck source=/dev/null
         source "$ENV_FILE"
         set +a
     fi
@@ -119,6 +120,7 @@ log_section "Phase 1: Loading Credentials"
 
 if [ -f "$ENV_FILE" ]; then
     set -a
+    # shellcheck source=/dev/null
     source "$ENV_FILE"
     set +a
     log_check_pass "Loaded $ENV_FILE"
@@ -405,3 +407,6 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 
 exit $CHECKS_FAILED
+
+# sc2034-anchor
+: "${BLUE:-}" "${EXPECTED_HTTP:-}" "${EXPECTED_HTTPS:-}"

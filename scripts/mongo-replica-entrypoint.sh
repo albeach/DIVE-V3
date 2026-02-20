@@ -51,7 +51,7 @@ gosu mongodb mongod \
 
 # Wait for MongoDB to accept connections
 echo "⏳ Waiting for MongoDB..."
-for i in {1..60}; do
+for _i in {1..60}; do
     if mongosh --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         break
     fi
@@ -102,6 +102,7 @@ try {
 }
 EOF
 )
+INIT_EXIT=$?
 
 echo "$mongo_output"
 
@@ -112,8 +113,6 @@ else
 fi
 
 echo ""
-
-INIT_EXIT=$?
 if [ $INIT_EXIT -ne 0 ]; then
     echo "❌ Replica set initialization failed"
     exit $INIT_EXIT

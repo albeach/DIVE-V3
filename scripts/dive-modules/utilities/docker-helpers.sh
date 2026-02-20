@@ -41,12 +41,16 @@ ensure_gcp_secrets_exist() {
             local password
             password=$(generate_secure_password)
             log_info "Creating GCP secret: $secret_name"
+            local creator_label
+            creator_label="$(whoami)@$(hostname)"
+            local created_at
+            created_at="$(date -u +%Y%m%d-%H%M%S)"
 
             echo -n "$password" | gcloud secrets create "$secret_name" \
                 --project="$project" \
                 --data-file=- \
                 --description="$description" \
-                --labels=environment="$ENVIRONMENT",instance="$inst_lc",managed-by=dive-cli,created-by="$(whoami)@$(hostname)",created-at="$(date -u +%Y%m%d-%H%M%S)"
+                --labels="environment=${ENVIRONMENT},instance=${inst_lc},managed-by=dive-cli,created-by=${creator_label},created-at=${created_at}"
         fi
     }
 
@@ -122,7 +126,8 @@ load_gcp_secrets() {
 
     # Export instance-suffixed variables for spoke docker-compose files
     # CRITICAL: Only overwrite if we have a non-empty value (preserve .env values)
-    local inst_uc=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
+    local inst_uc
+    inst_uc=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
     [ -n "$POSTGRES_PASSWORD" ] && eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
     [ -n "$KEYCLOAK_ADMIN_PASSWORD" ] && eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
     [ -n "$MONGO_PASSWORD" ] && eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
@@ -153,7 +158,8 @@ load_gcp_secrets() {
                 log_verbose "Loading spoke Keycloak passwords for federation operations..."
             fi
             for spoke in $provisioned_spokes; do
-                local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
+                local spoke_uc
+                spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
                 local spoke_password
                 if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
                     eval "export KEYCLOAK_ADMIN_PASSWORD_${spoke_uc}='${spoke_password}'"
@@ -179,7 +185,8 @@ load_gcp_secrets() {
     # OPAL authentication token - generate from AUTH_SECRET if not explicitly set
     if [ -z "${OPAL_AUTH_MASTER_TOKEN:-}" ] && [ -n "$AUTH_SECRET" ]; then
         # Generate a deterministic token from AUTH_SECRET for OPAL
-        export OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
+        OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
+        export OPAL_AUTH_MASTER_TOKEN
     fi
 
     # Terraform variables
@@ -242,6 +249,7 @@ load_local_defaults() {
 
         # Export variables from .env.hub
         set -a
+        # shellcheck source=/dev/null
         source "$env_file" 2>/dev/null || {
             log_error "Failed to source $env_file"
             return 1
@@ -326,7 +334,14 @@ load_secrets() {
         while IFS= read -r _line; do
             case "$_line" in
                 SECRETS_PROVIDER=*|VAULT_ADDR=*|VAULT_CLI_ADDR=*|VAULT_TOKEN=*|CERT_PROVIDER=*)
-                    export "$_line" ;;
+                    local _key _value
+                    _key="${_line%%=*}"
+                    _value="${_line#*=}"
+                    if [ -n "$_key" ]; then
+                        printf -v "$_key" '%s' "$_value"
+                        export "${_key?}"
+                    fi
+                    ;;
             esac
         done < "${DIVE_ROOT}/.env.hub"
     fi
@@ -339,7 +354,8 @@ load_secrets() {
         fi
         # Load token from .vault-token if not already set
         if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
-            export VAULT_TOKEN=$(cat "${DIVE_ROOT}/.vault-token")
+            VAULT_TOKEN=$(cat "${DIVE_ROOT}/.vault-token")
+            export VAULT_TOKEN
         fi
 
         log_info "Loading secrets from HashiCorp Vault..."

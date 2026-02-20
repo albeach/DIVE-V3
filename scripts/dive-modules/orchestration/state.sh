@@ -219,9 +219,9 @@ orch_validate_state_transition() {
     fi
 
     # Check if to_state is in the list of valid targets
-    if [[ ",$valid_targets," =~ ",$to_state," ]]; then
-        return 0
-    fi
+    case ",$valid_targets," in
+        *",$to_state,"*) return 0 ;;
+    esac
 
     log_error "Invalid state transition: $from_state → $to_state"
     log_error "Valid transitions from $from_state: $valid_targets"
@@ -309,7 +309,8 @@ orch_db_set_state() {
         # CRITICAL FIX (2026-01-18): Allow Hub (USA) to deploy without database
         # Hub deployment CREATES the orchestration database, so it can't depend on it
         # Spokes and other instances require the database to exist
-        local code_upper=$(upper "$instance_code")
+        local code_upper
+        code_upper=$(upper "$instance_code")
         if [ "$code_upper" != "USA" ]; then
             # Require database connection for non-Hub instances - fail fast if unavailable
             if ! orch_db_check_connection; then
@@ -438,7 +439,8 @@ orch_db_get_state() {
     # REMOTE MODE: Read state from file
     if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
         local state_dir="${DIVE_ROOT}/.dive-state"
-        local state_file="${state_dir}/$(lower "$instance_code").state"
+        local state_file
+        state_file="${state_dir}/$(lower "$instance_code").state"
         if [ -f "$state_file" ]; then
             tail -1 "$state_file" | cut -d'|' -f1
         else
@@ -449,7 +451,8 @@ orch_db_get_state() {
 
     # CRITICAL FIX: Allow Hub to read state without database during initial deployment
     # Hub deployment CREATES the orchestration database, so it can't depend on it
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     if [ "$code_upper" != "USA" ]; then
         # Non-Hub instances require database
         if ! orch_db_check_connection; then
@@ -542,14 +545,16 @@ orch_db_acquire_lock() {
     fi
 
     # Generate unique lock ID from instance code (hash to integer)
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
 
     log_verbose "Attempting PostgreSQL advisory lock for $instance_code (lock_id: $lock_id, timeout: ${timeout}s)..."
 
     # Try to acquire lock
     if [ "$timeout" -eq 0 ]; then
         # Non-blocking try
-        local acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
+        local acquired
+        acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
         if [ "$acquired" = "t" ]; then
             log_verbose "PostgreSQL advisory lock acquired for $instance_code"
             # Record lock acquisition
@@ -561,11 +566,13 @@ orch_db_acquire_lock() {
         fi
     else
         # Blocking with timeout (poll-based since pg_advisory_lock doesn't support timeout)
-        local start_time=$(date +%s)
+        local start_time
+        start_time=$(date +%s)
         local elapsed=0
 
         while [ $elapsed -lt "$timeout" ]; do
-            local acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
+            local acquired
+            acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
             if [ "$acquired" = "t" ]; then
                 log_success "PostgreSQL advisory lock acquired for $instance_code (after ${elapsed}s)"
                 # Record lock acquisition
@@ -602,12 +609,14 @@ orch_db_release_lock() {
     fi
 
     # Generate same lock ID
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
 
     log_verbose "Releasing PostgreSQL advisory lock for $instance_code (lock_id: $lock_id)..."
 
     # Release lock
-    local released=$(orch_db_exec "SELECT pg_advisory_unlock($lock_id);" 2>/dev/null | xargs)
+    local released
+    released=$(orch_db_exec "SELECT pg_advisory_unlock($lock_id);" 2>/dev/null | xargs)
 
     if [ "$released" = "t" ]; then
         log_verbose "PostgreSQL advisory lock released for $instance_code"
@@ -640,7 +649,8 @@ orch_db_check_lock_status() {
     fi
 
     # Check if lock is held in database
-    local lock_count=$(orch_db_exec "
+    local lock_count
+    lock_count=$(orch_db_exec "
         SELECT COUNT(*)
         FROM deployment_locks
         WHERE instance_code = '$code_lower'
@@ -769,16 +779,16 @@ orch_db_migrate_state_files() {
         fi
 
         # Parse state file (simple key=value format)
-        local state="" timestamp="" version="" reason="" metadata="" checksum=""
+        local state="" timestamp="" _version="" reason="" metadata="" _checksum=""
 
         while IFS='=' read -r key value; do
             case "$key" in
                 state) state="$value" ;;
                 timestamp) timestamp="$value" ;;
-                version) version="$value" ;;
+                version) _version="$value" ;;
                 reason) reason="$value" ;;
                 metadata) metadata="$value" ;;
-                checksum) checksum="$value" ;;
+                checksum) _checksum="$value" ;;
             esac
         done < "$state_file"
 
@@ -832,7 +842,8 @@ orch_db_migrate_state_files() {
 
     # Create migration record
     if [ "$migrated_count" -gt 0 ]; then
-        local migration_metadata="{\"migrated_files\": $migrated_count, \"skipped_files\": $skipped_count, \"failed_files\": $failed_count, \"migration_timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+        local migration_metadata
+        migration_metadata="{\"migrated_files\": $migrated_count, \"skipped_files\": $skipped_count, \"failed_files\": $failed_count, \"migration_timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
         orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value, labels) VALUES ('system', 'state_migration', $migrated_count, '$migration_metadata')" >/dev/null 2>&1 || true
     fi
 
@@ -981,3 +992,6 @@ orch_db_rollback_state() {
 if [ "$ORCH_DB_ENABLED" = "true" ]; then
     log_verbose "Orchestration database backend enabled (docker exec mode)"
 fi
+
+# sc2034-anchor
+: "${ORCH_DB_CONN:-}"

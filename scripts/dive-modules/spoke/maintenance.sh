@@ -20,8 +20,10 @@ spoke_fix_mappers() {
         echo "Usage: ./dive spoke fix-mappers CODE"
         return 1
     fi
-    local code_lower=$(lower "$code")
-    local code_upper=$(upper "$code")
+    local code_lower
+    code_lower=$(lower "$code")
+    local code_upper
+    code_upper=$(upper "$code")
 
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -112,7 +114,8 @@ spoke_fix_mappers() {
     local skipped=0
 
     for mapper_json in "${mappers[@]}"; do
-        local mapper_name=$(echo "$mapper_json" | jq -r '.name')
+        local mapper_name
+        mapper_name=$(echo "$mapper_json" | jq -r '.name')
 
         # Check if mapper exists
         local existing
@@ -147,8 +150,10 @@ spoke_fix_mappers() {
 spoke_reinit_client() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     print_header
     echo -e "${BOLD}Reinitializing Client Redirect URIs:${NC} ${code_upper}"
@@ -209,7 +214,8 @@ spoke_reinit_client() {
     # Build comprehensive redirect URIs
     log_step "Updating redirect URIs..."
 
-    local redirect_uris=$(cat <<EOF
+    local redirect_uris
+    redirect_uris=$(cat <<EOF
 [
     "https://localhost:${frontend_port}",
     "https://localhost:${frontend_port}/*",
@@ -229,7 +235,8 @@ spoke_reinit_client() {
 EOF
 )
 
-    local web_origins=$(cat <<EOF
+    local web_origins
+    web_origins=$(cat <<EOF
 [
     "https://localhost:${frontend_port}",
     "https://localhost:${backend_port}",
@@ -279,7 +286,8 @@ spoke_regenerate_theme() {
         echo "Usage: ./dive spoke regenerate-theme CODE"
         return 1
     fi
-    local code_upper=$(upper "$code")
+    local code_upper
+    code_upper=$(upper "$code")
 
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -320,7 +328,8 @@ spoke_generate_certs() {
 
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local certs_dir="$spoke_dir/certs"
 
@@ -331,10 +340,10 @@ spoke_generate_certs() {
 
     # Load config to get spoke ID from spoke_config_get (SSOT)
     local spoke_id=""
-    local instance_name=""
+    local _instance_name=""
 
     spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId" "spoke-${code_lower}-unknown")
-    instance_name=$(spoke_config_get "$instance_code" "identity.name" "$instance_code")
+    _instance_name=$(spoke_config_get "$instance_code" "identity.name" "$instance_code")
 
     print_header
     echo -e "${BOLD}Generating X.509 Certificates for Spoke:${NC} $(upper "$instance_code")"
@@ -425,8 +434,10 @@ spoke_generate_certs() {
 spoke_rotate_certs() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local certs_dir="$spoke_dir/certs"
 
@@ -447,7 +458,8 @@ spoke_rotate_certs() {
     fi
 
     # Create backup directory
-    local backup_dir="$certs_dir/backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_dir
+    backup_dir="$certs_dir/backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$backup_dir"
 
     echo -e "${CYAN}Step 1/3: Backing up current certificates...${NC}"
@@ -471,7 +483,7 @@ spoke_rotate_certs() {
     echo -e "${CYAN}Step 3/3: Restarting services...${NC}"
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
         export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         docker compose restart
         log_success "Services restarted with new certificates"
     else

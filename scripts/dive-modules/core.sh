@@ -5,7 +5,7 @@
 # Commands: up, down, restart, logs, ps, exec
 # =============================================================================
 
-# shellcheck source=common.sh disable=SC1091
+# shellcheck source=./common.sh
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -598,7 +598,8 @@ cmd_logs() {
 
 cmd_ps() {
     # INSTANCE-AWARE: Show containers for specified instance
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+    local instance_lower
+    instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
 
     if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
         # Spoke instance - show only spoke containers
@@ -614,7 +615,8 @@ cmd_ps() {
             echo "No hub containers running"
 
         # Also show count of running spokes
-        local spoke_count=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c "dive-spoke-" || echo "0")
+        local spoke_count
+        spoke_count=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c "dive-spoke-" || echo "0")
         if [ "$spoke_count" -gt 0 ]; then
             echo ""
             echo -e "${DIM}Note: $spoke_count spoke containers running (use './dive ps' to see all)${NC}"
@@ -633,7 +635,8 @@ cmd_exec() {
     fi
 
     # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+    local instance_lower
+    instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
 
     if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
         # Spoke instance - prepend spoke prefix to container name
@@ -691,4 +694,3 @@ cmd_exec() {
         fi
     fi
 }
-

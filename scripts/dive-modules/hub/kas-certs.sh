@@ -19,7 +19,8 @@ kas_certs_rotate() {
     echo ""
 
     local kas_cert_dir="${DIVE_ROOT}/kas/certs"
-    local backup_dir="${kas_cert_dir}/backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_dir
+    backup_dir="${kas_cert_dir}/backup-$(date +%Y%m%d-%H%M%S)"
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would backup current certificates to $backup_dir"
@@ -188,7 +189,7 @@ kas_test() {
     log_info "Running KAS tests..."
     echo ""
 
-    cd "$kas_dir"
+    cd "$kas_dir" || return 1
 
     if [ -f "package.json" ]; then
         # Check if node_modules exists

@@ -263,7 +263,8 @@ _hub_register_kas() {
     fi
 
     # Check if already registered (HTTPS only)
-    local already_registered=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
+    local already_registered
+    already_registered=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
         https://localhost:4000/api/kas/registry 2>/dev/null | \
         jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .kasId" 2>/dev/null)
 
@@ -271,7 +272,8 @@ _hub_register_kas() {
         log_success "Hub KAS already registered: ${kas_id}"
 
         # Verify status (HTTPS only)
-        local current_status=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
+        local current_status
+        current_status=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
             https://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
 
@@ -294,11 +296,10 @@ _hub_register_kas() {
         log_success "Generated Hub KAS key pair"
     fi
 
-    local public_key
     if [ -f "$public_key_path" ]; then
-        public_key=$(cat "$public_key_path" | base64 | tr -d '\n')
+        _public_key=$(cat "$public_key_path" | base64 | tr -d '\n')
     else
-        public_key=""
+        _public_key=""
         log_warn "Could not read public key, proceeding without it"
     fi
 

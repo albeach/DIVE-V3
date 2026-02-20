@@ -47,7 +47,7 @@ for i in {1..10}; do
     curl -s "$BACKEND_URL/health" > /dev/null 2>&1
     end=$(date +%s%3N)
     latency=$((end - start))
-    health_times+=($latency)
+    health_times+=("$latency")
 done
 
 # Calculate average
@@ -80,12 +80,12 @@ if [[ -n "$TEST_TOKEN" ]]; then
             -H "Authorization: Bearer $TEST_TOKEN" \
             "$BACKEND_URL/api/resources/doc-001" 2>/dev/null || echo "000\n0")
         
-        http_code=$(echo "$response" | tail -n 2 | head -n 1)
-        time_total=$(echo "$response" | tail -n 1)
+        _http_code=$(echo "$response" | tail -n 2 | head -n 1)
+        _time_total=$(echo "$response" | tail -n 1)
         end=$(date +%s%3N)
         
         latency=$((end - start))
-        auth_times+=($latency)
+        auth_times+=("$latency")
         
         # Check if cached (simple heuristic: very fast = cached)
         if [[ $latency -lt 50 ]]; then
@@ -144,6 +144,7 @@ OPA_URL="${OPA_URL:-https://localhost:8181}"
 opa_times=()
 for i in {1..10}; do
     start=$(date +%s%3N)
+    current_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     curl -sk -X POST "$OPA_URL/v1/data/dive/authorization/decision" \
         -H "Content-Type: application/json" \
         -d '{
@@ -162,14 +163,14 @@ for i in {1..10}; do
                 },
                 "action": "read",
                 "context": {
-                    "currentTime": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+                    "currentTime": "'$current_time'",
                     "requestId": "test-'$i'"
                 }
             }
         }' > /dev/null 2>&1
     end=$(date +%s%3N)
     latency=$((end - start))
-    opa_times+=($latency)
+    opa_times+=("$latency")
 done
 
 # Calculate average

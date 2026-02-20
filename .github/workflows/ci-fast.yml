@@ -10,6 +10,10 @@ on:
       - 'terraform/**'
       - '.github/workflows/ci-fast.yml'
 
+concurrency:
+  group: ci-fast-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-essentials:
     name: Backend - Build & Type Check
@@ -44,7 +48,7 @@ jobs:
         run: cd backend && npx tsc --noEmit
 
       - name: ESLint
-        run: cd backend && ESLINT_USE_FLAT_CONFIG=false npm run lint || true
+        run: cd backend && ESLINT_USE_FLAT_CONFIG=false npm run lint
 
       - name: Build
         run: cd backend && npm run build
@@ -88,7 +92,7 @@ jobs:
         run: cd frontend && npx tsc --noEmit
 
       - name: ESLint
-        run: cd frontend && npm run lint || true
+        run: cd frontend && npm run lint
 
       - name: Build
         run: cd frontend && npm run build

@@ -42,7 +42,8 @@ init_secrets() {
 # Decode JWT payload (handles macOS and Linux)
 decode_jwt() {
     local token="$1"
-    local payload=$(echo "$token" | cut -d'.' -f2)
+    local payload
+    payload=$(echo "$token" | cut -d'.' -f2)
     # Add padding if needed
     local padding=$((4 - ${#payload} % 4))
     if [ $padding -ne 4 ]; then
@@ -75,7 +76,7 @@ get_user_token() {
 
 # Display a single user's verification
 verify_user() {
-    local instance="$1"
+    local _instance="$1"
     local username="$2"
     local keycloak_url="$3"
     local realm="$4"
@@ -108,16 +109,16 @@ verify_user() {
     local claims
     claims=$(decode_jwt "$token")
 
-    local uniqueID clearance country acr amr user_acr user_amr acpCOI iss
+    local uniqueID clearance country acr amr _user_acr _user_amr _acpCOI _iss
     uniqueID=$(echo "$claims" | jq -r '.uniqueID // "MISSING"' 2>/dev/null)
     clearance=$(echo "$claims" | jq -r '.clearance // "MISSING"' 2>/dev/null)
     country=$(echo "$claims" | jq -r '.countryOfAffiliation // "MISSING"' 2>/dev/null)
     acr=$(echo "$claims" | jq -r '.acr // "MISSING"' 2>/dev/null)
     amr=$(echo "$claims" | jq -r 'if .amr then (.amr | join(",")) else "MISSING" end' 2>/dev/null)
-    user_acr=$(echo "$claims" | jq -r '.user_acr // "N/A"' 2>/dev/null)
-    user_amr=$(echo "$claims" | jq -r 'if .user_amr then (if (.user_amr | type) == "array" then (.user_amr | join(",")) else .user_amr end) else "N/A" end' 2>/dev/null)
-    acpCOI=$(echo "$claims" | jq -r 'if .acpCOI then (if (.acpCOI | type) == "array" then (.acpCOI | join(",")) else .acpCOI end) else "N/A" end' 2>/dev/null)
-    iss=$(echo "$claims" | jq -r '.iss // "MISSING"' 2>/dev/null)
+    _user_acr=$(echo "$claims" | jq -r '.user_acr // "N/A"' 2>/dev/null)
+    _user_amr=$(echo "$claims" | jq -r 'if .user_amr then (if (.user_amr | type) == "array" then (.user_amr | join(",")) else .user_amr end) else "N/A" end' 2>/dev/null)
+    _acpCOI=$(echo "$claims" | jq -r 'if .acpCOI then (if (.acpCOI | type) == "array" then (.acpCOI | join(",")) else .acpCOI end) else "N/A" end' 2>/dev/null)
+    _iss=$(echo "$claims" | jq -r '.iss // "MISSING"' 2>/dev/null)
 
     # Determine AAL
     local aal="?"

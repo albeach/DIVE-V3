@@ -29,7 +29,8 @@ verify_mongodb_indexes() {
     log_info "MongoDB Index Verification"
     log_info "========================================="
     
-    local password=$(gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25 2>/dev/null || echo "")
+    local password
+    password=$(gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25 2>/dev/null || echo "")
     
     if [[ -z "$password" ]]; then
         log_warning "Could not fetch MongoDB password from GCP, trying environment variable"
@@ -44,7 +45,8 @@ verify_mongodb_indexes() {
     log_info "Checking resources collection indexes..."
     
     # Get indexes for resources collection
-    local indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
+    local indexes
+    indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
         --eval "use dive-v3-hub; db.resources.getIndexes()" --quiet 2>/dev/null | grep -v "Using" || echo "")
     
     if [[ -z "$indexes" ]]; then
@@ -85,7 +87,8 @@ verify_mongodb_indexes() {
     log_info ""
     log_info "Checking trustedIssuers collection indexes..."
     
-    local issuer_indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
+    local issuer_indexes
+    issuer_indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
         --eval "use dive-v3-hub; db.trustedIssuers.getIndexes()" --quiet 2>/dev/null | grep -v "Using" || echo "")
     
     if echo "$issuer_indexes" | grep -q "issuerUrl"; then
@@ -98,7 +101,8 @@ verify_mongodb_indexes() {
     log_info ""
     log_info "Checking auditLog collection indexes..."
     
-    local audit_indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
+    local audit_indexes
+    audit_indexes=$(docker exec dive-hub-mongodb mongosh -u admin -p "$password" --authenticationDatabase admin \
         --eval "use dive-v3-hub; db.auditLog.getIndexes()" --quiet 2>/dev/null | grep -v "Using" || echo "")
     
     if echo "$audit_indexes" | grep -q "timestamp"; then
@@ -133,7 +137,8 @@ verify_postgresql_indexes() {
     log_info "PostgreSQL Index Verification"
     log_info "========================================="
     
-    local password=$(gcloud secrets versions access latest --secret=dive-v3-postgres-usa --project=dive25 2>/dev/null || echo "")
+    local password
+    password=$(gcloud secrets versions access latest --secret=dive-v3-postgres-usa --project=dive25 2>/dev/null || echo "")
     
     if [[ -z "$password" ]]; then
         log_warning "Could not fetch PostgreSQL password from GCP, trying environment variable"
@@ -148,7 +153,8 @@ verify_postgresql_indexes() {
     log_info "Checking NextAuth tables indexes..."
     
     # Check accounts table indexes
-    local accounts_indexes=$(PGPASSWORD="$password" docker exec -e PGPASSWORD="$password" dive-hub-postgres psql -U postgres -d dive-v3-hub \
+    local accounts_indexes
+    accounts_indexes=$(PGPASSWORD="$password" docker exec -e PGPASSWORD="$password" dive-hub-postgres psql -U postgres -d dive-v3-hub \
         -c "SELECT indexname FROM pg_indexes WHERE tablename = 'accounts';" -t 2>/dev/null || echo "")
     
     if [[ -z "$accounts_indexes" ]]; then
@@ -174,7 +180,8 @@ verify_postgresql_indexes() {
     fi
     
     # Check sessions table indexes
-    local sessions_indexes=$(PGPASSWORD="$password" docker exec -e PGPASSWORD="$password" dive-hub-postgres psql -U postgres -d dive-v3-hub \
+    local sessions_indexes
+    sessions_indexes=$(PGPASSWORD="$password" docker exec -e PGPASSWORD="$password" dive-hub-postgres psql -U postgres -d dive-v3-hub \
         -c "SELECT indexname FROM pg_indexes WHERE tablename = 'sessions';" -t 2>/dev/null || echo "")
     
     if echo "$sessions_indexes" | grep -q "user_id"; then
@@ -218,7 +225,8 @@ show_index_usage_stats() {
     
     log_info "MongoDB index statistics..."
     
-    local password=$(gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25 2>/dev/null || \
+    local password
+    password=$(gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25 2>/dev/null || \
                      echo "${MONGO_PASSWORD_USA:-}")
     
     if [[ -n "$password" ]]; then

@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Orchestration Checkpoints, Metrics & Validation
 # =============================================================================
@@ -24,13 +25,15 @@ orch_create_checkpoint() {
     # - Database transactions ensure consistency
     # - Simpler rollback logic
 
-    local checkpoint_id="$(date +%Y%m%d_%H%M%S)_${instance_code}_${level}"
+    local checkpoint_id
+    checkpoint_id="$(date +%Y%m%d_%H%M%S)_${instance_code}_${level}"
 
     log_verbose "Creating $level checkpoint: $checkpoint_id (database-only)" >&2
 
     # Store checkpoint in database ONLY
     if orch_db_check_connection; then
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         local escaped_description="${description//\'/\'\'}"
 
         # CRITICAL FIX (2026-01-22): Use correct table name 'checkpoints' not 'orchestration_checkpoints'
@@ -71,9 +74,15 @@ orch_checkpoint_containers() {
         > "${checkpoint_dir}/container_images.tsv" 2>/dev/null || true
 
     # Network connections
-    docker inspect $(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true) \
-        --format='{{.Name}}: {{range .NetworkSettings.Networks}}{{.NetworkID}} {{end}}' \
-        > "${checkpoint_dir}/networks.txt" 2>/dev/null || true
+    local -a _container_ids=()
+    mapfile -t _container_ids < <(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true)
+    if [ ${#_container_ids[@]} -gt 0 ]; then
+        docker inspect "${_container_ids[@]}" \
+            --format='{{.Name}}: {{range .NetworkSettings.Networks}}{{.NetworkID}} {{end}}' \
+            > "${checkpoint_dir}/networks.txt" 2>/dev/null || true
+    else
+        : > "${checkpoint_dir}/networks.txt"
+    fi
 }
 
 ##
@@ -220,7 +229,8 @@ orch_execute_rollback() {
 ##
 orch_find_latest_checkpoint() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # CRITICAL FIX (2026-01-15): Database-only checkpoints
     # Previous: Searched .dive-checkpoints/ filesystem
@@ -261,7 +271,7 @@ orch_rollback_stop_services() {
 
     log_info "Stopping services for rollback..."
 
-    cd "${DIVE_ROOT}/instances/${instance_code}"
+    cd "${DIVE_ROOT}/instances/${instance_code}" || return 1
     docker compose down 2>/dev/null || true
 
     log_success "Services stopped"
@@ -349,7 +359,8 @@ orch_rollback_complete() {
     local clean_slate="${3:-}"
 
     log_info "Executing comprehensive rollback for $instance_code..."
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # Track what was cleaned
@@ -359,7 +370,7 @@ orch_rollback_complete() {
     # Step 1: Stop and remove all containers with volumes
     log_step "1/$total_steps: Stopping and removing containers..."
     if [ -d "$instance_dir" ] && [ -f "$instance_dir/docker-compose.yml" ]; then
-        cd "$instance_dir"
+        cd "$instance_dir" || return 1
         if docker compose down -v --remove-orphans 2>&1 | grep -q "Removed\|Stopped"; then
             log_success "✓ Containers stopped and removed"
             ((cleaned++))
@@ -367,14 +378,15 @@ orch_rollback_complete() {
             # Fallback: manually remove containers
             docker ps -a --filter "name=dive-spoke-${code_lower}-" -q | grep . | xargs docker rm -f 2>/dev/null && ((cleaned++))
         fi
-        cd "$DIVE_ROOT"
+        cd "$DIVE_ROOT" || return 1
     else
         log_verbose "No docker-compose.yml found - skipping container cleanup"
     fi
 
     # Step 2: Remove Docker networks
     log_step "2/$total_steps: Cleaning Docker networks..."
-    local networks=$(docker network ls --filter "name=dive-spoke-${code_lower}" -q 2>/dev/null)
+    local networks
+    networks=$(docker network ls --filter "name=dive-spoke-${code_lower}" -q 2>/dev/null)
     if [ -n "$networks" ]; then
         echo "$networks" | grep . | xargs docker network rm 2>/dev/null && {
             log_success "✓ Docker networks removed"
@@ -388,7 +400,7 @@ orch_rollback_complete() {
     log_step "3/$total_steps: Cleaning Terraform state..."
     local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
     if [ -d "$tf_spoke_dir" ]; then
-        cd "$tf_spoke_dir"
+        cd "$tf_spoke_dir" || return 1
 
         # Remove workspace if it exists
         if terraform workspace list 2>/dev/null | grep -q "$code_lower"; then
@@ -405,7 +417,7 @@ orch_rollback_complete() {
         rm -f "terraform.tfstate.d/${code_lower}/terraform.tfstate" 2>/dev/null
         rm -rf ".terraform" 2>/dev/null
 
-        cd "$DIVE_ROOT"
+        cd "$DIVE_ROOT" || return 1
     else
         log_verbose "Terraform directory not found"
     fi
@@ -443,7 +455,8 @@ orch_rollback_complete() {
         log_step "6/$total_steps: Removing instance directory (clean slate)..."
         if [ -d "$instance_dir" ]; then
             # Backup critical files before removal
-            local backup_dir="${DIVE_ROOT}/.rollback-backups/${code_lower}-$(date +%Y%m%d-%H%M%S)"
+            local backup_dir
+            backup_dir="${DIVE_ROOT}/.rollback-backups/${code_lower}-$(date +%Y%m%d-%H%M%S)"
             mkdir -p "$backup_dir"
 
             # Backup config files if they exist
@@ -511,7 +524,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/checkpoint-recovery.sh"
 ##
 orch_validate_state_consistency() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Validating state consistency for $instance_code..."
 
@@ -522,7 +536,8 @@ orch_validate_state_consistency() {
     fi
 
     # Determine actual system state
-    local actual_state=$(orch_determine_actual_state "$instance_code")
+    local actual_state
+    actual_state=$(orch_determine_actual_state "$instance_code")
 
     log_verbose "DB state: $db_state | Actual state: $actual_state"
 
@@ -564,10 +579,12 @@ orch_validate_state_consistency() {
 ##
 orch_determine_actual_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Check 1: Do containers exist?
-    local container_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local container_count
+    container_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$container_count" -eq 0 ]; then
         # No containers = not deployed
@@ -576,7 +593,8 @@ orch_determine_actual_state() {
     fi
 
     # Check 2: Are containers running?
-    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local running_count
+    running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$running_count" -eq 0 ]; then
         # Containers exist but none running = failed or rolled back
@@ -591,7 +609,8 @@ orch_determine_actual_state() {
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
+            local health
+            health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
             if [ "$health" = "healthy" ] || [ "$health" = "no-healthcheck" ]; then
                 ((healthy_core++))
             fi
@@ -609,7 +628,8 @@ orch_determine_actual_state() {
     local realm="dive-v3-broker-${code_lower}"
 
     if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        local realm_check=$(docker exec "$kc_container" curl -sf \
+        local realm_check
+        realm_check=$(docker exec "$kc_container" curl -sf \
             "http://localhost:8080/realms/${realm}" 2>/dev/null | \
             jq -r '.realm // empty' 2>/dev/null)
 
@@ -624,7 +644,8 @@ orch_determine_actual_state() {
     local backend_container="dive-spoke-${code_lower}-backend"
     if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
         # Check if backend can reach Hub (indicates federation)
-        local hub_check=$(docker exec "$backend_container" curl -sf \
+        local hub_check
+        hub_check=$(docker exec "$backend_container" curl -sf \
             "https://dive-hub-backend:4000/health" 2>/dev/null | \
             jq -r '.status // empty' 2>/dev/null)
 

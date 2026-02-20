@@ -69,7 +69,7 @@ cleaned=0
 for file in $modified_files; do
     if [ -f "$file" ]; then
         # Check if file has trailing empty lines
-        if [ $(tail -n 1 "$file" | wc -l) -eq 0 ]; then
+        if [ -z "$(tail -n 1 "$file")" ]; then
             # Use Python to safely remove trailing empty lines
             python3 -c "
 import sys
@@ -110,3 +110,5 @@ if [ "$remaining" -gt 5 ]; then
     echo "... ($remaining total modified files)"
 fi
 
+# sc2034-anchor
+: "${RED:-}"

@@ -54,7 +54,8 @@ rollback_deployment() {
     local instance_code="${2:-}"
     local reason="${3:-Deployment failed}"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Rolling back $deployment_type ${instance_code:-} deployment..."
     log_warn "Reason: $reason"
@@ -86,7 +87,7 @@ rollback_hub() {
     log_info "Rolling back Hub deployment..."
 
     # Stop containers
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
     docker compose -f docker-compose.hub.yml down 2>/dev/null || true
 
     # Don't remove volumes - preserve data if possible
@@ -99,15 +100,16 @@ rollback_hub() {
 ##
 rollback_spoke() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_info "Rolling back Spoke $instance_code deployment..."
 
     if [ -d "$spoke_dir" ] && [ -f "${spoke_dir}/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         docker compose down 2>/dev/null || true
-        cd - >/dev/null
+        cd - >/dev/null || return 1
     fi
 
     # Remove any running containers
@@ -176,7 +178,8 @@ cleanup_all() {
     # Stop and remove all Spokes
     for spoke_dir in "${DIVE_ROOT}/instances"/*/; do
         [ -d "$spoke_dir" ] || continue
-        local code=$(basename "$spoke_dir")
+        local code
+        code=$(basename "$spoke_dir")
         cleanup_spoke "$code" "--force"
     done
 
@@ -208,7 +211,7 @@ cleanup_hub() {
 
     log_info "Cleaning Hub deployment..."
 
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
     docker compose -f docker-compose.hub.yml down -v 2>/dev/null || true
 
     # Remove Hub containers
@@ -229,8 +232,10 @@ cleanup_hub() {
 cleanup_spoke() {
     local instance_code="$1"
     local force="$2"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if [ "$force" != "--force" ] && is_interactive; then
         log_warn "This will remove Spoke $code_upper deployment!"
@@ -245,9 +250,9 @@ cleanup_spoke() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ -d "$spoke_dir" ] && [ -f "${spoke_dir}/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         docker compose down -v 2>/dev/null || true
-        cd - >/dev/null
+        cd - >/dev/null || return 1
     fi
 
     # Remove containers

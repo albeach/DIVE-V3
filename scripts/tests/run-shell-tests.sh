@@ -112,6 +112,7 @@ run_suite() {
     echo "  ─────────────────────────────────────"
 
     local before_failed=$TOTAL_FAILED
+    # shellcheck source=/dev/null
     source "$suite_file"
 
     if [ $TOTAL_FAILED -gt "$before_failed" ]; then
@@ -162,3 +163,6 @@ else
     echo ""
     exit 0
 fi
+
+# sc2034-anchor
+: "${PROJECT_ROOT:-}" "${YELLOW:-}"

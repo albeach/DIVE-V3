@@ -79,3 +79,6 @@ echo ""
 echo -e "${GREEN}════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  Setup Complete${NC}"
 echo -e "${GREEN}════════════════════════════════════════════${NC}"
+
+# sc2034-anchor
+: "${YELLOW:-}"

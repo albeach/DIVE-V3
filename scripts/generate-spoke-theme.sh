@@ -78,10 +78,14 @@ generate_theme() {
     fi
 
     # Get country data from NATO database
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
-    local primary=$(get_country_primary_color "$code")
-    local secondary=$(get_country_secondary_color "$code")
+    local name
+    name=$(get_country_name "$code")
+    local flag
+    flag=$(get_country_flag "$code")
+    local primary
+    primary=$(get_country_primary_color "$code")
+    local secondary
+    secondary=$(get_country_secondary_color "$code")
     local accent="#ffffff"  # White accent works for most flags
 
     # Handle partner nations
@@ -110,8 +114,10 @@ generate_theme() {
     mkdir -p "$theme_dir/login/resources/img"
 
     # Convert hex to RGB for rgba() usage
-    local primary_rgb=$(hex_to_rgb "$primary")
-    local secondary_rgb=$(hex_to_rgb "$secondary")
+    local primary_rgb
+    primary_rgb=$(hex_to_rgb "$primary")
+    local secondary_rgb
+    secondary_rgb=$(hex_to_rgb "$secondary")
 
     # Generate theme.properties
     cat > "$theme_dir/login/theme.properties" << PROPS
@@ -284,7 +290,8 @@ CSS
         fi
 
         # Update theme.properties to include both locales (portable)
-        local tmpfile=$(mktemp)
+        local tmpfile
+        tmpfile=$(mktemp)
         sed "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties" > "$tmpfile" && mv "$tmpfile" "$theme_dir/login/theme.properties"
     fi
 
@@ -385,7 +392,7 @@ if [ "$ALL" = true ]; then
     echo ""
 
     generated=0
-    skipped=0
+    _skipped=0
     failed=0
 
     for code in $(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do

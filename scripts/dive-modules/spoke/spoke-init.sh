@@ -194,8 +194,10 @@ spoke_setup_wizard() {
         instance_name="${instance_name:-$default_name}"
     fi
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo ""
     echo -e "  Instance Code: ${GREEN}$code_upper${NC}"
@@ -428,11 +430,16 @@ spoke_setup_wizard() {
     echo -e "${CYAN}Step 6: Security Configuration${NC}"
     echo ""
     echo "  Generating secure passwords..."
-    local postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local auth_secret=$(openssl rand -base64 32)
-    local client_secret=$(openssl rand -base64 24 | tr -d '/+=')
+    local postgres_pass
+    postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local mongo_pass
+    mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local keycloak_pass
+    keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local auth_secret
+    auth_secret=$(openssl rand -base64 32)
+    local client_secret
+    client_secret=$(openssl rand -base64 24 | tr -d '/+=')
     echo -e "  ${GREEN}✓ Secure passwords generated${NC}"
 
     # Confirmation
@@ -485,8 +492,10 @@ _spoke_init_internal() {
     local client_secret="${15}"
     local setup_tunnel="${16}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     ensure_dive_root
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -501,7 +510,7 @@ _spoke_init_internal() {
 
     # Extract individual port variables for later use
     local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
-    local keycloak_http_port="${SPOKE_KEYCLOAK_HTTP_PORT:-8080}"
+    local _keycloak_http_port="${SPOKE_KEYCLOAK_HTTP_PORT:-8080}"
     local kas_port="${SPOKE_KAS_PORT:-8085}"
 
     # Create directory structure
@@ -532,7 +541,8 @@ _spoke_init_internal() {
             -H "Content-Type: application/json" \
             -d "{\"instanceCode\":\"$code_upper\",\"name\":\"$instance_name\",\"baseUrl\":\"$base_url\",\"apiUrl\":\"$api_url\",\"idpUrl\":\"$idp_url\",\"idpPublicUrl\":\"$idp_public_url\",\"requestedScopes\":[\"policy:base\",\"policy:org\",\"policy:tenant\"],\"contactEmail\":\"$contact_email\",\"skipValidation\":true}" 2>&1)
 
-        local hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
+        local hub_spoke_id
+        hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
         if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
             spoke_id="$hub_spoke_id"
             log_success "✓ Got spokeId from Hub: $spoke_id"
@@ -546,7 +556,8 @@ _spoke_init_internal() {
     fi
 
     # Extract hostname from IdP URL for Keycloak config
-    local idp_hostname=$(echo "$idp_url" | sed 's|https://||' | cut -d: -f1)
+    local idp_hostname
+    idp_hostname=$(echo "$idp_url" | sed 's|https://||' | cut -d: -f1)
 
     # Create .env file with GCP secret references (NO SECRETS STORED LOCALLY)
     log_step "Creating environment configuration (GCP Secret Manager references)"

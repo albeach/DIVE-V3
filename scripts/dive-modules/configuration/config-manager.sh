@@ -222,6 +222,7 @@ config_validate_cmd() {
     if ! type config_validate &>/dev/null; then
         local validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
         if [ -f "$validator" ]; then
+            # shellcheck source=./config-validator.sh
             source "$validator"
         else
             log_error "Config validator not available"

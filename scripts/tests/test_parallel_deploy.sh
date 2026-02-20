@@ -167,7 +167,7 @@ if type _pd_validate_codes &>/dev/null; then
 
 else
     # Skip validation tests if function didn't load
-    for i in $(seq 9 14); do
+    for _i in $(seq 9 14); do
         assert_eq "0" "0" "validate: skipped (function not loadable)"
     done
 fi
@@ -225,7 +225,7 @@ if type _pd_print_pre_summary &>/dev/null; then
     assert_contains "$result" "1 instances" "summary: single spoke shows 1 instances"
 
 else
-    for i in $(seq 16 19); do
+    for _i in $(seq 16 19); do
         assert_eq "0" "0" "summary: skipped (function not loadable)"
     done
 fi
@@ -279,7 +279,7 @@ if type _pd_print_results &>/dev/null; then
     _pd_clear
 
 else
-    for i in $(seq 20 24); do
+    for _i in $(seq 20 24); do
         assert_eq "0" "0" "results: skipped (function not loadable)"
     done
 fi

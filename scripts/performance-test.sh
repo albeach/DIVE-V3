@@ -112,7 +112,8 @@ time_api_call() {
     local data="$3"
     local token="$4"
 
-    local start_time=$(date +%s%N)
+    local start_time
+    start_time=$(date +%s%N)
     local http_code
 
     if [ "$method" = "POST" ]; then
@@ -127,7 +128,8 @@ time_api_call() {
             "$url")
     fi
 
-    local end_time=$(date +%s%N)
+    local end_time
+    end_time=$(date +%s%N)
     local duration_ns=$((end_time - start_time))
     local duration_ms=$((duration_ns / 1000000))
 
@@ -144,15 +146,19 @@ run_latency_test() {
 
     log_info "Running latency test: $test_name ($iterations iterations)"
 
-    local token=$(get_auth_token)
+    local token
+    token=$(get_auth_token)
     local results=()
     local total_duration=0
     local success_count=0
 
     for i in $(seq 1 "$iterations"); do
-        local result=$(time_api_call "$BACKEND_URL$endpoint" "$method" "$data" "$token")
-        local duration_ms=$(echo "$result" | jq -r '.duration_ms')
-        local http_code=$(echo "$result" | jq -r '.http_code')
+        local result
+        result=$(time_api_call "$BACKEND_URL$endpoint" "$method" "$data" "$token")
+        local duration_ms
+        duration_ms=$(echo "$result" | jq -r '.duration_ms')
+        local http_code
+        http_code=$(echo "$result" | jq -r '.http_code')
 
         results+=("$duration_ms")
 
@@ -176,8 +182,7 @@ run_latency_test() {
     fi
 
     # Sort results for percentiles
-    IFS=$'\n' sorted_results=($(sort -n <<<"${results[*]}"))
-    unset IFS
+    mapfile -t sorted_results < <(printf '%s\n' "${results[@]}" | sort -n)
 
     local p50=${sorted_results[$((iterations / 2))]}
     local p95=${sorted_results[$((iterations * 95 / 100))]}
@@ -205,8 +210,10 @@ run_throughput_test() {
 
     log_info "Running throughput test: $concurrent_users concurrent users for ${duration}s"
 
-    local token=$(get_auth_token)
-    local start_time=$(date +%s)
+    local token
+    token=$(get_auth_token)
+    local start_time
+    start_time=$(date +%s)
     local end_time=$((start_time + duration))
 
     # Start background processes
@@ -222,10 +229,13 @@ run_throughput_test() {
             local successes=0
             local total_duration=0
 
-            while [ $(date +%s) -lt "$end_time" ]; do
-                local result=$(time_api_call "$BACKEND_URL$endpoint" "$method" "$data" "$token")
-                local duration_ms=$(echo "$result" | jq -r '.duration_ms')
-                local http_code=$(echo "$result" | jq -r '.http_code')
+            while [ "$(date +%s)" -lt "$end_time" ]; do
+                local result
+                result=$(time_api_call "$BACKEND_URL$endpoint" "$method" "$data" "$token")
+                local duration_ms
+                duration_ms=$(echo "$result" | jq -r '.duration_ms')
+                local http_code
+                http_code=$(echo "$result" | jq -r '.http_code')
 
                 count=$((count + 1))
 
@@ -263,12 +273,16 @@ run_throughput_test() {
 
     for result_file in "${results_files[@]}"; do
         if [ -f "$result_file" ]; then
-            local user_result=$(cat "$result_file")
+            local user_result
+            user_result=$(cat "$result_file")
             user_results+=("$user_result")
 
-            local requests=$(echo "$user_result" | jq -r '.requests')
-            local successes=$(echo "$user_result" | jq -r '.successes')
-            local avg_latency=$(echo "$user_result" | jq -r '.avg_latency_ms')
+            local requests
+            requests=$(echo "$user_result" | jq -r '.requests')
+            local successes
+            successes=$(echo "$user_result" | jq -r '.successes')
+            local avg_latency
+            avg_latency=$(echo "$user_result" | jq -r '.avg_latency_ms')
 
             total_requests=$((total_requests + requests))
             total_successes=$((total_successes + successes))
@@ -305,7 +319,7 @@ test_authorization_performance() {
     log_info "Testing authorization decision performance..."
 
     # Test data for different authorization scenarios
-    local test_cases=(
+    local _test_cases=(
         "UNCLASSIFIED resource access"
         "SECRET resource access"
         "TOP_SECRET resource access"
@@ -338,7 +352,8 @@ test_authorization_performance() {
                 }
             }"
 
-            local result=$(run_latency_test "/api/authz/check" "POST" "$data" "AuthZ $clearance $country" 50)
+            local result
+            result=$(run_latency_test "/api/authz/check" "POST" "$data" "AuthZ $clearance $country" 50)
             auth_results+=("$result")
         done
     done
@@ -383,19 +398,23 @@ run_performance_tests() {
     # API Latency Tests
     log_info "=== API Latency Tests ==="
 
-    local health_result=$(run_latency_test "/health" "GET" "" "Health Check")
-    local resources_result=$(run_latency_test "/api/resources" "GET" "" "List Resources")
+    local health_result
+    health_result=$(run_latency_test "/health" "GET" "" "Health Check")
+    local resources_result
+    resources_result=$(run_latency_test "/api/resources" "GET" "" "List Resources")
 
     echo
 
     # Authorization Performance Tests
     log_info "=== Authorization Performance Tests ==="
-    local authz_result=$(test_authorization_performance)
+    local authz_result
+    authz_result=$(test_authorization_performance)
     echo
 
     # Throughput Tests
     log_info "=== Throughput Tests ==="
-    local throughput_result=$(run_throughput_test "/api/authz/check" "POST" "{
+    local throughput_result
+    throughput_result=$(run_throughput_test "/api/authz/check" "POST" "{
         \"subject\": {
             \"uniqueID\": \"perf-test-user\",
             \"clearance\": \"SECRET\",
@@ -415,11 +434,12 @@ run_performance_tests() {
 
     # Federation Tests
     log_info "=== Federation Performance Tests ==="
-    local federation_result=$(test_federation_performance)
+    local federation_result
+    federation_result=$(test_federation_performance)
     echo
 
     # Generate comprehensive results
-    local results="{
+    local results_json="{
         \"timestamp\": \"$TIMESTAMP\",
         \"configuration\": {
             \"backend_url\": \"$BACKEND_URL\",
@@ -436,23 +456,26 @@ run_performance_tests() {
         \"federation_performance\": $federation_result
     }"
 
-    echo "$results" | jq '.' > "$RESULT_FILE"
+    echo "$results_json" | jq '.' > "$RESULT_FILE"
 
     # Analyze results and provide summary
-    analyze_results "$results"
+    analyze_results "$results_json"
 }
 
 # Analyze results and check against targets
 analyze_results() {
-    local results="$1"
+    local results_json="$1"
 
     echo
     log_info "=== Performance Test Results Summary ==="
 
     # Extract key metrics
-    local authz_p95=$(echo "$results" | jq -r '.authorization_performance.authorization_tests[0].p95_latency_ms')
-    local throughput_rps=$(echo "$results" | jq -r '.throughput_test.throughput_rps')
-    local throughput_success_rate=$(echo "$results" | jq -r '.throughput_test.success_rate')
+    local authz_p95
+    authz_p95=$(echo "$results_json" | jq -r '.authorization_performance.authorization_tests[0].p95_latency_ms')
+    local throughput_rps
+    throughput_rps=$(echo "$results_json" | jq -r '.throughput_test.throughput_rps')
+    local throughput_success_rate
+    throughput_success_rate=$(echo "$results_json" | jq -r '.throughput_test.success_rate')
 
     echo "Authorization Decision P95 Latency: ${authz_p95}ms (Target: < 200ms)"
     echo "Throughput: ${throughput_rps} requests/second"
@@ -493,10 +516,11 @@ analyze_results() {
 warmup_services() {
     log_info "Warming up services for ${WARMUP_DURATION} seconds..."
 
-    local token=$(get_auth_token)
+    local token
+    token=$(get_auth_token)
     local end_time=$(( $(date +%s) + WARMUP_DURATION ))
 
-    while [ $(date +%s) -lt "$end_time" ]; do
+    while [ "$(date +%s)" -lt "$end_time" ]; do
         time_api_call "$BACKEND_URL/health" "GET" "" "$token" > /dev/null
         sleep 0.1
     done
@@ -568,4 +592,3 @@ done
 
 # Run main function
 main
-

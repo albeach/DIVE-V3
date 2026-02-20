@@ -24,17 +24,24 @@
 ##
 spoke_secrets_generate() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_info "Generating new secrets for $code_upper"
 
     # Generate each required secret
-    local POSTGRES_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
-    local MONGO_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
-    local REDIS_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
-    local KEYCLOAK_ADMIN_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
-    local KEYCLOAK_CLIENT_SECRET_NEW=$(openssl rand -base64 24 | tr -d '/+=')
-    local AUTH_SECRET_NEW=$(openssl rand -base64 32)
+    local POSTGRES_PASSWORD_NEW
+    POSTGRES_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
+    local MONGO_PASSWORD_NEW
+    MONGO_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
+    local REDIS_PASSWORD_NEW
+    REDIS_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
+    local KEYCLOAK_ADMIN_PASSWORD_NEW
+    KEYCLOAK_ADMIN_PASSWORD_NEW=$(openssl rand -base64 16 | tr -d '/+=')
+    local KEYCLOAK_CLIENT_SECRET_NEW
+    KEYCLOAK_CLIENT_SECRET_NEW=$(openssl rand -base64 24 | tr -d '/+=')
+    local AUTH_SECRET_NEW
+    AUTH_SECRET_NEW=$(openssl rand -base64 32)
 
     # Export with instance suffix (SINGLE SOURCE OF TRUTH)
     # Docker compose templates use: ${POSTGRES_PASSWORD_NZL} format
@@ -69,7 +76,8 @@ spoke_secrets_generate() {
 ##
 spoke_secrets_validate() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Validating secrets for $code_upper"
 
@@ -138,8 +146,10 @@ spoke_secrets_validate() {
 ##
 spoke_secrets_sync() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Synchronizing secrets for $code_upper"
 
@@ -175,8 +185,10 @@ spoke_secrets_sync() {
 ##
 spoke_secrets_sync_keycloak_client() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
@@ -268,8 +280,10 @@ spoke_secrets_sync_keycloak_client() {
 ##
 spoke_secrets_sync_federation() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Check if Hub is running
     local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
@@ -311,8 +325,10 @@ spoke_secrets_sync_federation() {
 ##
 spoke_secrets_test_accessibility() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Testing secret accessibility in containers"
 
@@ -352,8 +368,10 @@ spoke_secrets_test_accessibility() {
 ##
 spoke_secrets_generate_report() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local report_file="${DIVE_ROOT}/logs/secret-validation-${code_lower}-$(date +%Y%m%d-%H%M%S).log"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local report_file
+    report_file="${DIVE_ROOT}/logs/secret-validation-${code_lower}-$(date +%Y%m%d-%H%M%S).log"
 
     mkdir -p "${DIVE_ROOT}/logs"
 

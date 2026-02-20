@@ -61,14 +61,15 @@ secret_exists() {
 # Create a secret with generated password
 create_secret() {
     local name="$1"
-    local description="$2"
+    local _description="$2"
     
     if secret_exists "$name"; then
         log_info "Secret exists: $name"
         return 0
     fi
     
-    local password=$(generate_password)
+    local password
+    password=$(generate_password)
     
     # Create secret
     gcloud secrets create "$name" \
@@ -89,8 +90,10 @@ create_secret() {
 create_country_secrets() {
     local code="$1"
     local code_lower="${code,,}"
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
+    local name
+    name=$(get_country_name "$code")
+    local flag
+    flag=$(get_country_flag "$code")
     
     echo ""
     echo -e "${BOLD}Creating secrets for $name ($code) $flag${NC}"
@@ -142,7 +145,8 @@ load_secrets() {
     echo ""
     
     # Core secrets
-    local kc_secret=$(gcloud secrets versions access latest \
+    local kc_secret
+    kc_secret=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-keycloak-${code_lower}" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -151,7 +155,8 @@ load_secrets() {
         echo "export TF_VAR_keycloak_admin_password='${kc_secret}'"
     fi
     
-    local mongo_secret=$(gcloud secrets versions access latest \
+    local mongo_secret
+    mongo_secret=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-mongodb-${code_lower}" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -159,7 +164,8 @@ load_secrets() {
         echo "export MONGO_PASSWORD_${code_upper}='${mongo_secret}'"
     fi
     
-    local pg_secret=$(gcloud secrets versions access latest \
+    local pg_secret
+    pg_secret=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-postgres-${code_lower}" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -167,7 +173,8 @@ load_secrets() {
         echo "export POSTGRES_PASSWORD_${code_upper}='${pg_secret}'"
     fi
     
-    local auth_secret=$(gcloud secrets versions access latest \
+    local auth_secret
+    auth_secret=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-auth-secret-${code_lower}" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -176,7 +183,8 @@ load_secrets() {
     fi
     
     # Client secret (shared across all instances)
-    local client_secret=$(gcloud secrets versions access latest \
+    local client_secret
+    client_secret=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-keycloak-client-secret" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -186,7 +194,8 @@ load_secrets() {
     fi
     
     # Test user password (shared)
-    local test_pwd=$(gcloud secrets versions access latest \
+    local test_pwd
+    test_pwd=$(gcloud secrets versions access latest \
         --secret="${SECRET_PREFIX}-test-user-password" \
         --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
@@ -197,7 +206,8 @@ load_secrets() {
     
     # Federation secrets
     if [[ "$code" != "USA" ]]; then
-        local fed_usa_to=$(gcloud secrets versions access latest \
+        local fed_usa_to
+        fed_usa_to=$(gcloud secrets versions access latest \
             --secret="${SECRET_PREFIX}-federation-usa-${code_lower}" \
             --project="$GCP_PROJECT" 2>/dev/null || echo "")
         
@@ -205,7 +215,8 @@ load_secrets() {
             echo "export FEDERATION_SECRET_USA_${code_upper}='${fed_usa_to}'"
         fi
         
-        local fed_to_usa=$(gcloud secrets versions access latest \
+        local fed_to_usa
+        fed_to_usa=$(gcloud secrets versions access latest \
             --secret="${SECRET_PREFIX}-federation-${code_lower}-usa" \
             --project="$GCP_PROJECT" 2>/dev/null || echo "")
         
@@ -219,7 +230,8 @@ load_secrets() {
 verify_secrets() {
     local code="$1"
     local code_lower="${code,,}"
-    local name=$(get_country_name "$code")
+    local name
+    name=$(get_country_name "$code")
     local missing=0
     
     echo ""
@@ -356,3 +368,6 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
+
+# sc2034-anchor
+: "${DIM:-}" "${PROJECT_ROOT:-}"

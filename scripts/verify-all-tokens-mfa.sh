@@ -83,7 +83,8 @@ generate_totp() {
 # Decode JWT payload
 decode_jwt() {
     local token="$1"
-    local payload=$(echo "$token" | cut -d'.' -f2)
+    local payload
+    payload=$(echo "$token" | cut -d'.' -f2)
     local padding=$((4 - ${#payload} % 4))
     if [ $padding -ne 4 ]; then
         payload="${payload}$(printf '=%.0s' $(seq 1 $padding))"
@@ -165,7 +166,7 @@ get_mfa_token() {
 
 # Verify a single user
 verify_user() {
-    local instance="$1"
+    local _instance="$1"
     local username="$2"
     local keycloak_url="$3"
     local realm="$4"
@@ -413,3 +414,6 @@ main() {
 }
 
 main "$@"
+
+# sc2034-anchor
+: "${FRA_BACKEND_URL:-}"

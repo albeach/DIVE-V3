@@ -28,8 +28,10 @@ export DIVE_SPOKE_FIX_HOSTNAME_LOADED=1
 ##
 spoke_fix_keycloak_hostname() {
     local instance_code="${1:-${INSTANCE}}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local compose_file="$spoke_dir/docker-compose.yml"
 
@@ -53,7 +55,8 @@ spoke_fix_keycloak_hostname() {
     fi
 
     # Create a temp file for the fixed configuration
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
 
     # Use awk to update the Keycloak environment section
     awk -v code_lower="$code_lower" -v kc_port="$SPOKE_KEYCLOAK_HTTPS_PORT" '
@@ -141,8 +144,10 @@ spoke_fix_all_hostnames() {
             continue
         fi
 
-        local code_lower=$(basename "$spoke_dir")
-        local code_upper=$(upper "$code_lower")
+        local code_lower
+        code_lower=$(basename "$spoke_dir")
+        local code_upper
+        code_upper=$(upper "$code_lower")
 
         if [ -f "$spoke_dir/docker-compose.yml" ]; then
             if spoke_fix_keycloak_hostname "$code_upper"; then
@@ -165,7 +170,8 @@ spoke_fix_all_hostnames() {
 ##
 spoke_needs_hostname_fix() {
     local instance_code="${1:-${INSTANCE}}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
 
     if [ ! -f "$compose_file" ]; then

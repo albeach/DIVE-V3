@@ -129,7 +129,8 @@ get_keycloak_url() {
         echo "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
     else
         # Fallback: try to detect from running container
-        local port=$(docker port "${code_lower}-keycloak-${code_lower}-1" 8443 2>/dev/null | cut -d: -f2 || echo "")
+        local port
+        port=$(docker port "${code_lower}-keycloak-${code_lower}-1" 8443 2>/dev/null | cut -d: -f2 || echo "")
         if [[ -n "$port" ]]; then
             echo "https://localhost:${port}"
         else
@@ -189,7 +190,8 @@ verify_mappers() {
     log_header "$name ($code) $flag - Protocol Mappers"
     
     # Get Keycloak URL
-    local kc_url=$(get_keycloak_url "$code")
+    local kc_url
+    kc_url=$(get_keycloak_url "$code")
     if [[ -z "$kc_url" ]]; then
         log_error "Could not determine Keycloak URL for $code"
         return 1
@@ -197,7 +199,8 @@ verify_mappers() {
     log_info "Keycloak URL: $kc_url"
     
     # Get admin token
-    local token=$(get_admin_token "$kc_url")
+    local token
+    token=$(get_admin_token "$kc_url")
     if [[ -z "$token" || "$token" == "null" ]]; then
         log_error "Failed to authenticate with Keycloak"
         log_info "Try setting KEYCLOAK_ADMIN_PASSWORD environment variable"
@@ -206,14 +209,17 @@ verify_mappers() {
     log_success "Admin authentication successful"
     
     # Get realm and client info
-    local realm=$(get_realm_name "$code")
-    local client_id=$(get_client_id "$code")
+    local realm
+    realm=$(get_realm_name "$code")
+    local client_id
+    client_id=$(get_client_id "$code")
     
     log_info "Realm: $realm"
     log_info "Client: $client_id"
     
     # Check if realm exists
-    local realm_exists=$(curl -sk -H "Authorization: Bearer $token" \
+    local realm_exists
+    realm_exists=$(curl -sk -H "Authorization: Bearer $token" \
         "${kc_url}/admin/realms/${realm}" 2>/dev/null | jq -r '.realm // empty')
     
     if [[ -z "$realm_exists" ]]; then
@@ -223,7 +229,8 @@ verify_mappers() {
     log_success "Realm exists: $realm"
     
     # Get client UUID
-    local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
+    local client_uuid
+    client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
         "${kc_url}/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
         jq -r '.[0].id // empty')
     
@@ -234,10 +241,12 @@ verify_mappers() {
     log_success "Client found: $client_id"
     
     # Get all mappers for the client
-    local mappers_json=$(curl -sk -H "Authorization: Bearer $token" \
+    local mappers_json
+    mappers_json=$(curl -sk -H "Authorization: Bearer $token" \
         "${kc_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null)
     
-    local mapper_names=$(echo "$mappers_json" | jq -r '.[].name // empty' 2>/dev/null)
+    local mapper_names
+    mapper_names=$(echo "$mappers_json" | jq -r '.[].name // empty' 2>/dev/null)
     
     echo ""
     echo -e "  ${CYAN}Required Mappers:${NC}"
@@ -286,19 +295,23 @@ verify_mappers() {
     echo ""
     echo -e "  ${CYAN}Federation IdP Mappers:${NC}"
     
-    local idps=$(curl -sk -H "Authorization: Bearer $token" \
+    local idps
+    idps=$(curl -sk -H "Authorization: Bearer $token" \
         "${kc_url}/admin/realms/${realm}/identity-provider/instances" 2>/dev/null)
     
-    local idp_count=$(echo "$idps" | jq 'length' 2>/dev/null || echo "0")
+    local idp_count
+    idp_count=$(echo "$idps" | jq 'length' 2>/dev/null || echo "0")
     
     if [[ "$idp_count" -gt 0 ]]; then
         log_info "  Found $idp_count identity provider(s)"
         
         for alias in $(echo "$idps" | jq -r '.[].alias' 2>/dev/null); do
-            local idp_mappers=$(curl -sk -H "Authorization: Bearer $token" \
+            local idp_mappers
+            idp_mappers=$(curl -sk -H "Authorization: Bearer $token" \
                 "${kc_url}/admin/realms/${realm}/identity-provider/instances/${alias}/mappers" 2>/dev/null)
             
-            local idp_mapper_count=$(echo "$idp_mappers" | jq 'length' 2>/dev/null || echo "0")
+            local idp_mapper_count
+            idp_mapper_count=$(echo "$idp_mappers" | jq 'length' 2>/dev/null || echo "0")
             
             if [[ "$idp_mapper_count" -ge 4 ]]; then
                 log_success "  $alias: $idp_mapper_count mappers"
@@ -345,7 +358,8 @@ create_mapper() {
         multivalued="true"
     fi
     
-    local payload=$(cat <<EOF
+    local payload
+    payload=$(cat <<EOF
 {
     "name": "${mapper_name}",
     "protocol": "openid-connect",
@@ -363,7 +377,8 @@ create_mapper() {
 EOF
 )
     
-    local result=$(curl -sk -X POST "${kc_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+    local result
+    result=$(curl -sk -X POST "${kc_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
         -d "$payload" 2>/dev/null)
@@ -371,7 +386,8 @@ EOF
     if [[ -z "$result" || "$result" == "{}" ]]; then
         log_success "    Created mapper: $mapper_name"
     else
-        local error=$(echo "$result" | jq -r '.errorMessage // empty')
+        local error
+        error=$(echo "$result" | jq -r '.errorMessage // empty')
         if [[ -n "$error" ]]; then
             log_error "    Failed to create $mapper_name: $error"
         fi
@@ -388,15 +404,19 @@ verify_token_claims() {
     
     log_header "Token Claim Verification - $code"
     
-    local kc_url=$(get_keycloak_url "$code")
-    local realm=$(get_realm_name "$code")
-    local client_id=$(get_client_id "$code")
+    local kc_url
+    kc_url=$(get_keycloak_url "$code")
+    local realm
+    realm=$(get_realm_name "$code")
+    local client_id
+    client_id=$(get_client_id "$code")
     
     log_info "Attempting to fetch a test token..."
     log_info "Looking for test user: pilot-${code_lower}-l2"
     
     # Try to get a token for a test user
-    local token_response=$(curl -sk -X POST "${kc_url}/realms/${realm}/protocol/openid-connect/token" \
+    local token_response
+    token_response=$(curl -sk -X POST "${kc_url}/realms/${realm}/protocol/openid-connect/token" \
         -d "grant_type=password" \
         -d "client_id=${client_id}" \
         -d "client_secret=${KEYCLOAK_CLIENT_SECRET:-}" \
@@ -404,7 +424,8 @@ verify_token_claims() {
         -d "password=${TEST_USER_PASSWORD:-TestPassword123!}" \
         2>/dev/null)
     
-    local access_token=$(echo "$token_response" | jq -r '.access_token // empty')
+    local access_token
+    access_token=$(echo "$token_response" | jq -r '.access_token // empty')
     
     if [[ -z "$access_token" ]]; then
         log_warn "Could not fetch test token (this is normal if direct grants are disabled)"
@@ -413,13 +434,15 @@ verify_token_claims() {
     fi
     
     # Decode and verify claims
-    local claims=$(echo "$access_token" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.')
+    local claims
+    claims=$(echo "$access_token" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.')
     
     echo ""
     echo -e "  ${CYAN}Token Claims:${NC}"
     
     for claim in clearance countryOfAffiliation uniqueID acpCOI organization organizationType; do
-        local value=$(echo "$claims" | jq -r ".${claim} // empty")
+        local value
+        value=$(echo "$claims" | jq -r ".${claim} // empty")
         if [[ -n "$value" ]]; then
             log_success "  $claim: $value"
         else
@@ -449,7 +472,7 @@ if [[ "$ALL_MODE" == "true" ]]; then
     for code in $(echo "${!NATO_COUNTRIES[@]:-}" | tr ' ' '\n' | sort); do
         if [[ "$code" == "USA" ]]; then continue; fi
         
-        local code_lower="${code,,}"
+        code_lower="${code,,}"
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${code_lower}-keycloak\|keycloak-${code_lower}"; then
             verify_mappers "$code" || true
         fi
@@ -473,3 +496,6 @@ echo ""
 echo "═══════════════════════════════════════════════════════════════════════"
 echo "  Verification Complete"
 echo "═══════════════════════════════════════════════════════════════════════"
+
+# sc2034-anchor
+: "${PROJECT_ROOT:-}"

@@ -48,8 +48,10 @@ INCORRECT_PASSWORD="TestUser2025!Pilot"
 ##
 reset_spoke_admin_password() {
     local instance_code="$1"
-    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_upper
+    code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
@@ -134,8 +136,8 @@ reset_spoke_admin_password() {
 
     # Reset password
     log_step "Resetting password to correct value..."
-    local reset_result
-    reset_result=$(docker exec "$kc_container" curl -sf -X PUT \
+    local _reset_result
+    _reset_result=$(docker exec "$kc_container" curl -sf -X PUT \
         "http://localhost:8080/admin/realms/${realm_name}/users/${user_id}/reset-password" \
         -H "Authorization: Bearer ${admin_token}" \
         -H "Content-Type: application/json" \
@@ -262,3 +264,6 @@ echo "Credentials (all spokes):"
 echo "  Username: admin-{instance} (e.g., admin-gbr, admin-fra)"
 echo "  Password: $CORRECT_PASSWORD"
 echo ""
+
+# sc2034-anchor
+: "${BOLD:-}" "${PROJECT_ROOT:-}"

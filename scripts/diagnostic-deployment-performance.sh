@@ -31,13 +31,15 @@ mkdir -p "$(dirname "$DIAGNOSTIC_REPORT")"
 # =============================================================================
 
 log_diagnostic() {
-    local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo "[$timestamp] $*" | tee -a "$DIAGNOSTIC_LOG"
 }
 
 measure_time() {
     local start=$1
-    local end=$(date +%s)
+    local end
+    end=$(date +%s)
     echo $((end - start))
 }
 
@@ -53,10 +55,14 @@ diagnostic_check_docker() {
         log_diagnostic "✅ Docker daemon is running"
 
         # Get Docker resource usage
-        local container_count=$(docker ps -q | wc -l | xargs)
-        local image_count=$(docker images -q | wc -l | xargs)
-        local volume_count=$(docker volume ls -q | wc -l | xargs)
-        local network_count=$(docker network ls -q | wc -l | xargs)
+        local container_count
+        container_count=$(docker ps -q | wc -l | xargs)
+        local image_count
+        image_count=$(docker images -q | wc -l | xargs)
+        local volume_count
+        volume_count=$(docker volume ls -q | wc -l | xargs)
+        local network_count
+        network_count=$(docker network ls -q | wc -l | xargs)
 
         log_diagnostic "📊 Docker Resources:"
         log_diagnostic "  - Containers: $container_count"
@@ -65,12 +71,14 @@ diagnostic_check_docker() {
         log_diagnostic "  - Networks: $network_count"
 
         # Check for orphaned resources
-        local exited_containers=$(docker ps -a -f status=exited -q | wc -l | xargs)
+        local exited_containers
+        exited_containers=$(docker ps -a -f status=exited -q | wc -l | xargs)
         if [ "$exited_containers" -gt 0 ]; then
             log_diagnostic "⚠️  Found $exited_containers exited containers (may slow down operations)"
         fi
 
-        local dangling_images=$(docker images -f dangling=true -q | wc -l | xargs)
+        local dangling_images
+        dangling_images=$(docker images -f dangling=true -q | wc -l | xargs)
         if [ "$dangling_images" -gt 0 ]; then
             log_diagnostic "⚠️  Found $dangling_images dangling images (may slow down operations)"
         fi
@@ -86,7 +94,8 @@ diagnostic_check_filesystem() {
     log_diagnostic "=== Filesystem Performance Check ==="
 
     # Check disk space
-    local disk_usage=$(df -h "$DIVE_ROOT" | tail -1 | awk '{print $5}' | sed 's/%//')
+    local disk_usage
+    disk_usage=$(df -h "$DIVE_ROOT" | tail -1 | awk '{print $5}' | sed 's/%//')
     log_diagnostic "💾 Disk Usage: ${disk_usage}%"
 
     if [ "$disk_usage" -gt 80 ]; then
@@ -95,9 +104,11 @@ diagnostic_check_filesystem() {
 
     # Check write performance (create temporary 10MB file)
     log_diagnostic "📝 Testing filesystem write performance..."
-    local write_start=$(date +%s)
+    local write_start
+    write_start=$(date +%s)
     dd if=/dev/zero of="${DIVE_ROOT}/logs/.write-test" bs=1M count=10 2>/dev/null
-    local write_end=$(date +%s)
+    local write_end
+    write_end=$(date +%s)
     local write_duration=$((write_end - write_start))
     rm -f "${DIVE_ROOT}/logs/.write-test"
 
@@ -114,7 +125,8 @@ diagnostic_check_network() {
     log_diagnostic "=== Network Performance Check ==="
 
     # Check Docker networks
-    local dive_networks=$(docker network ls --filter "name=dive" --format "{{.Name}}")
+    local dive_networks
+    dive_networks=$(docker network ls --filter "name=dive" --format "{{.Name}}")
 
     if [ -z "$dive_networks" ]; then
         log_diagnostic "✅ No pre-existing DIVE networks (clean state)"
@@ -143,7 +155,8 @@ diagnostic_analyze_orchestration() {
         return 1
     fi
 
-    local line_count=$(wc -l < "$orch_file" | xargs)
+    local line_count
+    line_count=$(wc -l < "$orch_file" | xargs)
     log_diagnostic "📄 orchestration/framework.sh: $line_count lines"
 
     if [ "$line_count" -gt 1500 ]; then
@@ -152,15 +165,18 @@ diagnostic_analyze_orchestration() {
     fi
 
     # Count hardcoded timeouts
-    local timeout_count=$(grep -c "sleep\|timeout" "$orch_file" || echo "0")
+    local timeout_count
+    timeout_count=$(grep -c "sleep\|timeout" "$orch_file" || echo "0")
     log_diagnostic "⏱️  Found $timeout_count timeout/sleep references"
 
     # Count error handling
-    local error_handling_count=$(grep -c "set -e\|trap\||| true" "$orch_file" || echo "0")
+    local error_handling_count
+    error_handling_count=$(grep -c "set -e\|trap\||| true" "$orch_file" || echo "0")
     log_diagnostic "🛡️  Found $error_handling_count error handling statements"
 
     # Identify potential sequential bottlenecks
-    local sequential_ops=$(grep -n "&&" "$orch_file" | wc -l | xargs)
+    local sequential_ops
+    sequential_ops=$(grep -n "&&" "$orch_file" | wc -l | xargs)
     log_diagnostic "🔗 Found $sequential_ops sequential operations (&&)"
     log_diagnostic "   Consider parallelizing independent operations"
 
@@ -181,7 +197,8 @@ diagnostic_check_service_timeouts() {
     done
 
     # Check if timeouts are parameterized
-    local hardcoded_timeouts=$(grep -c "sleep [0-9]" "$orch_file" || echo "0")
+    local hardcoded_timeouts
+    hardcoded_timeouts=$(grep -c "sleep [0-9]" "$orch_file" || echo "0")
     if [ "$hardcoded_timeouts" -gt 5 ]; then
         log_diagnostic "⚠️  Found $hardcoded_timeouts hardcoded sleep statements"
         log_diagnostic "    Recommendation: Parameterize all timeouts in config file"
@@ -198,13 +215,15 @@ diagnostic_check_database_state() {
         log_diagnostic "✅ Hub PostgreSQL is running"
 
         # Check orchestration database
-        local db_check=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT COUNT(*) FROM deployment_states" 2>/dev/null | grep -E "^\s*[0-9]+" | xargs || echo "0")
+        local db_check
+        db_check=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT COUNT(*) FROM deployment_states" 2>/dev/null | grep -E "^\s*[0-9]+" | xargs || echo "0")
 
         if [ "$db_check" != "0" ]; then
             log_diagnostic "📊 Orchestration database has $db_check deployment state records"
 
             # Check for stuck deployments
-            local stuck_deploys=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "
+            local stuck_deploys
+            stuck_deploys=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "
                 SELECT COUNT(*) FROM deployment_states
                 WHERE current_state IN ('DEPLOYING', 'INITIALIZING', 'CONFIGURING')
                 AND updated_at < NOW() - INTERVAL '1 hour'
@@ -228,7 +247,8 @@ diagnostic_measure_deployment_phases() {
 
     # Check for recent deployment metrics in database
     if docker ps --format '{{.Names}}' | grep -q "dive-hub-postgres"; then
-        local recent_deploys=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "
+        local recent_deploys
+        recent_deploys=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "
             SELECT
                 instance_code,
                 current_state,
@@ -262,8 +282,10 @@ diagnostic_check_health_check_configs() {
 
     if [ -f "$hub_compose" ]; then
         # Count services with health checks
-        local health_check_count=$(grep -c "healthcheck:" "$hub_compose" || echo "0")
-        local service_count=$(grep -c "^  [a-z].*:$" "$hub_compose" || echo "0")
+        local health_check_count
+        health_check_count=$(grep -c "healthcheck:" "$hub_compose" || echo "0")
+        local service_count
+        service_count=$(grep -c "^  [a-z].*:$" "$hub_compose" || echo "0")
 
         log_diagnostic "📊 Health Checks: $health_check_count / $service_count services"
 
@@ -273,7 +295,8 @@ diagnostic_check_health_check_configs() {
         fi
 
         # Find aggressive health check intervals
-        local aggressive_intervals=$(grep -A 3 "healthcheck:" "$hub_compose" | grep "interval:" | sed 's/.*interval: //' | while read interval; do
+        local aggressive_intervals
+        aggressive_intervals=$(grep -A 3 "healthcheck:" "$hub_compose" | grep "interval:" | sed 's/.*interval: //' | while read interval; do
             if [[ "$interval" =~ ([0-9]+)s ]]; then
                 local seconds="${BASH_REMATCH[1]}"
                 if [ "$seconds" -lt 10 ]; then
@@ -342,20 +365,23 @@ REPORT_EOF2
 
     # Extract orchestration issues
     if grep -q "Orchestration framework is very large" "$DIAGNOSTIC_LOG"; then
-        local lines=$(grep "orchestration/framework.sh:" "$DIAGNOSTIC_LOG" | sed 's/.* //')
+        local lines
+        lines=$(grep "orchestration/framework.sh:" "$DIAGNOSTIC_LOG" | sed 's/.* //')
         echo "- 📄 Monolithic orchestration/framework.sh ($lines)" >> "$DIAGNOSTIC_REPORT"
         echo "  - Recommendation: Split into modules (<500 lines each)" >> "$DIAGNOSTIC_REPORT"
     fi
 
     # Extract timeout issues
-    local timeout_count=$(grep "timeout/sleep references" "$DIAGNOSTIC_LOG" | sed 's/.* //' || echo "0")
+    local timeout_count
+    timeout_count=$(grep "timeout/sleep references" "$DIAGNOSTIC_LOG" | sed 's/.* //' || echo "0")
     if [ "$timeout_count" -gt 50 ]; then
         echo "- ⏱️ Excessive timeout references ($timeout_count)" >> "$DIAGNOSTIC_REPORT"
         echo "  - Recommendation: Centralize timeout configuration" >> "$DIAGNOSTIC_REPORT"
     fi
 
     # Extract sequential operation issues
-    local sequential_ops=$(grep "sequential operations" "$DIAGNOSTIC_LOG" | sed 's/.* //' || echo "0")
+    local sequential_ops
+    sequential_ops=$(grep "sequential operations" "$DIAGNOSTIC_LOG" | sed 's/.* //' || echo "0")
     if [ "$sequential_ops" -gt 100 ]; then
         echo "- 🔗 Many sequential operations ($sequential_ops)" >> "$DIAGNOSTIC_REPORT"
         echo "  - Recommendation: Parallelize independent operations" >> "$DIAGNOSTIC_REPORT"

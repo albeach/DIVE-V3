@@ -121,8 +121,10 @@ get_running_spokes() {
 show_port_comparison() {
     local code="$1"
     local code_lower="${code,,}"
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
+    local name
+    name=$(get_country_name "$code")
+    local flag
+    flag=$(get_country_flag "$code")
     
     log_header "$name ($code) $flag - Port Migration"
     
@@ -134,9 +136,12 @@ show_port_comparison() {
     local be_container="${code_lower}-backend-${code_lower}-1"
     local fe_container="${code_lower}-frontend-${code_lower}-1"
     
-    local current_kc_port=$(get_current_port "$kc_container" "8443")
-    local current_be_port=$(get_current_port "$be_container" "4000")
-    local current_fe_port=$(get_current_port "$fe_container" "3000")
+    local current_kc_port
+    current_kc_port=$(get_current_port "$kc_container" "8443")
+    local current_be_port
+    current_be_port=$(get_current_port "$be_container" "4000")
+    local current_fe_port
+    current_fe_port=$(get_current_port "$fe_container" "3000")
     
     echo ""
     echo "  Service       Current → New (NATO)"
@@ -209,7 +214,8 @@ generate_nato_docker_compose() {
     
     # Update port mappings in docker-compose.yml
     # This uses sed to replace port patterns
-    local tmp_file=$(mktemp)
+    local tmp_file
+    tmp_file=$(mktemp)
     
     # Read and update the compose file
     # Pattern: "OLD_PORT:INTERNAL_PORT" -> "NEW_PORT:INTERNAL_PORT"
@@ -238,7 +244,8 @@ generate_nato_docker_compose() {
 migrate_spoke() {
     local code="$1"
     local code_lower="${code,,}"
-    local name=$(get_country_name "$code")
+    local name
+    name=$(get_country_name "$code")
     
     show_port_comparison "$code"
     
@@ -280,7 +287,8 @@ migrate_spoke() {
         log_info "Step 3/4: Updating instance.json..."
         eval "$(get_country_ports "$code")"
         
-        local tmp_json=$(mktemp)
+        local tmp_json
+        tmp_json=$(mktemp)
         jq --arg fe "$SPOKE_FRONTEND_PORT" \
            --arg be "$SPOKE_BACKEND_PORT" \
            --arg kc "$SPOKE_KEYCLOAK_HTTPS_PORT" \
@@ -343,7 +351,7 @@ echo ""
 # If --all mode, detect running spokes
 if [[ "$ALL_MODE" == "true" ]]; then
     log_info "Detecting running spokes..."
-    COUNTRIES=($(get_running_spokes))
+    read -r -a COUNTRIES <<<"$(get_running_spokes)"
     
     if [[ ${#COUNTRIES[@]} -eq 0 ]]; then
         log_warn "No running spokes detected"

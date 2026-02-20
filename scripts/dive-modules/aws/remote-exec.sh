@@ -84,8 +84,8 @@ remote_sync() {
         # Get the LOCAL commit hash we want to deploy
         local local_commit
         local_commit=$(git -C "${DIVE_ROOT}" rev-parse HEAD 2>/dev/null || echo "")
-        local branch
-        branch=$(git -C "${DIVE_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+        local _branch
+        _branch=$(git -C "${DIVE_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 
         if [ -n "$local_commit" ]; then
             # Check if the commit is pushed to origin

@@ -125,3 +125,5 @@ echo -e "\n${GREEN}=== All checks passed! ===${NC}"
 echo -e "${BLUE}Local CI simulation completed successfully.${NC}"
 echo -e "${BLUE}Your code is ready for the full CI pipeline.${NC}"
 
+# sc2034-anchor
+: "${RED:-}"

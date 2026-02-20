@@ -275,7 +275,8 @@ preflight_check_tools() {
 preflight_check_disk_space() {
     log_verbose "Checking disk space..."
 
-    local available=$(df -h "${DIVE_ROOT}" | awk 'NR==2 {print $4}' | sed 's/[^0-9.]//g')
+    local available
+    available=$(df -h "${DIVE_ROOT}" | awk 'NR==2 {print $4}' | sed 's/[^0-9.]//g')
 
     if [ -z "$available" ]; then
         log_warn "Could not determine available disk space"
@@ -347,7 +348,8 @@ preflight_check_hub() {
     fi
 
     # Check Hub health
-    local hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+    local hub_health
+    hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
     if [ "$hub_health" != "healthy" ]; then
         log_warn "Hub Keycloak is not healthy (status: $hub_health)"

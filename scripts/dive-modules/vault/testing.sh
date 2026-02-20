@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Vault Test Suites
 # =============================================================================
@@ -9,7 +10,8 @@
 
 module_vault_test_rotation() {
     local target_code="${1:-DEU}"
-    local code_lower=$(echo "$target_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$target_code" | tr '[:upper:]' '[:lower:]')
 
     # Load test framework
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
@@ -43,7 +45,8 @@ module_vault_test_rotation() {
 
     # Step 2: Write new test value
     test_start "Write rotated secret to Vault"
-    local test_value="rotation-test-$(date +%s)"
+    local test_value
+    test_value="rotation-test-$(date +%s)"
     if vault kv put "$secret_path" password="$test_value" >/dev/null 2>&1; then
         test_pass
     else
@@ -132,7 +135,8 @@ module_vault_test_backup() {
     # Step 1: Create Raft snapshot (try each port — standby redirects to Docker hostname)
     test_start "Create Raft snapshot"
     local backup_dir="${DIVE_ROOT}/backups/vault"
-    local snapshot_path="${backup_dir}/vault-test-$(date +%Y%m%d-%H%M%S).snap"
+    local snapshot_path
+    snapshot_path="${backup_dir}/vault-test-$(date +%Y%m%d-%H%M%S).snap"
     mkdir -p "$backup_dir"
     local _snap_ok=false
     for _p in 8200 8202 8204; do
@@ -243,7 +247,8 @@ module_vault_test_ha_failover() {
 
     # Test 1: Write a test secret
     test_start "Write test secret"
-    local test_key="ha-failover-test-$(date +%s)"
+    local test_key
+    test_key="ha-failover-test-$(date +%s)"
     if vault kv put dive-v3/core/ha-test value="$test_key" >/dev/null 2>&1; then
         test_pass
     else
@@ -418,7 +423,8 @@ module_vault_test_full_restart() {
 
     # Test 1: Write a canary secret
     test_start "Write canary secret"
-    local canary="full-restart-$(date +%s)"
+    local canary
+    canary="full-restart-$(date +%s)"
     if vault kv put dive-v3/core/restart-test value="$canary" >/dev/null 2>&1; then
         test_pass
     else
@@ -661,7 +667,8 @@ module_vault_test_monitoring() {
 
     # Test 7: Snapshot command works (try each port — standby nodes redirect to Docker-internal leader hostname)
     test_start "Vault snapshot command succeeds"
-    local test_snap="${DIVE_ROOT}/backups/vault/vault-monitoring-test-$(date +%s).snap"
+    local test_snap
+    test_snap="${DIVE_ROOT}/backups/vault/vault-monitoring-test-$(date +%s).snap"
     mkdir -p "$(dirname "$test_snap")"
     local snap_ok=false
     for snap_port in 8200 8202 8204; do
@@ -841,7 +848,8 @@ module_vault_audit_rotate() {
     fi
 
     # Archive the current log
-    local archive_name="audit-$(date +%Y%m%d-%H%M%S).log.gz"
+    local archive_name
+    archive_name="audit-$(date +%Y%m%d-%H%M%S).log.gz"
     log_info "Archiving audit log as ${archive_name}..."
 
     if docker exec "$container" sh -c "gzip -c /vault/logs/audit.log > /vault/logs/${archive_name}"; then
@@ -915,7 +923,8 @@ module_vault_dr_test() {
     log_info "[2/5] Creating Raft snapshot..."
     local snap_dir="${DIVE_ROOT}/backups/vault"
     mkdir -p "$snap_dir"
-    local snap_path="${snap_dir}/dr-test-$(date +%Y%m%d-%H%M%S).snap"
+    local snap_path
+    snap_path="${snap_dir}/dr-test-$(date +%Y%m%d-%H%M%S).snap"
 
     if ! module_vault_snapshot "$snap_path"; then
         log_error "  Snapshot creation failed"

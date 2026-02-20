@@ -50,7 +50,12 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
         # Skip lines that don't look like valid KEY=value
         [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue
         # Export the variable
-        export "$line" 2>/dev/null || true
+        key="${line%%=*}"
+        value="${line#*=}"
+        if [[ -n "$key" ]]; then
+            printf -v "$key" '%s' "$value"
+            export "${key?}" 2>/dev/null || true
+        fi
     done < "${INSTANCE_DIR}/.env"
 fi
 
@@ -112,6 +117,7 @@ fi
 # Load NATO database if available
 NATO_DB_PATH="${SCRIPT_DIR}/../nato-countries.sh"
 if [[ -f "$NATO_DB_PATH" ]]; then
+    # shellcheck source=../nato-countries.sh
     source "$NATO_DB_PATH"
 fi
 
@@ -119,6 +125,7 @@ fi
 # Priority: common.sh get_instance_ports > nato-countries.sh > inline fallback
 COMMON_SH="${SCRIPT_DIR}/../dive-modules/common.sh"
 if [[ -f "$COMMON_SH" ]]; then
+    # shellcheck source=../dive-modules/common.sh
     source "$COMMON_SH"
 fi
 
@@ -293,7 +300,8 @@ ensure_realm_exists() {
 
     while [ $attempt -le $max_attempts ]; do
         # Check if realm exists
-        local realm_check=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        local realm_check
+        realm_check=$(kc_curl -H "Authorization: Bearer $TOKEN" \
             "${KEYCLOAK_INTERNAL_URL}/admin/realms/${realm_name}" 2>/dev/null | jq -r '.realm // empty')
 
         if [[ -n "$realm_check" ]]; then
@@ -322,7 +330,8 @@ ensure_realm_exists() {
         log_warn "Realm $realm_name not found (attempt $attempt/$max_attempts), creating..."
 
         # Create realm with FULL config including theme
-        local create_result=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
+        local create_result
+        create_result=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -w "%{http_code}" \
@@ -1268,3 +1277,6 @@ else
 fi
 
 log_info "Keycloak initialization complete for ${INSTANCE_CODE}"
+
+# sc2034-anchor
+: "${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-}" "${LOCAL_BACKEND_PORT:-}" "${PROJECT_PREFIX:-}"

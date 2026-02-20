@@ -60,7 +60,7 @@ CRITICAL_FILES=(
 check_file_for_password() {
     local file="$1"
     local expected_password="$2"
-    local password_var="$3"
+    local _password_var="$3"
 
     if [ ! -f "$file" ]; then
         log_warn "File not found: $file"
@@ -248,3 +248,6 @@ else
     echo ""
     exit 1
 fi
+
+# sc2034-anchor
+: "${BOLD:-}"

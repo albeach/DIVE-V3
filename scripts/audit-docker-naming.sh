@@ -94,22 +94,27 @@ EOF
 # Function to audit a file
 audit_file() {
     local file="$1"
-    local filename=$(basename "$file")
+    local filename
+    filename=$(basename "$file")
     local issues=0
 
     echo -e "${BLUE}Auditing: ${filename}${NC}"
 
     # Check for docker compose without -p flag
-    local compose_no_p=$(grep -n "docker compose" "$file" 2>/dev/null | grep -v " -p " | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
+    local compose_no_p
+    compose_no_p=$(grep -n "docker compose" "$file" 2>/dev/null | grep -v " -p " | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
 
     # Check for docker-compose (old syntax)
-    local old_syntax=$(grep -n "docker-compose" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
+    local old_syntax
+    old_syntax=$(grep -n "docker-compose" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
 
     # Check for COMPOSE_PROJECT_NAME without dive prefix
-    local bad_project=$(grep -n "COMPOSE_PROJECT_NAME" "$file" 2>/dev/null | grep -v "dive-hub" | grep -v "dive-spoke" | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
+    local bad_project
+    bad_project=$(grep -n "COMPOSE_PROJECT_NAME" "$file" 2>/dev/null | grep -v "dive-hub" | grep -v "dive-spoke" | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
 
     # Check for hardcoded container names without prefix
-    local bad_containers=$(grep -nE "docker (ps|exec|logs|inspect|rm|stop)" "$file" 2>/dev/null | grep -v "dive-hub-" | grep -v "dive-spoke-" | grep -v "\$" | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
+    local _bad_containers
+    _bad_containers=$(grep -nE "docker (ps|exec|logs|inspect|rm|stop)" "$file" 2>/dev/null | grep -v "dive-hub-" | grep -v "dive-spoke-" | grep -v "\$" | grep -v "^[[:space:]]*#" | wc -l | tr -d ' ')
 
     # Sum up issues
     issues=$((compose_no_p + old_syntax + bad_project))

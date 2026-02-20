@@ -294,13 +294,15 @@ _rotate_vault_node_certs_to_pki() {
     fi
 
     # Build --cacert flag for bootstrap CA (current TLS cert issuer)
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
 
     # Check that Vault PKI Intermediate CA is available
     local int_ca_check
-    # shellcheck disable=SC2086
-    int_ca_check=$(curl -sL $cacert_flag -H "X-Vault-Token: $vault_token" \
+    int_ca_check=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: $vault_token" \
         "${vault_addr}/v1/pki_int/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
     if [ -z "$int_ca_check" ] || ! echo "$int_ca_check" | grep -q "BEGIN CERTIFICATE"; then
         log_warn "Vault PKI Intermediate CA not available — keeping bootstrap certs"
@@ -312,8 +314,7 @@ _rotate_vault_node_certs_to_pki() {
     log_info "Creating PKI role: vault-node-services..."
 
     local role_response
-    # shellcheck disable=SC2086
-    role_response=$(curl -sL $cacert_flag -X POST \
+    role_response=$(curl -sL "${cacert_args[@]}" -X POST \
         -H "X-Vault-Token: $vault_token" \
         -H "Content-Type: application/json" \
         -d "{
@@ -370,8 +371,7 @@ _rotate_vault_node_certs_to_pki() {
         local response curl_err attempt=0 max_attempts=3
         while [ $attempt -lt $max_attempts ]; do
             curl_err=""
-            # shellcheck disable=SC2086
-            response=$(curl -sL $cacert_flag -X POST \
+            response=$(curl -sL "${cacert_args[@]}" -X POST \
                 -H "X-Vault-Token: $vault_token" \
                 -H "Content-Type: application/json" \
                 -d "{
@@ -637,12 +637,14 @@ generate_vault_node_certs() {
         # Build SANs for this node (mkcert format: space-separated DNS + IP)
         local sans
         sans=$(_vault_node_cert_sans "$node")
+        local -a sans_args=()
+        local _san
+        read -r -a sans_args <<<"$sans"
 
         # Generate cert with mkcert (skip trust store updates)
-        # shellcheck disable=SC2086
         if TRUST_STORES="" mkcert -key-file "$node_dir/key.pem" \
                   -cert-file "$node_dir/certificate.pem" \
-                  $sans 2>/dev/null; then
+                  "${sans_args[@]}" 2>/dev/null; then
             chmod 644 "$node_dir/key.pem"  # 644: Vault container runs as uid 100 (vault), needs read access
             chmod 644 "$node_dir/certificate.pem"
 

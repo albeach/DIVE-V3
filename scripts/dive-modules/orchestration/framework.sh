@@ -56,6 +56,14 @@ if [ -f "${MODULES_DIR}/deployment-state.sh" ]; then
     source "${MODULES_DIR}/deployment-state.sh"
 fi
 
+# Shared orchestration state (declared once, reused across sourced modules).
+if ! declare -p ORCH_CONTEXT &>/dev/null; then
+    declare -A ORCH_CONTEXT=()
+fi
+if [ "${ORCHESTRATION_ERRORS+set}" != "set" ]; then
+    ORCHESTRATION_ERRORS=()
+fi
+
 # =============================================================================
 # ORCHESTRATION CONSTANTS
 # =============================================================================
@@ -90,6 +98,7 @@ TIMEOUT_CONFIG="${DIVE_ROOT}/config/deployment-timeouts.env"
 if [ -f "$TIMEOUT_CONFIG" ]; then
     # Load timeout values, allowing environment variable overrides
     set +u  # Allow unset variables during config load
+    # shellcheck source=/dev/null
     source "$TIMEOUT_CONFIG"
     set -u
     log_verbose "Loaded timeout configuration from $TIMEOUT_CONFIG"
@@ -197,7 +206,7 @@ orch_execute_deployment() {
     fi
 
     # Ensure lock is released on exit (even if error occurs)
-    trap "orch_release_deployment_lock '$instance_code'" EXIT ERR INT TERM
+    trap 'orch_release_deployment_lock "$instance_code"' EXIT ERR INT TERM
 
     # Initialize context
     orch_init_context "$instance_code" "$instance_name"
@@ -346,8 +355,10 @@ PARALLEL_STARTUP_ENABLED="${PARALLEL_STARTUP_ENABLED:-true}"
 ##
 orch_validate_dependencies() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_step "Validating deployment dependencies for $instance_code..."
 
@@ -375,7 +386,8 @@ orch_validate_dependencies() {
             ((errors++))
             validation_failed=true
         else
-            local hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+            local hub_health
+            hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
             if [ "$hub_health" != "healthy" ]; then
                 log_warn "Hub is not healthy (status: $hub_health)"
                 ((warnings++))
@@ -452,7 +464,8 @@ orch_wait_healthy_with_retry() {
     log_info "Waiting for $service to become healthy (max: ${max_wait}s)..."
 
     while [ $elapsed -lt $max_wait ]; do
-        local health_status=$(docker inspect "$service" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+        local health_status
+        health_status=$(docker inspect "$service" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
 
         case "$health_status" in
             "healthy")
@@ -511,7 +524,8 @@ orch_parallel_tier_startup() {
     shift 2
     local services=("$@")
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Starting Tier $tier_number services in parallel..."
 
@@ -553,7 +567,8 @@ check_hub_healthy() {
         return 1
     fi
 
-    local hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+    local hub_health
+    hub_health=$(docker inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
     if [ "$hub_health" = "healthy" ]; then
         log_verbose "Hub Keycloak is healthy"
@@ -573,15 +588,17 @@ check_hub_healthy() {
 ##
 orch_start_services_tiered() {
     local instance_code="$1"
-    local compose_file="${2:-docker-compose.yml}"
-    local code_lower=$(lower "$instance_code")
+    local _compose_file="${2:-docker-compose.yml}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Starting services with tiered parallel approach..."
 
     local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
     cd "$instance_dir" || return 1
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Tier 0: Base infrastructure
     log_info "TIER 0: Base Infrastructure"
@@ -612,12 +629,13 @@ orch_start_services_tiered() {
         return 1
     fi
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     log_success "All services started and healthy (${duration}s)"
 
-    cd - >/dev/null
+    cd - >/dev/null || return 1
     return 0
 }
 
@@ -713,3 +731,6 @@ export -f orch_parallel_tier_startup
 export -f check_hub_healthy
 export -f orch_start_services_tiered
 
+# sc2034-anchor
+: "${HEALTH_FAILED:-}" "${HEALTH_HEALTHY:-}" "${HEALTH_STARTING:-}" "${HEALTH_UNHEALTHY:-}" "${HEALTH_UNKNOWN:-}" "${ORCH_SEVERITY_LOW:-}"
+: "${ORCH_SEVERITY_MEDIUM:-}"

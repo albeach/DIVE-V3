@@ -54,29 +54,35 @@ test_env_var_isolation() {
 
         # Check frontend port
         if [ -n "$frontend_port" ]; then
-            if [[ " ${used_ports[*]} " =~ " ${frontend_port} " ]]; then
+            case " ${used_ports[*]} " in
+                *" ${frontend_port} "*)
                 log_error "Port conflict: FRONTEND_PORT $frontend_port used by multiple instances"
                 all_passed=false
-            else
+                ;;
+                *)
                 used_ports+=("$frontend_port")
                 log_verbose "✓ $instance FRONTEND_PORT: $frontend_port"
-            fi
+                ;;
+            esac
         fi
 
         # Check backend port
         if [ -n "$backend_port" ]; then
-            if [[ " ${used_ports[*]} " =~ " ${backend_port} " ]]; then
+            case " ${used_ports[*]} " in
+                *" ${backend_port} "*)
                 log_error "Port conflict: BACKEND_PORT $backend_port used by multiple instances"
                 all_passed=false
-            else
+                ;;
+                *)
                 used_ports+=("$backend_port")
                 log_verbose "✓ $instance BACKEND_PORT: $backend_port"
-            fi
+                ;;
+            esac
         fi
     done
 
     # Check that database connections are separate
-    local db_connections=()
+    local _db_connections=()
     for instance in "${instances[@]}"; do
         local env_file="${DIVE_ROOT}/instances/${instance}/.env"
         local mongo_url
