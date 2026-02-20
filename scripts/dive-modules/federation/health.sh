@@ -585,6 +585,121 @@ federation_mark_stale() {
     log_info "Marked ${marked:-0} federation links as DEGRADED"
 }
 
+##
+# Escalate DEGRADED links to FAILED after sustained heartbeat failure
+#
+# State machine: ACTIVE → DEGRADED (2 missed) → FAILED (5 missed)
+#
+# Arguments:
+#   $1 - Missed heartbeat threshold for FAILED (default: 5 * HEARTBEAT_TIMEOUT)
+##
+federation_escalate_degraded() {
+    local failed_threshold="${1:-$((HEARTBEAT_TIMEOUT * 5))}"
+
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        return 1
+    fi
+
+    log_info "Escalating long-degraded links to FAILED (threshold: ${failed_threshold}s)..."
+
+    local escalated
+    escalated=$(orch_db_exec "
+        UPDATE federation_links fl
+        SET status='FAILED', updated_at=NOW(),
+            metadata=jsonb_set(COALESCE(metadata,'{}'), '{failed_reason}', '\"sustained_heartbeat_failure\"')
+        WHERE fl.status = 'DEGRADED'
+        AND fl.spoke_code IN (
+            SELECT fl2.spoke_code
+            FROM federation_links fl2
+            LEFT JOIN federation_heartbeats fh ON fl2.spoke_code = fh.spoke_code
+            WHERE fl2.status = 'DEGRADED'
+            GROUP BY fl2.spoke_code
+            HAVING MAX(fh.timestamp) IS NULL
+               OR MAX(fh.timestamp) < NOW() - INTERVAL '${failed_threshold} seconds'
+        )
+        RETURNING spoke_code
+    " 2>/dev/null | wc -l | xargs)
+
+    if [ "${escalated:-0}" -gt 0 ]; then
+        log_warn "Escalated ${escalated} federation links from DEGRADED to FAILED"
+    fi
+}
+
+##
+# Attempt auto-recovery for DEGRADED federation links
+#
+# For each DEGRADED link:
+#   1. Checks if spoke is now alive (heartbeat resumed)
+#   2. Validates OIDC discovery endpoint
+#   3. If healthy: transitions back to ACTIVE
+#
+# Arguments:
+#   None
+##
+federation_auto_recover() {
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        return 1
+    fi
+
+    # Get all DEGRADED links
+    local degraded_spokes
+    degraded_spokes=$(orch_db_exec "
+        SELECT DISTINCT spoke_code FROM federation_links WHERE status='DEGRADED'
+    " 2>/dev/null | xargs)
+
+    if [ -z "$degraded_spokes" ]; then
+        log_verbose "No degraded federation links to recover"
+        return 0
+    fi
+
+    log_info "Attempting auto-recovery for degraded links: ${degraded_spokes}"
+
+    local recovered=0
+    local code
+    for code in $degraded_spokes; do
+        local code_upper
+        code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+        local code_lower
+        code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+
+        # Check 1: Is spoke alive (recent heartbeat)?
+        if federation_is_spoke_alive "$code_upper" 2>/dev/null; then
+            log_info "  ${code_upper}: Heartbeat resumed — recovering..."
+
+            # Check 2: Validate OIDC discovery
+            local spoke_url
+            spoke_url=$(resolve_spoke_public_url "$code_upper" "idp" 2>/dev/null || echo "")
+            local spoke_realm="dive-v3-broker-${code_lower}"
+
+            if [ -n "$spoke_url" ]; then
+                local discovery
+                discovery=$(_federation_oidc_discover "${spoke_url}/realms/${spoke_realm}" "no-cache" 2>/dev/null || echo "")
+                if [ -n "$discovery" ]; then
+                    # OIDC healthy + heartbeat alive → transition to ACTIVE
+                    federation_set_link_state "$code_upper" "ACTIVE" "Auto-recovered: heartbeat and OIDC restored"
+                    recovered=$((recovered + 1))
+                    log_success "  ${code_upper}: Recovered → ACTIVE"
+
+                    if type fed_db_record_operation &>/dev/null; then
+                        fed_db_record_operation "$code_lower" "AUTO_RECOVER" "SUCCESS" "system" \
+                            "{\"trigger\": \"heartbeat_resumed\"}" 2>/dev/null || true
+                    fi
+                    continue
+                fi
+            fi
+
+            # Heartbeat alive but OIDC still failing — stay DEGRADED
+            log_verbose "  ${code_upper}: Heartbeat alive but OIDC still failing — remains DEGRADED"
+        else
+            log_verbose "  ${code_upper}: Still no heartbeat — remains DEGRADED"
+        fi
+    done
+
+    if [ "$recovered" -gt 0 ]; then
+        log_success "Auto-recovered ${recovered} federation link(s)"
+    fi
+}
+
 # =============================================================================
 # FEDERATION STATE DATABASE (consolidated from federation-state-db.sh)
 # =============================================================================
@@ -1023,6 +1138,8 @@ export -f federation_get_link_state
 export -f federation_set_link_state
 export -f federation_find_stale
 export -f federation_mark_stale
+export -f federation_escalate_degraded
+export -f federation_auto_recover
 export -f fed_db_init_schema
 export -f fed_db_schema_exists
 export -f fed_db_upsert_link
