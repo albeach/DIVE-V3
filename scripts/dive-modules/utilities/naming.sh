@@ -125,10 +125,14 @@ cmd_docker_resources() {
 
     instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
 
-    local project_name=$(get_docker_project_name "$instance")
-    local volume_prefix=$(get_docker_volume_prefix "$instance")
-    local network_prefix=$(get_docker_network_prefix "$instance")
-    local container_prefix=$(get_docker_container_prefix "$instance")
+    local project_name
+    project_name=$(get_docker_project_name "$instance")
+    local volume_prefix
+    volume_prefix=$(get_docker_volume_prefix "$instance")
+    local network_prefix
+    network_prefix=$(get_docker_network_prefix "$instance")
+    local container_prefix
+    container_prefix=$(get_docker_container_prefix "$instance")
 
     echo ""
     echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
@@ -144,10 +148,12 @@ cmd_docker_resources() {
     echo ""
 
     echo -e "${BOLD}Active Containers:${NC}"
-    local containers=$(docker ps -a --filter "name=${container_prefix}" --format "{{.Names}}" 2>/dev/null)
+    local containers
+    containers=$(docker ps -a --filter "name=${container_prefix}" --format "{{.Names}}" 2>/dev/null)
     if [ -n "$containers" ]; then
         echo "$containers" | while read -r container; do
-            local status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+            local status
+            status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
             if [ "$status" = "running" ]; then
                 echo "  ✓ $container (running)"
             else
@@ -160,7 +166,8 @@ cmd_docker_resources() {
     echo ""
 
     echo -e "${BOLD}Volumes:${NC}"
-    local volumes=$(docker volume ls --filter "name=${volume_prefix}" --format "{{.Name}}" 2>/dev/null)
+    local volumes
+    volumes=$(docker volume ls --filter "name=${volume_prefix}" --format "{{.Name}}" 2>/dev/null)
     if [ -n "$volumes" ]; then
         echo "$volumes" | while read -r volume; do
             echo "  • $volume"
@@ -171,7 +178,8 @@ cmd_docker_resources() {
     echo ""
 
     echo -e "${BOLD}Networks:${NC}"
-    local networks=$(docker network ls --filter "name=${network_prefix}" --format "{{.Name}}" 2>/dev/null)
+    local networks
+    networks=$(docker network ls --filter "name=${network_prefix}" --format "{{.Name}}" 2>/dev/null)
     if [ -n "$networks" ]; then
         echo "$networks" | while read -r network; do
             echo "  • $network"
@@ -202,7 +210,8 @@ cmd_validate_docker_naming() {
     total=$((total + 1))
     local hub_compose="${DIVE_ROOT}/docker-compose.hub.yml"
     if [ -f "$hub_compose" ]; then
-        local actual_name=$(grep "^name:" "$hub_compose" | head -1 | sed 's/name: *//' | tr -d ' ')
+        local actual_name
+        actual_name=$(grep "^name:" "$hub_compose" | head -1 | sed 's/name: *//' | tr -d ' ')
         if [ "$actual_name" = "dive-hub" ]; then
             log_success "Hub: ✓ Correct project name (dive-hub)"
             valid=$((valid + 1))
@@ -223,7 +232,8 @@ cmd_validate_docker_naming() {
             continue
         fi
 
-        local instance_code=$(basename "$instance_dir" | tr '[:upper:]' '[:lower:]')
+        local instance_code
+        instance_code=$(basename "$instance_dir" | tr '[:upper:]' '[:lower:]')
 
         # Skip special directories
         if [ "$instance_code" = "shared" ] || [ "$instance_code" = "template" ]; then
@@ -241,7 +251,8 @@ cmd_validate_docker_naming() {
         fi
 
         local expected_name="dive-spoke-${instance_code}"
-        local actual_name=$(grep "^name:" "$compose_file" | head -1 | sed 's/name: *//' | tr -d ' ')
+        local actual_name
+        actual_name=$(grep "^name:" "$compose_file" | head -1 | sed 's/name: *//' | tr -d ' ')
 
         if [ "$actual_name" = "$expected_name" ]; then
             log_success "$instance_code: ✓ Correct project name ($expected_name)"
@@ -337,7 +348,8 @@ cmd_naming_validate() {
             continue
         fi
 
-        local instance_code=$(basename "$instance_dir" | tr '[:lower:]' '[:upper:]')
+        local instance_code
+        instance_code=$(basename "$instance_dir" | tr '[:lower:]' '[:upper:]')
 
         # Skip special directories
         if [ "$instance_code" = "SHARED" ] || [ "$instance_code" = "TEMPLATE" ]; then
@@ -359,12 +371,16 @@ cmd_naming_validate() {
         fi
 
         # Get expected values from naming conventions
-        local expected_client_id=$(get_client_id "$instance_code")
-        local expected_realm=$(get_realm_name "$instance_code")
+        local expected_client_id
+        expected_client_id=$(get_client_id "$instance_code")
+        local _expected_realm
+        _expected_realm=$(get_realm_name "$instance_code")
 
         # Check actual values in docker-compose.yml
-        local actual_auth_keycloak_id=$(grep "AUTH_KEYCLOAK_ID:" "$compose_file" | head -1 | sed 's/.*AUTH_KEYCLOAK_ID: *//' | tr -d '"' | tr -d ' ' || echo "")
-        local actual_keycloak_client_id=$(grep "KEYCLOAK_CLIENT_ID:" "$compose_file" | head -1 | sed 's/.*KEYCLOAK_CLIENT_ID: *//' | tr -d '"' | tr -d ' ' || echo "")
+        local actual_auth_keycloak_id
+        actual_auth_keycloak_id=$(grep "AUTH_KEYCLOAK_ID:" "$compose_file" | head -1 | sed 's/.*AUTH_KEYCLOAK_ID: *//' | tr -d '"' | tr -d ' ' || echo "")
+        local actual_keycloak_client_id
+        actual_keycloak_client_id=$(grep "KEYCLOAK_CLIENT_ID:" "$compose_file" | head -1 | sed 's/.*KEYCLOAK_CLIENT_ID: *//' | tr -d '"' | tr -d ' ' || echo "")
 
         if [ "$actual_auth_keycloak_id" != "$expected_client_id" ] || [ "$actual_keycloak_client_id" != "$expected_client_id" ]; then
             log_error "$instance_code: Naming mismatch"

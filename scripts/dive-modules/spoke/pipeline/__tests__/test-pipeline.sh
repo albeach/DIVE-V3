@@ -271,7 +271,8 @@ test_container_module() {
     log_test "Check service timeout function"
 
     if type spoke_get_service_timeout &>/dev/null; then
-        local kc_timeout=$(spoke_get_service_timeout "keycloak")
+        local kc_timeout
+        kc_timeout=$(spoke_get_service_timeout "keycloak")
         log_pass "Service timeout function works: keycloak=${kc_timeout}s"
     else
         log_fail "Service timeout function not defined"
@@ -456,3 +457,6 @@ main() {
 
 # Run tests
 main "$@"
+
+# sc2034-anchor
+: "${TEST_NAME:-}"

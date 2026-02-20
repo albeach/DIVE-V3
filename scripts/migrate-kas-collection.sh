@@ -31,7 +31,8 @@ log_error() { echo -e "${RED}❌${NC} $1"; }
 
 migrate_instance() {
     local INSTANCE=$1
-    local instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
+    local instance_lower
+    instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
 
     log_info "Migrating KAS registry for ${INSTANCE}..."
 
@@ -116,7 +117,8 @@ migrate_instance() {
 
 verify_migration() {
     local INSTANCE=$1
-    local instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
+    local instance_lower
+    instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
 
     log_info "Verifying migration for ${INSTANCE}..."
 
@@ -213,3 +215,6 @@ EOF
         verify_migration "$SPOKE_UPPER"
         ;;
 esac
+
+# sc2034-anchor
+: "${DIVE_ROOT:-}"

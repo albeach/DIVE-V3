@@ -200,7 +200,8 @@ backup_sync_external() {
     
     log_info "Syncing backup to external storage ($storage_type)..."
     
-    local backup_name=$(basename "$backup_file")
+    local backup_name
+    backup_name=$(basename "$backup_file")
     
     case "$storage_type" in
         gcs)
@@ -279,7 +280,8 @@ backup_sync_external() {
 ##
 backup_get_tier() {
     local backup_file="$1"
-    local filename=$(basename "$backup_file")
+    local filename
+    filename=$(basename "$backup_file")
     
     # Tier 1: Critical data (production databases, certificates, terraform state)
     if [[ "$filename" =~ (production|critical|postgres|keycloak|terraform-state|certificates) ]]; then
@@ -315,7 +317,8 @@ backup_get_tier() {
 ##
 backup_get_retention() {
     local backup_file="$1"
-    local tier=$(backup_get_tier "$backup_file")
+    local tier
+    tier=$(backup_get_tier "$backup_file")
     
     case "$tier" in
         1) echo "$TIER1_RETENTION" ;;
@@ -342,8 +345,10 @@ backup_archive_old() {
     local count=0
     
     find "$BACKUP_DIR" -name "*.tar.gz" -o -name "*.tar.gz.enc" -type f -mtime "+$age_days" 2>/dev/null | while read -r backup; do
-        local backup_name=$(basename "$backup")
-        local tier=$(backup_get_tier "$backup")
+        local backup_name
+        backup_name=$(basename "$backup")
+        local tier
+        tier=$(backup_get_tier "$backup")
         
         log_verbose "Archiving: $backup_name (Tier $tier)"
         
@@ -377,7 +382,8 @@ backup_archive_old() {
 ##
 backup_create() {
     local target="${1:-all}"
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_path="${BACKUP_DIR}/${target}_${timestamp}"
 
     mkdir -p "$backup_path"
@@ -391,7 +397,8 @@ backup_create() {
     if [ "$target" = "all" ]; then
         for spoke_dir in "${DIVE_ROOT}/instances"/*/; do
             [ -d "$spoke_dir" ] || continue
-            local code=$(basename "$spoke_dir")
+            local code
+            code=$(basename "$spoke_dir")
             backup_spoke "$code" "$backup_path"
         done
     elif [ "$target" != "hub" ]; then
@@ -461,8 +468,10 @@ backup_hub() {
 backup_spoke() {
     local instance_code="$1"
     local backup_path="$2"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_path="${backup_path}/${code_lower}"
 
     mkdir -p "$spoke_path"
@@ -516,10 +525,12 @@ backup_restore() {
         log_warn "Non-interactive mode: auto-confirming restore"
     fi
 
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
     tar -xzf "$backup_file" -C "$temp_dir"
 
-    local backup_name=$(ls "$temp_dir")
+    local backup_name
+    backup_name=$(ls "$temp_dir")
     local backup_path="${temp_dir}/${backup_name}"
 
     # Restore Hub if present
@@ -530,7 +541,8 @@ backup_restore() {
     # Restore Spokes if present
     for spoke_dir in "${backup_path}"/*/; do
         [ -d "$spoke_dir" ] || continue
-        local code=$(basename "$spoke_dir")
+        local code
+        code=$(basename "$spoke_dir")
         [ "$code" = "hub" ] && continue
 
         restore_spoke "$code" "$spoke_dir"
@@ -574,8 +586,10 @@ restore_hub() {
 restore_spoke() {
     local instance_code="$1"
     local backup_path="$2"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_info "Restoring Spoke $code_upper..."
 
@@ -617,11 +631,16 @@ backup_list() {
         # Skip checksum files
         [[ "$backup" == *.sha256 ]] && continue
 
-        local name=$(basename "$backup")
-        local size=$(du -h "$backup" | cut -f1)
-        local tier=$(backup_get_tier "$backup")
-        local retention=$(backup_get_retention "$backup")
-        local date=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$backup" 2>/dev/null || \
+        local name
+        name=$(basename "$backup")
+        local size
+        size=$(du -h "$backup" | cut -f1)
+        local tier
+        tier=$(backup_get_tier "$backup")
+        local retention
+        retention=$(backup_get_retention "$backup")
+        local date
+        date=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$backup" 2>/dev/null || \
                     stat -c "%y" "$backup" 2>/dev/null | cut -d. -f1)
         
         # Check if checksum exists
@@ -674,12 +693,16 @@ backup_cleanup() {
     find "$BACKUP_DIR" -name "*.tar.gz" -o -name "*.tar.gz.enc" -type f 2>/dev/null | while read -r backup; do
         [ -f "$backup" ] || continue
         
-        local tier=$(backup_get_tier "$backup")
-        local retention=$(backup_get_retention "$backup")
+        local tier
+        tier=$(backup_get_tier "$backup")
+        local retention
+        retention=$(backup_get_retention "$backup")
         
         # Get file age in days
-        local mtime=$(stat -f %m "$backup" 2>/dev/null || stat -c %Y "$backup" 2>/dev/null)
-        local now=$(date +%s)
+        local mtime
+        mtime=$(stat -f %m "$backup" 2>/dev/null || stat -c %Y "$backup" 2>/dev/null)
+        local now
+        now=$(date +%s)
         local age_days=$(( (now - mtime) / 86400 ))
         
         if [ "$age_days" -gt "$retention" ]; then

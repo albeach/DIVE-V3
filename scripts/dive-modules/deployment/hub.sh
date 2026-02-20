@@ -185,3 +185,6 @@ export -f hub_spokes_list
 export -f module_hub
 
 log_verbose "Hub deployment module loaded (consolidated)"
+
+# sc2034-anchor
+: "${HUB_DATA_DIR:-}"

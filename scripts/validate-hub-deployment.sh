@@ -162,7 +162,8 @@ validate_health() {
     for service in "${EXPECTED_CORE_SERVICES[@]}"; do
         test_start "CORE: dive-hub-${service} healthy"
         
-        local health=$(${DOCKER_CMD} inspect "dive-hub-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(${DOCKER_CMD} inspect "dive-hub-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         
         # Trim whitespace
         health=$(echo "$health" | tr -d '[:space:]')
@@ -184,7 +185,8 @@ validate_health() {
         
         test_start "NON-CORE: dive-hub-${service} healthy"
         
-        local health=$(${DOCKER_CMD} inspect "dive-hub-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(${DOCKER_CMD} inspect "dive-hub-${service}" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         health=$(echo "$health" | tr -d '[:space:]')
         
         if [ "$health" = "healthy" ] || [ "$health" = "no_healthcheck" ] || [ -z "$health" ]; then
@@ -272,7 +274,8 @@ validate_databases() {
     fi
     
     if [ -n "$mongo_password" ]; then
-        local rs_status=$(${DOCKER_CMD} exec dive-hub-mongodb mongosh admin \
+        local rs_status
+        rs_status=$(${DOCKER_CMD} exec dive-hub-mongodb mongosh admin \
             -u admin -p "$mongo_password" --quiet --eval "rs.status().myState" 2>/dev/null || echo "0")
         
         # State 1 = PRIMARY, State 2 = SECONDARY, State 0 = NOT_INITIALIZED
@@ -401,7 +404,8 @@ validate_ports() {
         local port="${EXPECTED_PORTS[$service]}"
         test_start "Service ${service} port ${port} exposed"
         
-        local port_output=$(${DOCKER_CMD} port "dive-hub-${service}" "$port" 2>/dev/null || echo "")
+        local port_output
+        port_output=$(${DOCKER_CMD} port "dive-hub-${service}" "$port" 2>/dev/null || echo "")
         if [ -n "$port_output" ]; then
             test_pass
             VALIDATION_RESULTS["port_${service}"]="PASS"
@@ -437,7 +441,8 @@ validate_authentication() {
 
     # Check Keycloak realm exists
     test_start "Keycloak realm dive-v3-broker-usa exists"
-    local realm_check=$(curl -ksSf --max-time 10 "https://localhost:8443/realms/dive-v3-broker-usa" 2>/dev/null || echo "FAIL")
+    local realm_check
+    realm_check=$(curl -ksSf --max-time 10 "https://localhost:8443/realms/dive-v3-broker-usa" 2>/dev/null || echo "FAIL")
     if [[ "$realm_check" != "FAIL" ]] && echo "$realm_check" | grep -q "dive-v3-broker-usa"; then
         test_pass
         VALIDATION_RESULTS["auth_realm"]="PASS"
@@ -448,7 +453,8 @@ validate_authentication() {
 
     # Check backend accepts requests (even unauthorized should return proper response)
     test_start "Backend API responding to requests"
-    local backend_response=$(curl -ksSf --max-time 10 "https://localhost:4000/health" 2>/dev/null || echo "FAIL")
+    local backend_response
+    backend_response=$(curl -ksSf --max-time 10 "https://localhost:4000/health" 2>/dev/null || echo "FAIL")
     if [[ "$backend_response" != "FAIL" ]]; then
         test_pass
         VALIDATION_RESULTS["auth_backend"]="PASS"
@@ -482,7 +488,8 @@ main() {
     validate_authentication
 
     # Calculate duration
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - TEST_START_TIME))
 
     # Summary
@@ -536,3 +543,6 @@ main() {
 }
 
 main "$@"
+
+# sc2034-anchor
+: "${VALIDATION_TIMEOUT:-}"

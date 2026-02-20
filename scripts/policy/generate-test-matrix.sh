@@ -163,7 +163,7 @@ EOF
 
 # List each policy file
 for policy in "$POLICIES_DIR"/*.rego; do
-    if [[ -f "$policy" && ! "$policy" =~ "_test.rego" ]]; then
+    if [[ -f "$policy" && ! "$policy" =~ _test\.rego$ ]]; then
         FILENAME=$(basename "$policy")
         PACKAGE=$(grep "^package" "$policy" | awk '{print $2}' || echo "unknown")
         RULE_COUNT_FILE=$(grep -c "^[a-z_]*\s*:=" "$policy" 2>/dev/null || echo "0")
@@ -183,7 +183,7 @@ echo "### Base Layer Policies" >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 
 for policy in "$POLICIES_DIR"/base/*/*.rego; do
-    if [[ -f "$policy" && ! "$policy" =~ "_test.rego" ]]; then
+    if [[ -f "$policy" && ! "$policy" =~ _test\.rego$ ]]; then
         FILENAME=$(basename "$policy")
         PACKAGE=$(grep "^package" "$policy" | awk '{print $2}' || echo "unknown")
         RULE_COUNT_FILE=$(grep -c "^[a-z_]*\s*:=" "$policy" 2>/dev/null || echo "0")
@@ -232,4 +232,3 @@ echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Review coverage report: cat $REPORT_FILE"
 echo "  2. Add tests for uncovered rules"
 echo "  3. Run baseline capture: npx ts-node scripts/policy/capture-baseline.ts capture"
-

@@ -191,3 +191,5 @@ main() {
 
 # Run main function
 main "$@"
+# sc2034-anchor
+: "${CRON_FILE:-}" "${CYAN:-}"

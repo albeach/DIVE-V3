@@ -344,17 +344,18 @@ module_spoke() {
 _spoke_logs() {
     local code="${1:?Instance code required}"
     local service="${2:-}"
-    local code_lower=$(lower "$code")
+    local code_lower
+    code_lower=$(lower "$code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ -d "$spoke_dir" ] && [ -f "${spoke_dir}/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         if [ -n "$service" ]; then
             docker compose logs -f "$service"
         else
             docker compose logs -f
         fi
-        cd - >/dev/null
+        cd - >/dev/null || return 1
     else
         # Try direct container logs
         if [ -n "$service" ]; then

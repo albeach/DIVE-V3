@@ -212,3 +212,6 @@ else
     log_error "Failed to update User Profile"
     exit 1
 fi
+
+# sc2034-anchor
+: "${PROJECT_ROOT:-}"

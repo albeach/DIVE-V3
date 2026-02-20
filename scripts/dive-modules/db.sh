@@ -5,7 +5,7 @@
 # Commands: seed, backup, restore
 # =============================================================================
 
-# shellcheck source=common.sh disable=SC1091
+# shellcheck source=./common.sh
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

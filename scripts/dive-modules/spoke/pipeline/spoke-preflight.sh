@@ -37,8 +37,10 @@ fi
 ##
 spoke_preflight_validation() {
     local instance_code="${1:?Instance code required}"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Running preflight validation for $code_upper spoke..."
 
@@ -246,7 +248,8 @@ preflight_check_secrets_available() {
             local env_file="${DIVE_ROOT}/instances/${instance_code,,}/.env"
             if [ -f "$env_file" ] && grep -q "^${secret_var}=" "$env_file"; then
                 # Load from .env
-                local value=$(grep "^${secret_var}=" "$env_file" | cut -d'=' -f2-)
+                local value
+                value=$(grep "^${secret_var}=" "$env_file" | cut -d'=' -f2-)
                 if [ -n "$value" ]; then
                     export "${secret_var}=${value}"
                     has_secret=true
@@ -315,7 +318,8 @@ preflight_check_secrets_available() {
 ##
 preflight_check_ports_available() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Get port allocation for this spoke (outputs shell exports, not JSON)
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)" || {
@@ -354,7 +358,8 @@ preflight_check_ports_available() {
                 # Check all containers for this spoke instance
                 for container in $(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' 2>/dev/null); do
                     # Use docker inspect + jq to get host ports (proper JSON parsing)
-                    local container_ports=$(docker inspect "$container" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null | \
+                    local container_ports
+                    container_ports=$(docker inspect "$container" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null | \
                         jq -r 'to_entries[] | .value[]? | .HostPort' 2>/dev/null || echo "")
                     
                     # Check if this container uses the port
@@ -426,9 +431,11 @@ preflight_check_docker_resources() {
     fi
 
     # Check memory (need at least 4GB allocated to Docker)
-    local memory_total=$(docker info 2>/dev/null | grep "Total Memory" | awk '{print $3}')
+    local memory_total
+    memory_total=$(docker info 2>/dev/null | grep "Total Memory" | awk '{print $3}')
     if [ -n "$memory_total" ]; then
-        local memory_gb=$(echo "$memory_total" | sed 's/[^0-9.]//g')
+        local memory_gb
+        memory_gb=$(echo "$memory_total" | sed 's/[^0-9.]//g')
         local memory_int=${memory_gb%.*}
         if [ -n "$memory_int" ] && [ "$memory_int" -lt 4 ]; then
             log_warn "Low Docker memory: ${memory_total}"
@@ -507,7 +514,8 @@ preflight_check_terraform_clean() {
     if [ "$workspace_exists" = "true" ]; then
         terraform workspace select "$code_lower" >/dev/null 2>&1
 
-        local state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
+        local state_count
+        state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
 
         if [ "$state_count" != "0" ]; then
             log_verbose "Existing Terraform state found: $state_count resources"

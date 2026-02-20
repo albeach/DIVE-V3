@@ -151,6 +151,7 @@ spoke_phase_preflight() {
     else
         local _validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
         if [ -f "$_validator" ]; then
+            # shellcheck source=../../configuration/config-validator.sh
             source "$_validator"
             if ! config_validate "spoke" "$code_upper"; then
                 log_error "Spoke deployment aborted: configuration validation failed"

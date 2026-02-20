@@ -56,8 +56,10 @@ HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 ##
 federation_verify() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying federation for $code_upper..."
 
@@ -119,9 +121,11 @@ federation_verify() {
     # Check 5: IdP configured on Hub
     ((total++)) || true
     log_info "Check 5: IdP configured on Hub..."
-    local hub_token=$(get_hub_admin_token 2>/dev/null)
+    local hub_token
+    hub_token=$(get_hub_admin_token 2>/dev/null)
     if [ -n "$hub_token" ]; then
-        local idp_exists=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" \
+        local idp_exists
+        idp_exists=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" \
             -H "Authorization: Bearer $hub_token" \
             --insecure 2>/dev/null | jq -r '.alias // empty')
 
@@ -140,11 +144,13 @@ federation_verify() {
     # Check 6: Federation client on Spoke
     ((total++)) || true
     log_info "Check 6: Federation client on Spoke..."
-    local spoke_token=$(get_spoke_admin_token "$instance_code" 2>/dev/null)
+    local spoke_token
+    spoke_token=$(get_spoke_admin_token "$instance_code" 2>/dev/null)
     if [ -n "$spoke_token" ]; then
         # The spoke should have an incoming federation client named dive-v3-broker-usa
         # This is the client the Hub uses to authenticate to the spoke
-        local client_exists=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
+        local client_exists
+        client_exists=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
             -H "Authorization: Bearer $spoke_token" \
             --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-v3-broker-usa") | .clientId')
 
@@ -215,8 +221,10 @@ federation_verify() {
 ##
 federation_health_check() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
     local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
@@ -238,7 +246,8 @@ federation_health_check() {
     fi
 
     # Federation check
-    local hub_token=$(get_hub_admin_token 2>/dev/null)
+    local hub_token
+    hub_token=$(get_hub_admin_token 2>/dev/null)
     if [ -n "$hub_token" ]; then
         local idp_alias="${code_lower}-idp"
         if curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" \
@@ -269,8 +278,10 @@ EOF
 ##
 federation_test_sso_flow() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Testing SSO flow for $code_upper..."
 
@@ -431,6 +442,7 @@ federation_integration_test() {
     # Load test framework
     local _test_path="${FEDERATION_DIR}/../utilities/testing.sh"
     if [ -f "$_test_path" ]; then
+        # shellcheck source=../utilities/testing.sh
         source "$_test_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -492,7 +504,8 @@ federation_integration_test() {
 
     # Per-spoke tests
     for code in "${spokes[@]}"; do
-        local code_lower=$(lower "$code")
+        local code_lower
+        code_lower=$(lower "$code")
 
         # Resolve ports
         eval "$(get_instance_ports "$code" 2>/dev/null)" || true
@@ -577,6 +590,7 @@ federation_test_token_revocation() {
     # Load test framework
     local _test_path="${FEDERATION_DIR}/../utilities/testing.sh"
     if [ -f "$_test_path" ]; then
+        # shellcheck source=../utilities/testing.sh
         source "$_test_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -701,7 +715,8 @@ federation_test_token_revocation() {
     fi
     if [ -z "$target_spoke" ] && [ -d "${DIVE_ROOT}/instances" ]; then
         for dir in "${DIVE_ROOT}"/instances/*/; do
-            local code=$(basename "$dir")
+            local code
+            code=$(basename "$dir")
             [ "$code" = "usa" ] && continue
             [[ "$code" == .* ]] && continue
             target_spoke=$(upper "$code")

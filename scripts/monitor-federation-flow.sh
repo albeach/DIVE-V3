@@ -105,6 +105,10 @@ done &
 GBR_PID=$!
 
 # Wait for user interrupt
-trap "kill $USA_PID $GBR_PID 2>/dev/null; exit" INT TERM
+cleanup_monitors() {
+  kill "$USA_PID" "$GBR_PID" 2>/dev/null || true
+  exit
+}
+trap cleanup_monitors INT TERM
 
 wait

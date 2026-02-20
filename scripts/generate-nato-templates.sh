@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Script to generate all NATO nation mapper templates
 
-cd "$(dirname "$0")/../keycloak/mapper-templates/nato-nations"
+cd "$(dirname "$0")/../keycloak/mapper-templates/nato-nations" || exit 1
 
 # Function to create a nation template
 create_template() {

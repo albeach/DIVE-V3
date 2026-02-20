@@ -13,23 +13,13 @@
 # - Deploy dry-run validation
 # =============================================================================
 
-name: DIVE PR Checks
+name: DIVE PR Checks (Manual)
 
 on:
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'scripts/**'
-      - 'docker-compose*.yml'
-      - 'terraform/**'
-      - 'backend/**'
-      - 'frontend/**'
-      - 'keycloak/**'
-      - 'policies/**'
-      - '.github/workflows/dive-pr-checks.yml'
+  workflow_dispatch:
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: dive-pr-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -55,9 +45,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- scripts/)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            mapfile -t changed_files < <(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- scripts/)
+          else
+            mapfile -t changed_files < <(git diff --name-only HEAD~1 HEAD -- scripts/ || true)
+          fi
 
           shell_files=()
           for file in "${changed_files[@]}"; do
@@ -87,13 +81,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y shellcheck
           fi
-          # Excluded checks (pervasive in codebase, low-risk for sourced modules):
-          # SC2155: Declare and assign separately (288 instances across codebase)
-          # SC1090: Can't follow non-constant source (dynamic source paths)
-          # SC2034: Variable appears unused (exported via source, not direct execution)
-          # SC2164: Use cd ... || exit (functions use return, not exit)
-          # SC2154: Variable referenced but not assigned (set by caller in sourced modules)
-          xargs -r shellcheck -S warning --exclude=SC2155,SC1090,SC2034,SC2164,SC2154 < "${{ steps.changed-shell.outputs.file_list }}"
+          xargs -r shellcheck -S warning < "${{ steps.changed-shell.outputs.file_list }}"
 
       - name: Skip ShellCheck
         if: steps.changed-shell.outputs.has_files != 'true'
@@ -112,7 +100,6 @@ jobs:
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive terraform/
-        continue-on-error: true
 
       - name: Terraform Validate (Pilot)
         run: |
@@ -195,7 +182,6 @@ jobs:
 
       - name: Run Unit Tests
         id: backend_unit_tests
-        continue-on-error: true
         run: cd backend && npm run test:unit -- --passWithNoTests
         env:
           NODE_ENV: test
@@ -206,7 +192,7 @@ jobs:
           if [ "${{ steps.backend_unit_tests.outcome }}" = "success" ]; then
             echo "✅ Backend unit tests passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ Backend unit tests reported failures (non-blocking in PR checks)." >> $GITHUB_STEP_SUMMARY
+            echo "❌ Backend unit tests failed." >> $GITHUB_STEP_SUMMARY
           fi
 
   test-frontend-unit:
@@ -228,7 +214,6 @@ jobs:
 
       - name: Run Unit Tests
         id: frontend_unit_tests
-        continue-on-error: true
         run: cd frontend && npm test -- --passWithNoTests --maxWorkers=50%
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -239,7 +224,7 @@ jobs:
           if [ "${{ steps.frontend_unit_tests.outcome }}" = "success" ]; then
             echo "✅ Frontend unit tests passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ Frontend unit tests reported failures (non-blocking in PR checks)." >> $GITHUB_STEP_SUMMARY
+            echo "❌ Frontend unit tests failed." >> $GITHUB_STEP_SUMMARY
           fi
 
   test-opa:
@@ -253,7 +238,7 @@ jobs:
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
         with:
-          version: latest
+          version: 1.12.3
 
       - name: Run OPA Tests
         run: |

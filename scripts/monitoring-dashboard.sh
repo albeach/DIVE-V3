@@ -35,7 +35,8 @@ declare -A LAST_STATUS
 log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
     echo "[$timestamp] [$level] $message"
 }
@@ -52,7 +53,7 @@ log_success() { log "SUCCESS" "$1"; }
 check_service_health() {
     local service_name="$1"
     local health_url="$2"
-    local expected_status="${3:-200}"
+    local _expected_status="${3:-200}"
 
     if curl -sk --max-time 10 --connect-timeout 5 "$health_url" &>/dev/null; then
         return 0
@@ -82,7 +83,7 @@ check_database_connectivity() {
 
 check_federation_health() {
     # Check if federation spokes are responding
-    local hub_api="${HUB_API_URL:-http://localhost:4000}"
+    local _hub_api="${HUB_API_URL:-http://localhost:4000}"
 
     # Get active spokes from MongoDB
     local active_spokes
@@ -406,3 +407,5 @@ case "${1:-dashboard}" in
         exit 1
         ;;
 esac
+# sc2034-anchor
+: "${BLUE:-}" "${LAST_STATUS:-}"

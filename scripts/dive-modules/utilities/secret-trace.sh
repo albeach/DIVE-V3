@@ -40,7 +40,8 @@ secret_trace_log() {
     local status="$3"
     local context="${4:-}"
 
-    local timestamp=$(date -u +"%H:%M:%S")
+    local timestamp
+    timestamp=$(date -u +"%H:%M:%S")
     local log_entry="[$timestamp] $secret_name | $source | $status"
 
     if [ -n "$context" ]; then
@@ -95,7 +96,8 @@ secret_trace_gcp() {
         echo "$secret_value"
         return 0
     else
-        local error_msg=$(gcloud secrets versions access latest --secret="$secret_name" --project="$project_id" 2>&1 || true)
+        local error_msg
+        error_msg=$(gcloud secrets versions access latest --secret="$secret_name" --project="$project_id" 2>&1 || true)
         secret_trace_log "$secret_name" "GCP" "FAIL" "error=$error_msg"
         return 1
     fi
@@ -254,10 +256,14 @@ secret_trace_summary() {
         return 1
     fi
 
-    local total_attempts=$(grep -c "ATTEMPT" "$SECRET_TRACE_LOG" || echo "0")
-    local total_success=$(grep -c "SUCCESS" "$SECRET_TRACE_LOG" || echo "0")
-    local total_failures=$(grep -c "FAIL" "$SECRET_TRACE_LOG" || echo "0")
-    local total_fallbacks=$(grep -c "FALLBACK" "$SECRET_TRACE_LOG" || echo "0")
+    local total_attempts
+    total_attempts=$(grep -c "ATTEMPT" "$SECRET_TRACE_LOG" || echo "0")
+    local total_success
+    total_success=$(grep -c "SUCCESS" "$SECRET_TRACE_LOG" || echo "0")
+    local total_failures
+    total_failures=$(grep -c "FAIL" "$SECRET_TRACE_LOG" || echo "0")
+    local total_fallbacks
+    total_fallbacks=$(grep -c "FALLBACK" "$SECRET_TRACE_LOG" || echo "0")
 
     echo "Total secret loading attempts: $total_attempts"
     echo "Successful loads: $total_success"

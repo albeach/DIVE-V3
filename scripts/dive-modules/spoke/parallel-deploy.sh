@@ -126,7 +126,7 @@ _pd_resolve_all_spokes() {
         echo "$DIVE_SPOKE_LIST"
     else
         # Scan instances/ directories
-        local codes=""
+        local resolved_codes=""
         if [ -d "${DIVE_ROOT}/instances" ]; then
             local dir
             for dir in "${DIVE_ROOT}"/instances/*/; do
@@ -136,10 +136,10 @@ _pd_resolve_all_spokes() {
                 local code_upper
                 code_upper=$(echo "$dirname" | tr '[:lower:]' '[:upper:]')
                 [ "$code_upper" = "USA" ] && continue
-                codes="${codes:+$codes }$code_upper"
+                resolved_codes="${resolved_codes:+$resolved_codes }$code_upper"
             done
         fi
-        echo "$codes"
+        echo "$resolved_codes"
     fi
 }
 
@@ -432,8 +432,8 @@ spoke_parallel_deploy() {
         log_info "Starting spoke $code_upper ($spoke_name) → $log_file"
 
         # Launch in background subshell
-        local spoke_start
-        spoke_start=$(date +%s)
+        local _spoke_start
+        _spoke_start=$(date +%s)
         (
             _pd_deploy_single "$code_upper" "$log_file" "${extra_args[@]}"
         ) &
@@ -453,14 +453,14 @@ spoke_parallel_deploy() {
 
     for (( i = 0; i < ${#_PD_PIDS[@]}; i++ )); do
         local pid="${_PD_PIDS[$i]}"
-        local spoke_start_time
-        spoke_start_time=$(date +%s)
+        local _spoke_start_time
+        _spoke_start_time=$(date +%s)
 
         local rc=0
         wait "$pid" 2>/dev/null || rc=$?
 
-        local spoke_end_time
-        spoke_end_time=$(date +%s)
+        local _spoke_end_time
+        _spoke_end_time=$(date +%s)
 
         _PD_RESULTS[$i]="$rc"
         # Duration approximation: total time from launch to completion

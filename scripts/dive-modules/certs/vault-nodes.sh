@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Certificate Verification & Vault Node TLS
 # =============================================================================
@@ -134,8 +135,8 @@ verify_all_certificates() {
     echo -e "${BOLD}Certificate Verification: All Spokes${NC}"
     echo ""
 
-    local total_passed=0
-    local total_failed=0
+    local _total_passed=0
+    local _total_failed=0
     local spokes_ok=0
     local spokes_fail=0
 
@@ -414,11 +415,13 @@ install_vault_ca_to_system_truststore() {
         fi
 
         if [ -n "$vault_token" ]; then
-            local cacert_flag
-            cacert_flag=$(_vault_curl_cacert_flag)
+            local -a cacert_args=()
+            local _cacert_arg
+            while IFS= read -r _cacert_arg; do
+                [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+            done < <(_vault_curl_cacert_flag)
             local ca_pem
-            # shellcheck disable=SC2086
-            ca_pem=$(curl -sL $cacert_flag -H "X-Vault-Token: $vault_token" \
+            ca_pem=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: $vault_token" \
                 "${vault_addr}/v1/pki/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
             if [ -n "$ca_pem" ] && echo "$ca_pem" | grep -q "BEGIN CERTIFICATE"; then
                 printf '%s\n' "$ca_pem" > "$tmp_root_ca"

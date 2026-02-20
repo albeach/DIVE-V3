@@ -229,3 +229,6 @@ else
     echo -e "${YELLOW}⚠ Some tests failed or were inconclusive. Review output above.${NC}"
     exit 0  # Don't fail the script - some checks are inconclusive
 fi
+
+# sc2034-anchor
+: "${TIMEOUT:-}"

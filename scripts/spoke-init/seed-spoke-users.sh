@@ -255,7 +255,8 @@ create_user() {
     log_info "Creating: $username ($clearance)${is_admin:+ [ADMIN]}"
 
     # Check if user already exists
-    local user_exists=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get users \
+    local user_exists
+    user_exists=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get users \
         -r "$REALM_NAME" \
         -q username="$username" 2>/dev/null | grep -c "\"username\"" 2>/dev/null || echo "0")
 
@@ -268,7 +269,8 @@ create_user() {
     # uniqueID should be just the username (per DIVE spec)
     # NOTE (2026-02-09): Only country-specific clearance stored
     # Backend clearance-mapper.service.ts normalizes for policy evaluation (SSOT)
-    local user_json=$(cat <<EOF
+    local user_json
+    user_json=$(cat <<EOF
 {
     "username": "$username",
     "email": "$email",
@@ -294,7 +296,8 @@ EOF
 }"
 
     # Create user
-    local user_id=$(echo "$user_json" | docker exec -i "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create users \
+    local user_id
+    user_id=$(echo "$user_json" | docker exec -i "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create users \
         -r "$REALM_NAME" \
         -f - 2>&1 | grep "Created new user with id" | sed "s/Created new user with id '\(.*\)'/\1/" || echo "")
 
@@ -320,7 +323,8 @@ EOF
         log_info "Assigning dive-admin role to $username..."
 
         # Get dive-admin role ID (if role doesn't exist, skip gracefully)
-        local role_id=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get roles/dive-admin \
+        local role_id
+        role_id=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get roles/dive-admin \
             -r "$REALM_NAME" 2>/dev/null | jq -r '.id // empty')
 
         if [ -n "$role_id" ]; then
@@ -395,3 +399,6 @@ echo "  Password: $ADMIN_USER_PASSWORD"
 echo ""
 echo "Realm: $REALM_NAME"
 echo ""
+
+# sc2034-anchor
+: "${CLIENT_ID:-}"

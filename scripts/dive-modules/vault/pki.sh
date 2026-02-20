@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Vault PKI & Spoke Provisioning
 # =============================================================================
@@ -224,8 +225,10 @@ module_vault_provision() {
         return 1
     fi
 
-    local code=$(lower "$spoke_code")
-    local code_upper=$(upper "$spoke_code")
+    local code
+    code=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
 
     # Reject hub instance
     if [ "$code" = "usa" ]; then
@@ -396,7 +399,7 @@ module_vault_provision() {
         current_policies=$(vault read -field=token_policies "auth/approle/role/spoke-${code}" 2>/dev/null || true)
         if [ -n "$current_policies" ]; then
             # Build policy list from current + db policy
-            local db_policy="dive-v3-db-spoke-${code}"
+            local _db_policy="dive-v3-db-spoke-${code}"
 
             # Create spoke-specific DB policy from template concept
             # Spokes use the same spoke-template.hcl which now includes database paths
@@ -514,7 +517,8 @@ module_vault_provision() {
         fi
         # Only create if pair doesn't already exist
         if ! vault_get_secret "federation" "$pair" "client-secret" >/dev/null 2>&1; then
-            local fed_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            local fed_secret
+            fed_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
             if vault_set_secret "federation" "$pair" "{\"client-secret\":\"${fed_secret}\"}"; then
                 total_seeded=$((total_seeded + 1))
                 log_verbose "  Seeded: dive-v3/federation/${pair}"
@@ -536,9 +540,12 @@ module_vault_provision() {
     mkdir -p "$spoke_dir"
 
     # Read shared secrets from Vault
-    local shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret" 2>/dev/null || true)
-    local shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password" 2>/dev/null || true)
-    local opal_token=$(vault_get_secret "opal" "master-token" "token" 2>/dev/null || true)
+    local shared_client
+    shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret" 2>/dev/null || true)
+    local shared_blacklist
+    shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password" 2>/dev/null || true)
+    local opal_token
+    opal_token=$(vault_get_secret "opal" "master-token" "token" 2>/dev/null || true)
 
     # Create or update spoke .env
     [ ! -f "$spoke_env" ] && touch "$spoke_env"

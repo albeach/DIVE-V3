@@ -26,7 +26,7 @@ fi
 # Arguments: $1 - phase name, $2 - deployment type (hub|spoke)
 _error_get_remediation() {
     local phase="$1"
-    local type="${2:-hub}"
+    local _type="${2:-hub}"
 
     case "$phase" in
         VAULT_BOOTSTRAP)
@@ -375,7 +375,7 @@ _ERROR_SKIPPABLE_PHASES="REALM_VERIFY SEEDING VERIFICATION KAS_INIT"
 error_recovery_suggest() {
     local phase="$1"
     local deploy_type="${2:-hub}"
-    local instance_code="${3:-USA}"
+    local _instance_code="${3:-USA}"
 
     echo ""
     echo "==============================================================================="

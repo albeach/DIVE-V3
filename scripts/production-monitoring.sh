@@ -49,8 +49,10 @@ SERVICE_PORTS["opa"]="8181"
 log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local log_file="$LOG_DIR/monitoring-$(date +%Y%m%d).log"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local log_file
+    log_file="$LOG_DIR/monitoring-$(date +%Y%m%d).log"
     echo "[$timestamp] [$level] $message" >> "$log_file"
 }
 
@@ -66,7 +68,7 @@ log_error() { log "ERROR" "$1"; echo -e "${RED}✗${NC} $1"; }
 check_service_health() {
     local service_name="$1"
     local container_pattern="$2"
-    local port="${3:-}"
+    local _port="${3:-}"
 
     # Check if container is running
     if ! docker ps --filter "name=$container_pattern" --format "{{.Names}}" | grep -q "$container_pattern"; then
@@ -146,7 +148,8 @@ check_federation_health() {
 # =============================================================================
 
 collect_system_metrics() {
-    local metrics_file="$METRICS_DIR/metrics-$(date +%Y%m%d).json"
+    local metrics_file
+    metrics_file="$METRICS_DIR/metrics-$(date +%Y%m%d).json"
 
     # Get system metrics
     local cpu_usage mem_usage disk_usage load_avg
@@ -181,7 +184,8 @@ EOF
 collect_service_metrics() {
     local service_name="$1"
     local container_pattern="$2"
-    local metrics_file="$METRICS_DIR/${service_name}-$(date +%Y%m%d).json"
+    local metrics_file
+    metrics_file="$METRICS_DIR/${service_name}-$(date +%Y%m%d).json"
 
     # Get detailed container stats
     local stats
@@ -351,7 +355,8 @@ show_system_resources() {
     echo "-------------------------------------------------------------------------------"
 
     # Read latest metrics
-    local metrics_file="$METRICS_DIR/metrics-$(date +%Y%m%d).json"
+    local metrics_file
+    metrics_file="$METRICS_DIR/metrics-$(date +%Y%m%d).json"
     if [ -f "$metrics_file" ]; then
         local cpu_load mem_percent disk_percent load_avg container_count
 
@@ -395,7 +400,8 @@ show_recent_activity() {
     echo -e "${CYAN}📋 RECENT MONITORING ACTIVITY${NC}"
     echo "-------------------------------------------------------------------------------"
 
-    local log_file="$LOG_DIR/monitoring-$(date +%Y%m%d).log"
+    local log_file
+    log_file="$LOG_DIR/monitoring-$(date +%Y%m%d).log"
     if [ -f "$log_file" ]; then
         tail -10 "$log_file" 2>/dev/null | while read -r line; do
             # Color code log levels
@@ -609,3 +615,5 @@ main() {
 trap 'echo -e "\nMonitoring stopped by user"; exit 0' INT TERM
 
 main "$@"
+# sc2034-anchor
+: "${SERVICE_PORTS:-}"

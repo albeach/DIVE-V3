@@ -75,6 +75,7 @@ _spoke_pipeline_load_modules() {
 
     for module in "${modules[@]}"; do
         if [ -f "${_PIPELINE_DIR}/${module}" ]; then
+            # shellcheck source=/dev/null
             source "${_PIPELINE_DIR}/${module}"
         fi
     done
@@ -140,9 +141,12 @@ spoke_pipeline_execute() {
     local instance_name="${2:-$instance_code Instance}"
     local pipeline_mode="${3:-$PIPELINE_MODE_DEPLOY}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
-    local start_time=$(date +%s)
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local start_time
+    start_time=$(date +%s)
 
     # Validate inputs
     if [ -z "$instance_code" ]; then
@@ -257,7 +261,8 @@ _spoke_pipeline_execute_internal() {
     fi
 
     # Check current state for logging
-    local current_state=$(get_deployment_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    local current_state
+    current_state=$(get_deployment_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
     log_verbose "Current state before preflight: $current_state"
 
     # Execute phases based on mode
@@ -269,6 +274,7 @@ _spoke_pipeline_execute_internal() {
     # Pre-deployment summary + confirmation
     if ! type deployment_pre_summary_spoke &>/dev/null; then
         local _summary="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-summary.sh"
+        # shellcheck source=../../utilities/deployment-summary.sh
         [ -f "$_summary" ] && source "$_summary"
     fi
     if type deployment_pre_summary_spoke &>/dev/null; then
@@ -283,7 +289,8 @@ _spoke_pipeline_execute_internal() {
         spoke_phase_times+=("Phase 1 (Preflight): skipped")
     else
         log_verbose "Executing phase 1: PREFLIGHT"
-        local _ps=$(date +%s)
+        local _ps
+        _ps=$(date +%s)
         if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode" "$resume_mode"; then
             log_warn "Preflight phase failed, stopping pipeline"
             phase_result=1
@@ -308,7 +315,8 @@ _spoke_pipeline_execute_internal() {
             spoke_phase_times+=("Phase 2 (Initialization): skipped")
         else
             log_verbose "Executing phase 2: INITIALIZATION"
-            local _ps=$(date +%s)
+            local _ps
+            _ps=$(date +%s)
             if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Initialization phase failed, stopping pipeline"
                 phase_result=1
@@ -333,7 +341,8 @@ _spoke_pipeline_execute_internal() {
             spoke_phase_times+=("Phase 3 (Deployment): skipped")
         else
             log_verbose "Executing phase 3: DEPLOYMENT"
-            local _ps=$(date +%s)
+            local _ps
+            _ps=$(date +%s)
             if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Deployment phase failed, stopping pipeline"
                 phase_result=1
@@ -361,7 +370,8 @@ _spoke_pipeline_execute_internal() {
             spoke_phase_times+=("Phase 4 (Configuration): skipped")
         else
             log_verbose "Executing phase 4: CONFIGURATION"
-            local _ps=$(date +%s)
+            local _ps
+            _ps=$(date +%s)
             if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Configuration phase failed, stopping pipeline"
                 phase_result=1
@@ -384,7 +394,8 @@ _spoke_pipeline_execute_internal() {
             spoke_phase_times+=("Phase 5 (Seeding): skipped")
         else
             log_verbose "Executing phase 5: SEEDING"
-            local _ps=$(date +%s)
+            local _ps
+            _ps=$(date +%s)
             if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Seeding phase failed, stopping pipeline"
                 phase_result=1
@@ -409,7 +420,8 @@ _spoke_pipeline_execute_internal() {
             spoke_phase_times+=("Phase 6 (Verification): skipped")
         else
             log_verbose "Executing phase 6: VERIFICATION"
-            local _ps=$(date +%s)
+            local _ps
+            _ps=$(date +%s)
             if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Verification phase failed, stopping pipeline"
                 phase_result=1
@@ -435,7 +447,8 @@ _spoke_pipeline_execute_internal() {
     fi
 
     # Calculate duration
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     # Finalize
@@ -561,7 +574,8 @@ spoke_pipeline_run_phase() {
     fi
 
     log_step "Phase: $phase_name"
-    local phase_start=$(date +%s)
+    local phase_start
+    phase_start=$(date +%s)
 
     # Map pipeline phase names to orchestration states
     local state_name="$phase_name"
@@ -631,7 +645,8 @@ spoke_pipeline_run_phase() {
             fi
         fi
 
-        local phase_end=$(date +%s)
+        local phase_end
+        phase_end=$(date +%s)
         local phase_duration=$((phase_end - phase_start))
 
         if [ $phase_exit -eq 0 ]; then
@@ -733,7 +748,8 @@ spoke_pipeline_run_phase() {
 spoke_pipeline_rollback() {
     local instance_code="$1"
     local failed_phase="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Attempting rollback for $instance_code after $failed_phase failure"
 
@@ -751,7 +767,7 @@ spoke_pipeline_rollback() {
     local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
     if [ -d "$tf_spoke_dir" ]; then
         (
-            cd "$tf_spoke_dir"
+            cd "$tf_spoke_dir" || return 1
 
             # Delete workspace entirely (cleanest approach)
             if terraform workspace list 2>/dev/null | grep -qw "$code_lower"; then
@@ -783,13 +799,13 @@ spoke_pipeline_rollback() {
 
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     if [ -d "$spoke_dir" ] && [ -f "$spoke_dir/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         if docker compose down 2>&1 | grep -q "Removed\|Stopped"; then
             log_success "✓ Containers stopped successfully"
         else
             log_warn "⚠ Container stop may have failed (check manually)"
         fi
-        cd "$DIVE_ROOT"
+        cd "$DIVE_ROOT" || return 1
     else
         log_verbose "No docker-compose.yml found - containers may not be running"
     fi
@@ -896,3 +912,6 @@ spoke_pipeline_redeploy() {
 
     spoke_pipeline_execute "$instance_code" "$instance_name" "$PIPELINE_MODE_REDEPLOY"
 }
+
+# sc2034-anchor
+: "${PIPELINE_PHASE_COMPLETE:-}"

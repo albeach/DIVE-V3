@@ -48,7 +48,8 @@ verification_run_all() {
     local deployment_type="${1:-spoke}"
     local instance_code="${2:-}"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local container_prefix
 
     if [ "$deployment_type" = "hub" ]; then
@@ -161,11 +162,13 @@ verification_check_containers() {
 verification_check_health() {
     local container_prefix="$1"
 
-    local containers=$(docker ps --filter "name=${container_prefix}" --format '{{.Names}}')
+    local containers
+    containers=$(docker ps --filter "name=${container_prefix}" --format '{{.Names}}')
     local unhealthy=0
 
     for container in $containers; do
-        local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
 
         if [ "$health" = "unhealthy" ]; then
             log_verbose "Container unhealthy: $container"
@@ -182,7 +185,8 @@ verification_check_health() {
 verification_check_keycloak() {
     local deployment_type="$1"
     local instance_code="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local kc_port
 
@@ -207,7 +211,8 @@ verification_check_keycloak() {
 verification_check_backend() {
     local deployment_type="$1"
     local instance_code="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local be_port
 
@@ -232,7 +237,8 @@ verification_check_backend() {
 verification_check_frontend() {
     local deployment_type="$1"
     local instance_code="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local fe_port
 
@@ -342,7 +348,8 @@ verification_check_opa() {
 verification_generate_report() {
     local deployment_type="$1"
     local instance_code="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local report_file
 

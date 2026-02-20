@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090,SC2034  # Dynamic sources intentional; exported vars used by test suites
 # =============================================================================
 # DIVE V3 - Comprehensive Testing Framework
 # =============================================================================
@@ -57,6 +56,9 @@ LOAD_TARGETS=(
     "resource_access:75"
     "policy_evaluation:150"
 )
+
+# Keep constants explicitly referenced for strict shellcheck.
+: "${TEST_CATEGORIES[*]}" "${COVERAGE_TARGETS[*]}" "${LOAD_TARGETS[*]}"
 
 # =============================================================================
 # TEST FRAMEWORK FUNCTIONS
@@ -203,6 +205,7 @@ test_run_cli_integration_tests() {
 
     # Load CLI module tests
     if [ -f "${DIVE_ROOT}/scripts/test-cli-modules.sh" ]; then
+        # shellcheck source=./test-cli-modules.sh
         source "${DIVE_ROOT}/scripts/test-cli-modules.sh"
         test_run_cli_module_tests
     else
@@ -263,6 +266,7 @@ test_cli_module() {
     # Source module and run basic validation
     if bash -n "$module_path" 2>/dev/null; then
         # Try to source and check for syntax errors
+        # shellcheck source=/dev/null
         if (source "$module_path" 2>&1 | grep -q "syntax error\|command not found\|undefined function"); then
             return 1
         fi
@@ -347,6 +351,7 @@ test_run_load_tests() {
 
     # Load load testing suite
     if [ -f "${DIVE_ROOT}/scripts/load-test-suite.sh" ]; then
+        # shellcheck source=./load-test-suite.sh
         source "${DIVE_ROOT}/scripts/load-test-suite.sh"
         load_test_run_suite
     else
@@ -363,6 +368,7 @@ test_run_e2e_tests() {
 
     # Load environment isolation tests
     if [ -f "${DIVE_ROOT}/scripts/test-environment-isolation.sh" ]; then
+        # shellcheck source=./test-environment-isolation.sh
         source "${DIVE_ROOT}/scripts/test-environment-isolation.sh"
         test_run_environment_isolation_tests
     else
@@ -379,6 +385,7 @@ test_run_security_tests() {
 
     # Load security vulnerability tests
     if [ -f "${DIVE_ROOT}/scripts/test-security-vulnerabilities.sh" ]; then
+        # shellcheck source=./test-security-vulnerabilities.sh
         source "${DIVE_ROOT}/scripts/test-security-vulnerabilities.sh"
         test_run_security_vulnerability_tests
     else

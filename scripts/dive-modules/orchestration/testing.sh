@@ -76,19 +76,20 @@ orch_test_record() {
     local result="$3"
     local message="${4:-}"
 
-    local timestamp=$(date +%s)
+    local timestamp
+    timestamp=$(date +%s)
     local result_str
 
     case "$result" in
-        $TEST_PASS)
+        "$TEST_PASS")
             result_str="PASS"
             ((TESTS_PASSED++))
             ;;
-        $TEST_FAIL)
+        "$TEST_FAIL")
             result_str="FAIL"
             ((TESTS_FAILED++))
             ;;
-        $TEST_SKIP)
+        "$TEST_SKIP")
             result_str="SKIP"
             ((TESTS_SKIPPED++))
             ;;
@@ -100,13 +101,13 @@ orch_test_record() {
     TEST_RESULTS+=("$timestamp|$test_name|$test_type|$result_str|$message")
 
     case "$result" in
-        $TEST_PASS)
+        "$TEST_PASS")
             log_success "✅ $test_name ($test_type)"
             ;;
-        $TEST_FAIL)
+        "$TEST_FAIL")
             log_error "❌ $test_name ($test_type): $message"
             ;;
-        $TEST_SKIP)
+        "$TEST_SKIP")
             log_warn "⏭️  $test_name ($test_type): $message"
             ;;
     esac
@@ -140,7 +141,8 @@ orch_test_assert() {
 # Generate test report
 #
 orch_test_report() {
-    local report_file="${DIVE_ROOT}/logs/orchestration-test-report-$(date +%Y%m%d-%H%M%S).txt"
+    local report_file
+    report_file="${DIVE_ROOT}/logs/orchestration-test-report-$(date +%Y%m%d-%H%M%S).txt"
 
     {
         echo "================================================================================"
@@ -247,7 +249,8 @@ orch_test_cleanup_instance() {
     rm -rf "$test_dir"
 
     # Clean up any orphaned containers
-    local orphaned=$(docker ps -aq --filter "name=dive-test-${test_instance}" 2>/dev/null || true)
+    local orphaned
+    orphaned=$(docker ps -aq --filter "name=dive-test-${test_instance}" 2>/dev/null || true)
     if [ -n "$orphaned" ]; then
         docker rm -f $orphaned 2>/dev/null || true
     fi
@@ -310,9 +313,12 @@ orch_test_unit_smart_retry() {
     log_step "Testing Smart Retry Unit Tests..."
 
     # Test delay calculation for different operations
-    local keycloak_delay=$(orch_calculate_retry_delay "keycloak_health" 2 5)
-    local federation_delay=$(orch_calculate_retry_delay "federation_config" 2 5)
-    local secrets_delay=$(orch_calculate_retry_delay "secret_loading" 2 5)
+    local keycloak_delay
+    keycloak_delay=$(orch_calculate_retry_delay "keycloak_health" 2 5)
+    local federation_delay
+    federation_delay=$(orch_calculate_retry_delay "federation_config" 2 5)
+    local secrets_delay
+    secrets_delay=$(orch_calculate_retry_delay "secret_loading" 2 5)
 
     orch_test_assert "[ '$keycloak_delay' -gt 5 ]" \
         "Keycloak Progressive Delay" "$TEST_UNIT"
@@ -602,14 +608,16 @@ orch_test_performance_all() {
 orch_test_performance_metrics_collection() {
     log_step "Testing Metrics Collection Performance..."
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Collect metrics multiple times
     for i in {1..100}; do
         orch_collect_current_metrics "PERF_TEST" >/dev/null 2>&1
     done
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     orch_test_assert "[ $duration -lt 30 ]" \
@@ -623,7 +631,8 @@ orch_test_performance_metrics_collection() {
 orch_test_performance_concurrent_state_operations() {
     log_step "Testing Concurrent State Operations Performance..."
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Perform concurrent state operations
     for i in {1..50}; do
@@ -631,7 +640,8 @@ orch_test_performance_concurrent_state_operations() {
     done
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     orch_test_assert "[ $duration -lt 10 ]" \
@@ -650,7 +660,8 @@ orch_test_performance_concurrent_state_operations() {
 orch_test_performance_checkpoint_operations() {
     log_step "Testing Checkpoint Operations Performance..."
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Create multiple checkpoints
     for i in {1..10}; do
@@ -658,7 +669,8 @@ orch_test_performance_checkpoint_operations() {
     done
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     orch_test_assert "[ $duration -lt 30 ]" \
@@ -728,3 +740,5 @@ orch_test_run_category() {
 
     orch_test_report
 }
+# sc2034-anchor
+: "${PERF_CONCURRENT_INSTANCES:-}" "${PERF_DEPLOYMENT_TIMEOUT:-}" "${PERF_LOAD_TEST_ITERATIONS:-}"

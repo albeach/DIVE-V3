@@ -127,7 +127,8 @@ migrate_secret() {
 ##
 migrate_instance() {
     local instance="$1"
-    local code_lower=$(lower "$instance")
+    local code_lower
+    code_lower=$(lower "$instance")
 
     log_info "━━━ Migrating instance: $(upper "$instance") ━━━"
 

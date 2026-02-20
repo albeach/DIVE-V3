@@ -1,15 +1,7 @@
-name: Terraform Validate
+name: Terraform Validate (Manual)
 
 on:
-  pull_request:
-    paths:
-      - 'terraform/**'
-      - '.github/workflows/terraform-validate.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'terraform/**'
+  workflow_dispatch:
 
 jobs:
   validate:

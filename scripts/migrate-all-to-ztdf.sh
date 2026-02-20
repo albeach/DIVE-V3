@@ -146,7 +146,8 @@ check_container_running() {
 
 get_mongo_stats() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if [ "$instance_code" = "USA" ] || [ "$instance_code" = "HUB" ]; then
         local mongo_container="dive-hub-mongodb"
@@ -161,7 +162,8 @@ get_mongo_stats() {
         return 1
     fi
 
-    local mongo_pass=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+    local mongo_pass
+    mongo_pass=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
     local mongo_uri="mongodb://localhost:27017/${db_name}?authSource=admin"
 
     if [ -n "$mongo_pass" ]; then
@@ -169,13 +171,16 @@ get_mongo_stats() {
     fi
 
     # Get counts
-    local total=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+    local total
+    total=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
         --eval "db.resources.countDocuments({})" 2>/dev/null | tail -1 || echo "0")
 
-    local ztdf=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+    local ztdf
+    ztdf=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
         --eval "db.resources.countDocuments({ 'ztdf.manifest': { \$exists: true } })" 2>/dev/null | tail -1 || echo "0")
 
-    local locale=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+    local locale
+    locale=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
         --eval "db.resources.countDocuments({ 'ztdf.policy.securityLabel.originalClassification': { \$exists: true } })" 2>/dev/null | tail -1 || echo "0")
 
     echo "${total}:${ztdf}:${locale}"
@@ -183,7 +188,8 @@ get_mongo_stats() {
 
 verify_instance() {
     local instance_code="$1"
-    local stats=$(get_mongo_stats "$instance_code")
+    local stats
+    stats=$(get_mongo_stats "$instance_code")
 
     IFS=':' read -r total ztdf locale <<< "$stats"
 
@@ -210,7 +216,8 @@ verify_instance() {
 
 backup_instance() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Backing up $instance_code..."
 
@@ -252,7 +259,8 @@ backup_instance() {
 
 migrate_instance() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_header "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log_header "  Migrating: $instance_code"
@@ -341,14 +349,16 @@ migrate_instance() {
         return 0
     fi
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     if docker exec "$backend_container" npm run seed:instance -- \
         --instance="$instance_code" \
         --count="$RESOURCE_COUNT" \
         --replace 2>&1 | tee -a "$MIGRATION_LOG"; then
 
-        local end_time=$(date +%s)
+        local end_time
+        end_time=$(date +%s)
         local duration=$((end_time - start_time))
 
         log_success "Seeded $instance_code in ${duration}s"
@@ -398,7 +408,8 @@ discover_instances() {
         # User specified spokes
         IFS=',' read -ra SPOKE_LIST <<< "$SPECIFIC_SPOKES"
         for spoke in "${SPOKE_LIST[@]}"; do
-            local spoke_upper=$(upper "$spoke")
+            local spoke_upper
+            spoke_upper=$(upper "$spoke")
             instances+=("$spoke_upper")
         done
     else
@@ -408,12 +419,14 @@ discover_instances() {
                 continue
             fi
 
-            local basename=$(basename "$dir")
+            local basename
+            basename=$(basename "$dir")
             if [[ "$basename" == "hub" || "$basename" == "usa" || "$basename" == "shared" ]]; then
                 continue
             fi
 
-            local spoke_upper=$(upper "$basename")
+            local spoke_upper
+            spoke_upper=$(upper "$basename")
             local backend_container="dive-spoke-${basename}-backend"
 
             if check_container_running "$backend_container"; then
@@ -592,7 +605,8 @@ main() {
     fi
 
     # Migrate instances
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     if [ "$PARALLEL" = true ] && [ ${#INSTANCES[@]} -gt 1 ]; then
         log_info "Migrating instances in parallel..."
@@ -609,7 +623,8 @@ main() {
         done
     fi
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local total_duration=$((end_time - start_time))
 
     # Generate report

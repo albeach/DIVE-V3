@@ -195,7 +195,7 @@ deployment_pre_summary_spoke() {
 deployment_post_summary() {
     local deploy_type="${1:?Deployment type required}"
     local instance_code="${2:-USA}"
-    local duration="${3:-0}"
+    local _duration="${3:-0}"
     local code_lower
     code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
 

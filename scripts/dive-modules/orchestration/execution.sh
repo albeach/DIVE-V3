@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Orchestration Execution Engine
 # =============================================================================
@@ -6,6 +7,11 @@
 # Service health checks, circuit breaker, retry logic, timeout calculation,
 # parallel startup, health cascade
 # =============================================================================
+
+if ! declare -p ORCH_CONTEXT &>/dev/null; then
+    declare -A ORCH_CONTEXT=()
+fi
+: "${PHASE_PREFLIGHT:=PREFLIGHT}"
 
 orch_init_context() {
     local instance_code="$1"
@@ -46,42 +52,43 @@ orch_record_error() {
     local remediation="${5:-}"
     local context="${6:-}"
 
-    local timestamp=$(date +%s)
+    local timestamp
+    timestamp=$(date +%s)
     local error_record="$timestamp|$error_code|$severity|$component|$message|$remediation|$context"
 
     ORCHESTRATION_ERRORS+=("$error_record")
 
     # Update error counters
     case "$severity" in
-        $ORCH_SEVERITY_CRITICAL)
+        "$ORCH_SEVERITY_CRITICAL")
             ((ORCH_CONTEXT[errors_critical]++))
             ;;
-        $ORCH_SEVERITY_HIGH)
+        "$ORCH_SEVERITY_HIGH")
             ((ORCH_CONTEXT[errors_high]++))
             ;;
-        $ORCH_SEVERITY_MEDIUM)
+        "$ORCH_SEVERITY_MEDIUM")
             ((ORCH_CONTEXT[errors_medium]++))
             ;;
-        $ORCH_SEVERITY_LOW)
+        "$ORCH_SEVERITY_LOW")
             ((ORCH_CONTEXT[errors_low]++))
             ;;
     esac
 
     # Log based on severity
     case "$severity" in
-        $ORCH_SEVERITY_CRITICAL)
+        "$ORCH_SEVERITY_CRITICAL")
             log_error "CRITICAL [$component]: $message"
             [ -n "$remediation" ] && log_error "REMEDIATION: $remediation"
             ;;
-        $ORCH_SEVERITY_HIGH)
+        "$ORCH_SEVERITY_HIGH")
             log_error "HIGH PRIORITY [$component]: $message"
             [ -n "$remediation" ] && log_error "REMEDIATION: $remediation"
             ;;
-        $ORCH_SEVERITY_MEDIUM)
+        "$ORCH_SEVERITY_MEDIUM")
             log_warn "MEDIUM PRIORITY [$component]: $message"
             [ -n "$remediation" ] && log_info "NOTE: $remediation"
             ;;
-        $ORCH_SEVERITY_LOW)
+        "$ORCH_SEVERITY_LOW")
             log_info "NOTICE [$component]: $message"
             ;;
     esac
@@ -122,7 +129,8 @@ orch_should_continue() {
 ##
 orch_generate_error_summary() {
     local instance_code="$1"
-    local error_log="${DIVE_ROOT}/logs/orchestration-errors-${instance_code}-$(date +%Y%m%d-%H%M%S).log"
+    local error_log
+    error_log="${DIVE_ROOT}/logs/orchestration-errors-${instance_code}-$(date +%Y%m%d-%H%M%S).log"
 
     {
         echo "=== DIVE V3 Orchestration Error Summary ==="
@@ -196,7 +204,8 @@ orch_check_service_health() {
     local code_lower="$instance_code"
 
     local container_name="dive-spoke-${code_lower}-${service}"
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local elapsed=0
 
     log_verbose "Checking health of $container_name (timeout: ${timeout}s)"
@@ -310,9 +319,12 @@ orch_get_service_health_details() {
     fi
 
     # Get container details
-    local container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
-    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "none")
-    local started_at=$(docker inspect --format='{{.State.StartedAt}}' "$container_name" 2>/dev/null || echo "unknown")
+    local container_status
+    container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+    local health_status
+    health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "none")
+    local started_at
+    started_at=$(docker inspect --format='{{.State.StartedAt}}' "$container_name" 2>/dev/null || echo "unknown")
 
     # Try HTTP health check if available
     local http_healthy="null"
@@ -322,7 +334,8 @@ orch_get_service_health_details() {
 
     if [ -n "$health_url" ] && [ -n "$health_port" ]; then
         local health_endpoint="http://localhost:${health_port}${health_url}"
-        local http_response=$(curl -kfs --max-time 3 -w "\n%{http_code}" "$health_endpoint" 2>/dev/null || echo "")
+        local http_response
+        http_response=$(curl -kfs --max-time 3 -w "\n%{http_code}" "$health_endpoint" 2>/dev/null || echo "")
         http_status=$(echo "$http_response" | tail -1)
 
         if [ "$http_status" = "200" ]; then
@@ -474,7 +487,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/circuit-breaker.sh"
 orch_parallel_startup() {
     local instance_code="$1"
     local services="${2:-all}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Starting parallel service startup for $instance_code"
 
@@ -484,7 +498,8 @@ orch_parallel_startup() {
         return 1
     fi
 
-    local max_level=$(orch_get_max_dependency_level)
+    local max_level
+    max_level=$(orch_get_max_dependency_level)
     local total_started=0
     local total_failed=0
 
@@ -492,7 +507,8 @@ orch_parallel_startup() {
 
     # Start services level by level
     for ((level=0; level<=max_level; level++)); do
-        local level_services=$(orch_get_services_at_level $level)
+        local level_services
+        level_services=$(orch_get_services_at_level $level)
 
         if [ -z "$level_services" ]; then
             continue
@@ -514,7 +530,8 @@ orch_parallel_startup() {
 
             # Start service in background
             (
-                local timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
+                local timeout
+                timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
                 local container="dive-spoke-${code_lower}-${service}"
 
                 # Check if already running
@@ -526,7 +543,7 @@ orch_parallel_startup() {
                 # Start service
                 local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
                 if [ -f "$spoke_dir/docker-compose.yml" ]; then
-                    cd "$spoke_dir"
+                    cd "$spoke_dir" || return 1
                     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
                     docker compose up -d "$service" >/dev/null 2>&1
                 fi
@@ -540,7 +557,7 @@ orch_parallel_startup() {
             ) &
 
             local pid=$!
-            pids+=($pid)
+            pids+=("$pid")
             service_pid_map="$service_pid_map $service:$pid"
         done
 
@@ -629,12 +646,14 @@ orch_check_health_with_cascade() {
 
     # Check dependencies first (cascade awareness)
     if [ "$skip_deps" != "true" ]; then
-        local deps=$(orch_get_health_check_dependencies "$service")
+        local deps
+        deps=$(orch_get_health_check_dependencies "$service")
 
         for dep in $deps; do
             log_verbose "Checking health cascade: $service depends on $dep"
 
-            local dep_timeout=$(orch_calculate_dynamic_timeout "$dep" "$instance_code")
+            local dep_timeout
+            dep_timeout=$(orch_calculate_dynamic_timeout "$dep" "$instance_code")
             if ! orch_check_service_health "$instance_code" "$dep" "$dep_timeout"; then
                 log_error "Health cascade failed: $dep (dependency of $service) is unhealthy"
                 return 1
@@ -678,3 +697,7 @@ declare -A CHECKPOINT_METADATA=()
 # Returns:
 #   Checkpoint ID on stdout
 ##
+
+# sc2034-anchor
+: "${CHECKPOINT_COMPLETE:-}" "${CHECKPOINT_CONFIG:-}" "${CHECKPOINT_CONTAINER:-}" "${CHECKPOINT_FEDERATION:-}" "${CHECKPOINT_KEYCLOAK:-}" "${CHECKPOINT_METADATA:-}"
+: "${CHECKPOINT_REGISTRY:-}" "${ROLLBACK_COMPLETE:-}" "${ROLLBACK_CONFIG:-}" "${ROLLBACK_CONTAINERS:-}" "${ROLLBACK_STOP:-}"

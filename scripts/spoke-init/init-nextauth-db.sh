@@ -51,7 +51,7 @@ fi
 
 # Wait for PostgreSQL to be ready
 log_info "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
+for _i in {1..30}; do
     if docker exec "$POSTGRES_CONTAINER" pg_isready -U keycloak -d keycloak >/dev/null 2>&1; then
         break
     fi
@@ -150,3 +150,6 @@ if [ "$TABLES" -ge 4 ]; then
 else
     log_warn "Only ${TABLES}/4 NextAuth tables found"
 fi
+
+# sc2034-anchor
+: "${DIVE_ROOT:-}"

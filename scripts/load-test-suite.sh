@@ -62,7 +62,8 @@ load_test_authz_decisions() {
     fi
 
     # Create test payload
-    local payload='{
+    local payload
+    payload='{
         "subject": {
             "uniqueID": "test-user-123",
             "clearance": "SECRET",
@@ -105,7 +106,8 @@ EOF
     # Run load test using parallel curl requests
     log_info "Starting authorization load test: $concurrent concurrent users for ${duration}s (target: ${target_rps} req/s)"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local request_count=0
     local error_count=0
 
@@ -132,7 +134,8 @@ EOF
     # Wait for all background processes
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local actual_duration=$((end_time - start_time))
     local actual_rps=$((request_count / actual_duration))
 
@@ -173,7 +176,8 @@ load_test_federation_heartbeat() {
     fi
 
     # Create test payload (simulating spoke heartbeat)
-    local payload='{
+    local payload
+    payload='{
         "spokeId": "load-test-spoke",
         "instanceCode": "TST",
         "policyVersion": "1.0.0",
@@ -214,7 +218,8 @@ EOF
     # Run load test
     log_info "Starting heartbeat load test: $concurrent concurrent spokes for ${duration}s (target: ${target_rps} req/s)"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local request_count=0
     local error_count=0
 
@@ -241,7 +246,8 @@ EOF
     # Wait for all background processes
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local actual_duration=$((end_time - start_time))
     local actual_rps=$((request_count / actual_duration))
 
@@ -301,7 +307,8 @@ EOF
     # Run load test
     log_info "Starting resource access load test: $concurrent concurrent users for ${duration}s (target: ${target_rps} req/s)"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local request_count=0
     local error_count=0
 
@@ -328,7 +335,8 @@ EOF
     # Wait for all background processes
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local actual_duration=$((end_time - start_time))
     local actual_rps=$((request_count / actual_duration))
 
@@ -369,7 +377,8 @@ load_test_policy_evaluation() {
     fi
 
     # Create test payload for OPA policy evaluation
-    local payload='{
+    local payload
+    payload='{
         "input": {
             "subject": {
                 "uniqueID": "test-user-'$(date +%s)'",
@@ -406,7 +415,8 @@ EOF
     # Run load test
     log_info "Starting policy evaluation load test: $concurrent concurrent requests for ${duration}s (target: ${target_rps} req/s)"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local request_count=0
     local error_count=0
 
@@ -433,7 +443,8 @@ EOF
     # Wait for all background processes
     wait
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local actual_duration=$((end_time - start_time))
     local actual_rps=$((request_count / actual_duration))
 

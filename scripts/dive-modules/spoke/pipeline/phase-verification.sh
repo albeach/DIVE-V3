@@ -63,8 +63,10 @@ spoke_phase_verification() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
@@ -74,9 +76,11 @@ spoke_phase_verification() {
     # Only skip if explicitly marked complete AND recent (within last 5 minutes)
     if type spoke_phase_is_complete &>/dev/null; then
         if spoke_phase_is_complete "$instance_code" "VERIFICATION"; then
-            local checkpoint_age=$(spoke_phase_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
+            local checkpoint_age
+            checkpoint_age=$(spoke_phase_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
             if [ -n "$checkpoint_age" ]; then
-                local now=$(date +%s)
+                local now
+                now=$(date +%s)
                 # Cross-platform ISO 8601 timestamp parsing (macOS + Linux)
                 local checkpoint_ts
                 checkpoint_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$checkpoint_age" +%s 2>/dev/null \
@@ -279,7 +283,8 @@ spoke_phase_verification() {
 ##
 spoke_verify_service_health() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying service health..."
 
@@ -290,7 +295,7 @@ spoke_verify_service_health() {
     # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
     local services
     if type compose_get_spoke_services &>/dev/null; then
-        services=($(compose_get_spoke_services "$instance_code"))
+        read -r -a services <<<"$(compose_get_spoke_services "$instance_code")"
     else
         log_warn "compose_get_spoke_services not available, using fallback service list"
         services=("frontend" "backend" "redis" "keycloak" "postgres" "mongodb" "opa" "opal-client")
@@ -367,7 +372,8 @@ spoke_verify_service_health() {
 ##
 spoke_verify_database_connectivity() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying database connectivity..."
 
@@ -394,7 +400,8 @@ spoke_verify_database_connectivity() {
     local mongo_container="dive-spoke-${code_lower}-mongodb"
     if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
         local mongo_test
-        local mongo_pass_var="MONGO_PASSWORD_$(upper "$instance_code")"
+        local mongo_pass_var
+        mongo_pass_var="MONGO_PASSWORD_$(upper "$instance_code")"
         local mongo_pass="${!mongo_pass_var:-}"
         if [ -n "$mongo_pass" ]; then
             # SECURITY FIX: Use environment variable instead of command-line argument
@@ -476,7 +483,8 @@ spoke_verify_database_connectivity() {
 ##
 spoke_verify_keycloak_health() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying Keycloak health..."
 
@@ -570,8 +578,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/phase-verification-federation.sh"
 spoke_verify_generate_report() {
     local instance_code="$1"
     local overall_result="$2"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local report_file="$spoke_dir/verification-report.json"
@@ -653,7 +663,8 @@ EOF
 ##
 spoke_verify_quick_health() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Check if critical services are running
     local critical_services=("keycloak" "backend" "postgres")
@@ -701,8 +712,10 @@ spoke_verify_quick_health() {
 ##
 spoke_verify_health_detailed() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_step "Running detailed health check via backend API..."
 
@@ -829,8 +842,10 @@ spoke_verify_health_detailed() {
         echo "  Circuit Breakers:"
 
         echo "$health_response" | jq -r '.circuitBreakers | to_entries[] | "\(.key):\(.value.state)"' 2>/dev/null | while read -r line; do
-            local cb_name=$(echo "$line" | cut -d: -f1)
-            local cb_state=$(echo "$line" | cut -d: -f2)
+            local cb_name
+            cb_name=$(echo "$line" | cut -d: -f1)
+            local cb_state
+            cb_state=$(echo "$line" | cut -d: -f2)
 
             case "$cb_state" in
                 CLOSED)
@@ -878,7 +893,8 @@ spoke_verify_health_detailed() {
 ##
 spoke_verify_api_health_detailed() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying API health (detailed)..."
 

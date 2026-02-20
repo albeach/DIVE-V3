@@ -2,7 +2,7 @@
 # Monitor backend authorization decisions in real-time
 # Run this in one terminal while testing
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 echo "========================================="
 echo "Monitoring Backend Authorization"

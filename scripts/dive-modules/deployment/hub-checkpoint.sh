@@ -107,9 +107,12 @@ hub_checkpoint_mark_complete() {
     local checkpoint_file="${HUB_CHECKPOINT_DIR}/${phase}.done"
 
     # Build checkpoint data
-    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    local hostname=$(hostname)
-    local username=$(whoami)
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local hostname
+    hostname=$(hostname)
+    local username
+    username=$(whoami)
 
     # Create checkpoint file with metadata
     cat > "$checkpoint_file" <<EOF
@@ -209,7 +212,8 @@ hub_checkpoint_list_completed() {
     local completed_phases=""
     for checkpoint_file in "$HUB_CHECKPOINT_DIR"/*.done; do
         if [ -f "$checkpoint_file" ]; then
-            local basename=$(basename "$checkpoint_file" .done)
+            local basename
+            basename=$(basename "$checkpoint_file" .done)
             completed_phases="$completed_phases $basename"
         fi
     done
@@ -224,7 +228,8 @@ hub_checkpoint_list_completed() {
 #   Human-readable summary on stdout
 ##
 hub_checkpoint_get_summary() {
-    local completed=$(hub_checkpoint_list_completed)
+    local completed
+    completed=$(hub_checkpoint_list_completed)
 
     if [ -z "$completed" ]; then
         echo "No completed phases"
@@ -232,7 +237,8 @@ hub_checkpoint_get_summary() {
     fi
 
     local total=${#HUB_VALID_PHASES[@]}
-    local count=$(echo "$completed" | wc -w | tr -d ' ')
+    local count
+    count=$(echo "$completed" | wc -w | tr -d ' ')
 
     echo "Completed $count/$total phases: $completed"
 }
@@ -260,7 +266,8 @@ hub_checkpoint_clear_all() {
     fi
 
     # Check if there are any checkpoints
-    local checkpoint_count=$(find "$HUB_CHECKPOINT_DIR" -name "*.done" 2>/dev/null | wc -l | tr -d ' ')
+    local checkpoint_count
+    checkpoint_count=$(find "$HUB_CHECKPOINT_DIR" -name "*.done" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$checkpoint_count" -eq 0 ]; then
         log_verbose "No hub checkpoints to clear"
         return 0
@@ -347,7 +354,8 @@ hub_checkpoint_validate_state() {
     # Check SERVICES checkpoint
     if hub_checkpoint_is_complete "SERVICES"; then
         # Verify hub containers exist
-        local container_count=$(docker ps -a --filter "name=dive-hub-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+        local container_count
+        container_count=$(docker ps -a --filter "name=dive-hub-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
         if [ "$container_count" -eq 0 ]; then
             log_warn "SERVICES checkpoint exists but no hub containers found"
@@ -364,7 +372,8 @@ hub_checkpoint_validate_state() {
         local realm="dive-v3-broker-usa"
 
         if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-            local realm_check=$(curl -sk --max-time 5 "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${realm}" 2>/dev/null | \
+            local realm_check
+            realm_check=$(curl -sk --max-time 5 "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${realm}" 2>/dev/null | \
                 jq -r '.realm // empty' 2>/dev/null)
 
             if [ "$realm_check" != "$realm" ]; then
@@ -383,7 +392,8 @@ hub_checkpoint_validate_state() {
         # Verify database tables exist
         local postgres_container="dive-hub-postgres"
         if docker ps --format '{{.Names}}' | grep -q "^${postgres_container}$"; then
-            local table_count=$(docker exec "$postgres_container" psql -U postgres -d orchestration -t -c \
+            local table_count
+            table_count=$(docker exec "$postgres_container" psql -U postgres -d orchestration -t -c \
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null | xargs || echo "0")
 
             if [ "$table_count" -lt 6 ]; then
@@ -447,13 +457,15 @@ hub_checkpoint_get_next_phase() {
 #   1 - Cannot resume (no checkpoints or all complete)
 ##
 hub_checkpoint_can_resume() {
-    local completed=$(hub_checkpoint_list_completed)
+    local completed
+    completed=$(hub_checkpoint_list_completed)
 
     if [ -z "$completed" ]; then
         return 1  # No checkpoints
     fi
 
-    local next_phase=$(hub_checkpoint_get_next_phase)
+    local next_phase
+    next_phase=$(hub_checkpoint_get_next_phase)
     if [ -z "$next_phase" ]; then
         return 1  # All phases complete
     fi
@@ -465,15 +477,18 @@ hub_checkpoint_can_resume() {
 # Print hub resume summary
 ##
 hub_checkpoint_print_resume_info() {
-    local completed=$(hub_checkpoint_list_completed)
-    local next_phase=$(hub_checkpoint_get_next_phase)
+    local completed
+    completed=$(hub_checkpoint_list_completed)
+    local next_phase
+    next_phase=$(hub_checkpoint_get_next_phase)
 
     echo ""
     echo "=== Hub Resume Information ==="
     echo ""
     echo "Completed phases:"
     for phase in $completed; do
-        local timestamp=$(hub_checkpoint_get_timestamp "$phase")
+        local timestamp
+        timestamp=$(hub_checkpoint_get_timestamp "$phase")
         echo "  + $phase (completed: $timestamp)"
     done
 
@@ -519,7 +534,8 @@ hub_checkpoint_report_json() {
 
         if [ -f "$checkpoint_file" ] && jq empty "$checkpoint_file" 2>/dev/null; then
             # Read checkpoint data
-            local phase_data=$(cat "$checkpoint_file")
+            local phase_data
+            phase_data=$(cat "$checkpoint_file")
             phases_json="${phases_json}${phase_data}"
         else
             # Phase not complete
@@ -555,7 +571,8 @@ deployment_checkpoint_mark_complete() {
     local duration="${3:-0}"
     local metadata="${4:-{}}"
 
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if [ "$code_upper" = "USA" ]; then
         hub_checkpoint_mark_complete "$phase" "$duration" "$metadata"
@@ -577,7 +594,8 @@ deployment_checkpoint_is_complete() {
     local instance_code="$1"
     local phase="$2"
 
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if [ "$code_upper" = "USA" ]; then
         hub_checkpoint_is_complete "$phase"

@@ -26,8 +26,10 @@
 ##
 spoke_config_init_nextauth_db() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Initializing NextAuth database schema"
 
@@ -62,8 +64,10 @@ spoke_config_init_nextauth_db() {
 ##
 spoke_config_apply_terraform() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Applying Terraform configuration"
 
@@ -213,7 +217,8 @@ spoke_config_apply_terraform() {
 ##
 spoke_config_verify_realm() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local realm="dive-v3-broker-${code_lower}"
     local kc_container="dive-spoke-${code_lower}-keycloak"
 
@@ -264,8 +269,10 @@ spoke_config_verify_realm() {
 ##
 spoke_config_nato_localization() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Configuring NATO localization for $code_upper..."
 
@@ -296,6 +303,7 @@ spoke_config_nato_localization() {
     if [ -z "${NATO_COUNTRIES_LOADED:-}" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/dev/null; then
         local nato_db_path="${DIVE_ROOT}/scripts/nato-countries.sh"
         if [ -f "$nato_db_path" ]; then
+            # shellcheck source=../../../nato-countries.sh
             source "$nato_db_path" 2>/dev/null || true
         fi
     fi
@@ -304,7 +312,8 @@ spoke_config_nato_localization() {
     # Check if NATO_COUNTRIES array has our country (without re-declaring which resets it)
     if [ -n "${NATO_COUNTRIES[$code_upper]+_}" ] && [ -n "${NATO_COUNTRIES[$code_upper]:-}" ]; then
         # Extract country name (first field before |)
-        local country_name=$(echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1)
+        local country_name
+        country_name=$(echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1)
         display_name="${country_name} DIVE Portal"
     else
         display_name="$code_upper DIVE Portal"
@@ -338,9 +347,10 @@ spoke_config_nato_localization() {
 ##
 spoke_config_setup_federation() {
     local instance_code="$1"
-    local pipeline_mode="$2"
+    local _pipeline_mode="$2"
 
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_step "Configuring federation for $code_upper..."
 
@@ -376,8 +386,10 @@ spoke_config_setup_federation() {
 ##
 spoke_config_sync_secrets() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Synchronizing secrets for $code_upper..."
 
@@ -403,8 +415,10 @@ spoke_config_sync_secrets() {
 ##
 spoke_config_sync_keycloak_secret() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -463,7 +477,8 @@ spoke_config_sync_keycloak_secret() {
 ##
 spoke_config_sync_federation_secrets() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Check if Hub is running
     if ! docker ps --format '{{.Names}}' | grep -q "^dive-hub-keycloak$"; then
@@ -497,8 +512,10 @@ spoke_config_sync_federation_secrets() {
 ##
 spoke_config_provision_opal() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Provisioning OPAL token for $code_upper..."
 
@@ -549,8 +566,10 @@ spoke_config_provision_opal() {
 ##
 spoke_config_sync_amr_attributes() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Synchronizing AMR attributes for $code_upper..."
 
@@ -589,7 +608,8 @@ spoke_config_sync_amr_attributes() {
 ##
 spoke_config_update_redirect_uris() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Updating redirect URIs for $instance_code"
 
@@ -670,7 +690,8 @@ spoke_config_update_redirect_uris() {
 ##
 spoke_checkpoint_configuration() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Validating configuration checkpoint for $instance_code"
 

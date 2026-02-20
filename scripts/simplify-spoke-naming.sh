@@ -55,7 +55,8 @@ for instance_dir in "$INSTANCES_DIR"/*/; do
         cp "$compose_file" "${compose_file}.backup-$(date +%Y%m%d-%H%M%S)"
 
         # Portable sed in-place editing (works on both macOS and Linux)
-        local tmpfile=$(mktemp)
+        tmpfile
+        tmpfile=$(mktemp)
         
         # Update volume declarations (remove redundant {code}_ prefix)
         sed "s/${code}_postgres_data:/postgres_data:/g; \

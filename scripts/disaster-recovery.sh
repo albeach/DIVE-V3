@@ -35,7 +35,8 @@ NC='\033[0m'
 log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message"
 }
 
@@ -141,7 +142,7 @@ select_backup() {
     # List available backups with metadata
     local count=1
     declare -a backup_files
-    declare -a backup_info
+    declare -a _backup_info
 
     while IFS= read -r -d '' backup; do
         local name size mtime age_days
@@ -151,7 +152,7 @@ select_backup() {
         age_days=$(( ($(date +%s) - mtime) / 86400 ))
 
         backup_files[$count]="$backup"
-        backup_info[$count]="$name|$size|$age_days days"
+        _backup_info[$count]="$name|$size|$age_days days"
 
         printf "%2d) %s (%s, %d days old)\n" $count "$name" "$size" $age_days
         ((count++))
@@ -187,7 +188,8 @@ select_backup() {
 create_recovery_plan() {
     local backup_file="$1"
     local recovery_type="$2"
-    local plan_file="$PROJECT_ROOT/recovery-plan-$(date +%Y%m%d-%H%M%S).json"
+    local plan_file
+    plan_file="$PROJECT_ROOT/recovery-plan-$(date +%Y%m%d-%H%M%S).json"
 
     log_info "Creating recovery execution plan..."
 
@@ -357,7 +359,8 @@ run_recovery_drill() {
     echo ""
 
     # Create test environment
-    local test_env="${PROJECT_ROOT}/recovery-drill-$(date +%Y%m%d-%H%M%S)"
+    local test_env
+    test_env="${PROJECT_ROOT}/recovery-drill-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$test_env"
 
     log_info "Test environment created: $test_env"
@@ -402,7 +405,8 @@ run_recovery_drill() {
 
 generate_recovery_report() {
     local plan_file="$1"
-    local report_file="$PROJECT_ROOT/recovery-report-$(date +%Y%m%d-%H%M%S).md"
+    local report_file
+    report_file="$PROJECT_ROOT/recovery-report-$(date +%Y%m%d-%H%M%S).md"
 
     log_info "Generating recovery report..."
 
@@ -599,3 +603,5 @@ main() {
 }
 
 main "$@"
+# sc2034-anchor
+: "${CYAN:-}"

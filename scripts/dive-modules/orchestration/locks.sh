@@ -52,7 +52,8 @@ fi
 orch_acquire_lock() {
     local instance_code="$1"
     local timeout="${2:-300}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! orch_db_check_connection; then
         log_error "FATAL: Database not available - cannot acquire lock"
@@ -60,12 +61,14 @@ orch_acquire_lock() {
     fi
 
     # Generate lock ID from instance code
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
 
     log_verbose "Acquiring lock for $code_lower (lock_id: $lock_id, timeout: ${timeout}s)..."
 
     # Try to acquire advisory lock with timeout
-    local acquired=$(orch_db_exec "
+    local acquired
+    acquired=$(orch_db_exec "
         SELECT pg_try_advisory_lock($lock_id)
     " 2>/dev/null | xargs)
 
@@ -92,14 +95,16 @@ orch_acquire_lock() {
 ##
 orch_release_lock() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! orch_db_check_connection; then
         log_warn "Database not available - lock may not be properly released"
         return 1
     fi
 
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
 
     # Release advisory lock
     orch_db_exec "SELECT pg_advisory_unlock($lock_id)" >/dev/null 2>&1
@@ -129,15 +134,18 @@ orch_release_lock() {
 ##
 orch_check_lock() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! orch_db_check_connection; then
         return 1
     fi
 
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
 
-    local is_locked=$(orch_db_exec "
+    local is_locked
+    is_locked=$(orch_db_exec "
         SELECT COUNT(*) FROM pg_locks
         WHERE locktype = 'advisory'
         AND objid = $lock_id
@@ -180,7 +188,8 @@ orch_cleanup_stale_locks() {
     local sql_filter="released_at IS NULL AND acquired_at < NOW() - INTERVAL '${age_minutes} minutes'"
 
     if [ -n "$instance_code" ]; then
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         sql_filter="$sql_filter AND instance_code='$code_lower'"
     fi
 
@@ -194,7 +203,8 @@ orch_cleanup_stale_locks() {
     log_success "Database lock records cleaned: $db_locks_cleaned"
 
     # Clean PostgreSQL advisory locks
-    local active_locks=$(orch_db_exec "
+    local active_locks
+    active_locks=$(orch_db_exec "
         SELECT COUNT(*) FROM pg_locks
         WHERE locktype = 'advisory' AND granted = true
     " 2>/dev/null | xargs || echo "0")
@@ -216,8 +226,10 @@ orch_cleanup_stale_locks() {
 ##
 orch_force_unlock() {
     local instance_code="${1:?Instance code required}"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Force unlocking $code_upper (emergency cleanup)..."
 
@@ -235,7 +247,8 @@ orch_force_unlock() {
     " >/dev/null 2>&1
 
     # Release PostgreSQL advisory lock
-    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+    local lock_id
+    lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
     orch_db_exec "SELECT pg_advisory_unlock($lock_id);" >/dev/null 2>&1 || true
 
     log_success "Force unlock complete for $code_upper"

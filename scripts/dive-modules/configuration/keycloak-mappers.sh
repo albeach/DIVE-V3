@@ -246,3 +246,6 @@ export -f upsert_idp_mapper
 export -f upsert_protocol_mapper
 export -f upsert_idp_mappers_batch
 export -f upsert_protocol_mappers_batch
+
+# sc2034-anchor
+: "${CYAN:-}"

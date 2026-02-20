@@ -53,7 +53,8 @@ HEARTBEAT_TIMEOUT="${HEARTBEAT_TIMEOUT:-180}"   # seconds (3x interval)
 ##
 federation_record_heartbeat() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         log_verbose "Database not available - heartbeat not recorded"
@@ -77,7 +78,8 @@ federation_record_heartbeat() {
 ##
 federation_get_last_heartbeat() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         echo "unknown"
@@ -103,7 +105,8 @@ federation_get_last_heartbeat() {
 ##
 federation_is_spoke_alive() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         return 1
@@ -150,7 +153,8 @@ federation_health_dashboard() {
         spoke=$(echo "$spoke" | xargs)
         [ -z "$spoke" ] && continue
 
-        local last_hb=$(federation_get_last_heartbeat "$spoke")
+        local last_hb
+        last_hb=$(federation_get_last_heartbeat "$spoke")
         local alive="UNKNOWN"
         local age=""
 
@@ -162,8 +166,10 @@ federation_health_dashboard() {
 
         # Calculate age
         if [ "$last_hb" != "never" ] && [ "$last_hb" != "unknown" ]; then
-            local hb_epoch=$(date -d "$last_hb" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "$last_hb" +%s 2>/dev/null)
-            local now_epoch=$(date +%s)
+            local hb_epoch
+            hb_epoch=$(date -d "$last_hb" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "$last_hb" +%s 2>/dev/null)
+            local now_epoch
+            now_epoch=$(date +%s)
             local age_secs=$((now_epoch - hb_epoch))
 
             if [ $age_secs -lt 60 ]; then
@@ -204,7 +210,8 @@ federation_health_json() {
         spoke=$(echo "$spoke" | xargs)
         [ -z "$spoke" ] && continue
 
-        local last_hb=$(federation_get_last_heartbeat "$spoke")
+        local last_hb
+        last_hb=$(federation_get_last_heartbeat "$spoke")
         local alive="false"
         federation_is_spoke_alive "$spoke" && alive="true"
 
@@ -237,7 +244,8 @@ EOF
 ##
 federation_get_link_state() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         echo "UNKNOWN"
@@ -267,7 +275,8 @@ federation_set_link_state() {
     local instance_code="$1"
     local new_state="$2"
     local reason="${3:-State update}"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         log_warn "Database not available - state not updated"
@@ -398,7 +407,8 @@ fed_db_schema_exists() {
 }
 
 fed_db_upsert_link() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" idp_alias="$4"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" idp_alias="$4"
     local status="${5:-PENDING}" client_id="${6:-}" metadata="${7:-}"
     orch_db_check_connection || { log_verbose "Database not available - federation link not persisted"; return 1; }
     local metadata_sql="NULL"
@@ -426,7 +436,8 @@ RETURNING id;" 2>/dev/null)
 }
 
 fed_db_update_status() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" status="$4"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" status="$4"
     local error_message="${5:-}" error_code="${6:-}"
     orch_db_check_connection || { log_verbose "Database not available for federation status update"; return 1; }
     if ! fed_db_schema_exists; then
@@ -442,7 +453,8 @@ fed_db_update_status() {
     local idp_alias="${source_code}-idp"
     [ "$direction" = "HUB_TO_SPOKE" ] && idp_alias="${target_code}-idp"
     [ "$direction" = "SPOKE_TO_HUB" ] && idp_alias="usa-idp"
-    local sql="
+    local sql
+    sql="
 INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, updated_at $([ -n "$error_message" ] && echo ", error_message") $([ -n "$error_code" ] && echo ", last_error_code"))
 VALUES ('$source_code', '$target_code', '$direction', '$idp_alias', '$status', NOW() $([ -n "$error_message" ] && echo ", '$escaped_error'") $([ -n "$error_code" ] && echo ", '$error_code'"))
 ON CONFLICT (source_code, target_code, direction) DO UPDATE SET
@@ -457,13 +469,15 @@ ON CONFLICT (source_code, target_code, direction) DO UPDATE SET
 }
 
 fed_db_get_link() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     orch_db_check_connection || return 1
     orch_db_exec "SELECT id, source_code, target_code, direction, idp_alias, status, retry_count, last_verified_at, error_message FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" 2>/dev/null
 }
 
 fed_db_get_link_status() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     orch_db_check_connection || { echo "UNKNOWN"; return 1; }
     local status
     status=$(orch_db_exec "SELECT status FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" 2>/dev/null | xargs)
@@ -471,7 +485,8 @@ fed_db_get_link_status() {
 }
 
 fed_db_list_links() {
-    local instance_code=$(lower "$1")
+    local instance_code
+    instance_code=$(lower "$1")
     orch_db_check_connection || return 1
     orch_db_exec "SELECT source_code, target_code, direction, idp_alias, status, last_verified_at FROM federation_links WHERE source_code = '$instance_code' OR target_code = '$instance_code' ORDER BY direction, target_code;" 2>/dev/null
 }
@@ -483,7 +498,8 @@ fed_db_get_failed_links() {
 }
 
 fed_db_delete_link() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     orch_db_check_connection || return 1
     if orch_db_exec "DELETE FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" >/dev/null 2>&1; then
         log_info "Federation link deleted: $source_code -> $target_code ($direction)"
@@ -494,7 +510,8 @@ fed_db_delete_link() {
 }
 
 fed_db_record_health() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     local src_idp_exists="$4" src_idp_enabled="$5" tgt_idp_exists="$6" tgt_idp_enabled="$7"
     local sso_passed="${8:-}" sso_latency="${9:-}" error_message="${10:-}"
     orch_db_check_connection || return 1
@@ -523,13 +540,15 @@ VALUES ('$source_code', '$target_code', '$direction', $src_idp_exists, $src_idp_
 }
 
 fed_db_get_latest_health() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     orch_db_check_connection || return 1
     orch_db_exec "SELECT check_timestamp, source_idp_exists, source_idp_enabled, target_idp_exists, target_idp_enabled, sso_test_passed, sso_latency_ms, error_message FROM federation_health WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction' ORDER BY check_timestamp DESC LIMIT 1;" 2>/dev/null
 }
 
 fed_db_get_instance_status() {
-    local instance_code=$(lower "$1")
+    local instance_code
+    instance_code=$(lower "$1")
     if ! orch_db_check_connection; then
         echo '{"error": "database_unavailable"}'
         return 1
@@ -574,7 +593,8 @@ fed_db_get_pairs() {
 }
 
 fed_db_mark_for_retry() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     orch_db_check_connection || return 1
     if orch_db_exec "UPDATE federation_links SET status = 'PENDING', error_message = NULL, updated_at = NOW() WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction' AND status = 'FAILED';" >/dev/null 2>&1; then
         log_info "Federation link marked for retry: $source_code -> $target_code"
@@ -585,7 +605,8 @@ fed_db_mark_for_retry() {
 }
 
 fed_db_reset_failed() {
-    local instance_code=$(lower "$1")
+    local instance_code
+    instance_code=$(lower "$1")
     orch_db_check_connection || return 1
     local count
     count=$(orch_db_exec "UPDATE federation_links SET status = 'PENDING', retry_count = 0, error_message = NULL, updated_at = NOW() WHERE (source_code = '$instance_code' OR target_code = '$instance_code') AND status = 'FAILED' RETURNING id;" 2>/dev/null | wc -l | xargs)
@@ -594,7 +615,8 @@ fed_db_reset_failed() {
 }
 
 fed_db_record_operation() {
-    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local source_code
+    source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
     local op_type="$4" op_status="$5" triggered_by="${6:-system}" error_message="${7:-}" context="${8:-}"
     orch_db_check_connection || return 1
     local escaped_error="${error_message//\'/\'\'}" context_sql="NULL"
@@ -628,8 +650,10 @@ fed_db_cleanup_operations() {
 
 verify_federation_state() {
     local spoke_code="${1:?Spoke code required}"
-    local code_lower=$(lower "$spoke_code")
-    local code_upper=$(upper "$spoke_code")
+    local code_lower
+    code_lower=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
 
     ensure_dive_root
     log_step "Verifying federation state for $code_upper..."

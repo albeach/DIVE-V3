@@ -20,7 +20,7 @@ if [ ! -f "frontend/package.json" ]; then
 fi
 
 echo "📋 Step 1: Clearing Next.js build cache..."
-cd frontend
+cd frontend || exit 1
 if [ -d ".next" ]; then
     rm -rf .next
     echo -e "${GREEN}✅ Cleared .next folder${NC}"

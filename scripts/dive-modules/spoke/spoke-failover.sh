@@ -57,7 +57,8 @@ spoke_failover_status() {
     fi
 
     # Query backend API for failover status
-    local response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/status" --max-time 5 2>/dev/null)
+    local response
+    response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/status" --max-time 5 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo -e "  Backend:           ${RED}Not Running${NC}"
@@ -68,14 +69,22 @@ spoke_failover_status() {
     fi
 
     # Parse JSON response
-    local state=$(echo "$response" | grep -o '"state"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local hub_healthy=$(echo "$response" | grep -o '"hubHealthy"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local opal_healthy=$(echo "$response" | grep -o '"opalHealthy"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local consecutive_failures=$(echo "$response" | grep -o '"consecutiveFailures"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local total_failures=$(echo "$response" | grep -o '"totalFailures"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local total_recoveries=$(echo "$response" | grep -o '"totalRecoveries"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local uptime=$(echo "$response" | grep -o '"uptimePercentage"[[:space:]]*:[[:space:]]*[0-9.]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local maintenance=$(echo "$response" | grep -o '"isInMaintenanceMode"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local state
+    state=$(echo "$response" | grep -o '"state"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local hub_healthy
+    hub_healthy=$(echo "$response" | grep -o '"hubHealthy"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local opal_healthy
+    opal_healthy=$(echo "$response" | grep -o '"opalHealthy"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local consecutive_failures
+    consecutive_failures=$(echo "$response" | grep -o '"consecutiveFailures"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local total_failures
+    total_failures=$(echo "$response" | grep -o '"totalFailures"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local total_recoveries
+    total_recoveries=$(echo "$response" | grep -o '"totalRecoveries"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local uptime
+    uptime=$(echo "$response" | grep -o '"uptimePercentage"[[:space:]]*:[[:space:]]*[0-9.]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local maintenance
+    maintenance=$(echo "$response" | grep -o '"isInMaintenanceMode"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
 
     # State color and icon
     local state_color="$GREEN"
@@ -140,7 +149,8 @@ spoke_failover_force() {
 
     log_step "Forcing circuit breaker to: $(upper "$target_state")"
 
-    local response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/force" \
+    local response
+    response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/force" \
         -H "Content-Type: application/json" \
         -d "{\"state\": \"$(upper "$target_state")\"}" \
         --max-time 5 2>/dev/null)
@@ -162,7 +172,8 @@ spoke_failover_reset() {
 
     log_step "Resetting circuit breaker metrics"
 
-    local response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/reset" \
+    local response
+    response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/reset" \
         --max-time 5 2>/dev/null)
 
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
@@ -218,16 +229,20 @@ spoke_maintenance_status() {
         return 0
     fi
 
-    local response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/status" --max-time 5 2>/dev/null)
+    local response
+    response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/failover/status" --max-time 5 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo -e "  Backend:           ${RED}Not Running${NC}"
         return 1
     fi
 
-    local maintenance=$(echo "$response" | grep -o '"isInMaintenanceMode"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local reason=$(echo "$response" | grep -o '"maintenanceReason"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local entered=$(echo "$response" | grep -o '"maintenanceEnteredAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local maintenance
+    maintenance=$(echo "$response" | grep -o '"isInMaintenanceMode"[[:space:]]*:[[:space:]]*[^,}]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local reason
+    reason=$(echo "$response" | grep -o '"maintenanceReason"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local entered
+    entered=$(echo "$response" | grep -o '"maintenanceEnteredAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
 
     if [ "$maintenance" = "true" ]; then
         echo -e "  Status:            ${YELLOW}⚠️  MAINTENANCE MODE${NC}"
@@ -259,7 +274,8 @@ spoke_maintenance_enter() {
 
     log_step "Entering maintenance mode..."
 
-    local response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/maintenance/enter" \
+    local response
+    response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/maintenance/enter" \
         -H "Content-Type: application/json" \
         -d "{\"reason\": \"$reason\"}" \
         --max-time 5 2>/dev/null)
@@ -287,7 +303,8 @@ spoke_maintenance_exit() {
 
     log_step "Exiting maintenance mode..."
 
-    local response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/maintenance/exit" \
+    local response
+    response=$(curl -s -X POST "https://localhost:${BACKEND_PORT:-4000}/api/spoke/maintenance/exit" \
         --max-time 5 2>/dev/null)
 
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
@@ -321,7 +338,8 @@ spoke_audit_status() {
         return 0
     fi
 
-    local response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/audit/status" --max-time 5 2>/dev/null)
+    local response
+    response=$(curl -s "https://localhost:${BACKEND_PORT:-4000}/api/spoke/audit/status" --max-time 5 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo -e "  Backend:           ${RED}Not Running${NC}"
@@ -332,13 +350,20 @@ spoke_audit_status() {
     fi
 
     # Parse response
-    local queue_size=$(echo "$response" | grep -o '"queueSize"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local queue_size_bytes=$(echo "$response" | grep -o '"queueSizeBytes"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local total_synced=$(echo "$response" | grep -o '"totalSynced"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local total_failed=$(echo "$response" | grep -o '"totalFailed"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-    local last_sync=$(echo "$response" | grep -o '"lastSyncAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local last_sync_status=$(echo "$response" | grep -o '"lastSyncStatus"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local max_size=$(echo "$response" | grep -o '"maxQueueSize"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local queue_size
+    queue_size=$(echo "$response" | grep -o '"queueSize"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local queue_size_bytes
+    queue_size_bytes=$(echo "$response" | grep -o '"queueSizeBytes"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local total_synced
+    total_synced=$(echo "$response" | grep -o '"totalSynced"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local total_failed
+    total_failed=$(echo "$response" | grep -o '"totalFailed"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+    local last_sync
+    last_sync=$(echo "$response" | grep -o '"lastSyncAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local last_sync_status
+    last_sync_status=$(echo "$response" | grep -o '"lastSyncStatus"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local max_size
+    max_size=$(echo "$response" | grep -o '"maxQueueSize"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
 
     # Calculate human-readable size
     local size_display="$queue_size_bytes bytes"

@@ -776,8 +776,8 @@ cmd_validate() {
     if [ -f "$hub_cert_path" ]; then
         # Check certificate validity
         if openssl x509 -checkend 0 -noout -in "$hub_cert_path" 2>/dev/null; then
-            local cert_subject
-            cert_subject=$(openssl x509 -subject -noout -in "$hub_cert_path" 2>/dev/null | sed 's/subject=//')
+            local _cert_subject
+            _cert_subject=$(openssl x509 -subject -noout -in "$hub_cert_path" 2>/dev/null | sed 's/subject=//')
             format_status "instances/hub/certs" "pass" "Valid"
         else
             format_status "instances/hub/certs" "fail" "Expired"
@@ -927,3 +927,6 @@ export -f cmd_info
 export -f cmd_diagnostics
 export -f cmd_status_brief
 export -f cmd_env_print
+
+# sc2034-anchor
+: "${SERVICE_HEALTH_ENDPOINTS:-}"

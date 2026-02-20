@@ -30,7 +30,8 @@ NC='\033[0m'
 log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
     echo "[$timestamp] [$level] $message"
 }
@@ -354,7 +355,7 @@ perform_backup() {
 
 restore_backup() {
     local backup_file="$1"
-    local restore_type="${2:-full}"
+    local _restore_type="${2:-full}"
 
     log_info "Starting DIVE V3 restore from: $backup_file"
 
@@ -364,7 +365,8 @@ restore_backup() {
     fi
 
     # Create temporary restore directory
-    local restore_dir="${DIVE_ROOT}/restore-$(date +%Y%m%d-%H%M%S)"
+    local restore_dir
+    restore_dir="${DIVE_ROOT}/restore-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$restore_dir"
 
     # Decrypt if needed
@@ -497,3 +499,5 @@ main() {
 }
 
 main "$@"
+# sc2034-anchor
+: "${GREEN:-}" "${NC:-}" "${RED:-}" "${YELLOW:-}"

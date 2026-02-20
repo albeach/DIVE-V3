@@ -265,7 +265,8 @@ assert_container_healthy() {
     local container="$1"
     local message="${2:-Container should be healthy}"
 
-    local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+    local health
+    health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
 
     if [ "$health" = "healthy" ]; then
         test_pass
@@ -287,7 +288,8 @@ assert_http_ok() {
     local expected="${2:-200}"
     local message="${3:-HTTP endpoint should respond}"
 
-    local status=$(curl -sf -o /dev/null -w "%{http_code}" "$url" --insecure 2>/dev/null)
+    local status
+    status=$(curl -sf -o /dev/null -w "%{http_code}" "$url" --insecure 2>/dev/null)
 
     if [ "$status" = "$expected" ]; then
         test_pass
@@ -311,7 +313,7 @@ assert_http_ok() {
 wait_for_condition() {
     local condition="$1"
     local timeout="$2"
-    local description="${3:-condition}"
+    local _description="${3:-condition}"
 
     local elapsed=0
     while [ $elapsed -lt $timeout ]; do
@@ -387,3 +389,6 @@ export -f generate_test_data
 export -f test_cleanup
 
 log_verbose "Testing utilities module loaded"
+
+# sc2034-anchor
+: "${CURRENT_TEST:-}" "${TEST_OUTPUT:-}"

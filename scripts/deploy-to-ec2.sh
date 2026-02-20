@@ -8,7 +8,7 @@ set -e
 # Configuration
 EC2_HOST="18.254.34.87"
 EC2_USER="ec2-user"
-SSH_KEY="~/.ssh/ABeach-SSH-Key.pem"
+SSH_KEY="${HOME}/.ssh/ABeach-SSH-Key.pem"
 REMOTE_DIR="/home/ec2-user/DIVE-V3"
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
@@ -217,3 +217,6 @@ echo "  frontend/MIGRATION_COMPLETE.md          → What changed"
 echo "  frontend/QUICK_REFERENCE.md             → Syntax reference"
 echo ""
 echo "✨ Done!"
+
+# sc2034-anchor
+: "${REMOTE_DIR:-}"

@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Hub Services & Utilities
 # =============================================================================
@@ -29,12 +30,14 @@ hub_parallel_startup() {
         ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d 2>&1
         return $?
     fi
-    local all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+    local all_services_raw
+    all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
 
     # Filter out profile-only services (e.g., authzforce with profiles: ["xacml"])
     local all_services=""
     for svc in $all_services_raw; do
-        local profiles=$(yq eval ".services.\"$svc\".profiles // []" "$HUB_COMPOSE_FILE" 2>/dev/null)
+        local profiles
+        profiles=$(yq eval ".services.\"$svc\".profiles // []" "$HUB_COMPOSE_FILE" 2>/dev/null)
         if [ "$profiles" != "[]" ] && [ "$profiles" != "null" ] && [ -n "$profiles" ]; then
             log_verbose "Skipping service '$svc' (in profile: $profiles)"
             continue  # Skip profile-only services
@@ -49,7 +52,8 @@ hub_parallel_startup() {
     local STRETCH_SERVICES_RAW=""
 
     for svc in $all_services; do
-        local class=$(yq eval ".services.\"$svc\".labels.\"dive.service.class\" // \"\"" "$HUB_COMPOSE_FILE" 2>/dev/null | tr -d '"')
+        local class
+        class=$(yq eval ".services.\"$svc\".labels.\"dive.service.class\" // \"\"" "$HUB_COMPOSE_FILE" 2>/dev/null | tr -d '"')
         case "$class" in
             core)
                 CORE_SERVICES_RAW="$CORE_SERVICES_RAW $svc"
@@ -74,9 +78,12 @@ hub_parallel_startup() {
     done
 
     # Convert to arrays and trim whitespace
-    local -a CORE_SERVICES=($(echo $CORE_SERVICES_RAW | xargs))
-    local -a OPTIONAL_SERVICES=($(echo $OPTIONAL_SERVICES_RAW | xargs))
-    local -a STRETCH_SERVICES=($(echo $STRETCH_SERVICES_RAW | xargs))
+    local -a CORE_SERVICES=()
+    local -a OPTIONAL_SERVICES=()
+    local -a STRETCH_SERVICES=()
+    read -r -a CORE_SERVICES <<<"$CORE_SERVICES_RAW"
+    read -r -a OPTIONAL_SERVICES <<<"$OPTIONAL_SERVICES_RAW"
+    read -r -a STRETCH_SERVICES <<<"$STRETCH_SERVICES_RAW"
 
     log_verbose "Discovered services dynamically from $HUB_COMPOSE_FILE:"
     log_verbose "  CORE: ${CORE_SERVICES[*]} (${#CORE_SERVICES[@]} services)"
@@ -91,37 +98,41 @@ hub_parallel_startup() {
     # Handle both depends_on formats:
     #   Simple array: [opa, mongodb]
     #   Object with conditions: {opa: {condition: ...}, mongodb: {condition: ...}}
-    declare -A service_deps
+    declare -A _service_deps
     for svc in $all_services; do
         # Try to get dependencies (handle both array and object formats)
-        local deps_type=$(yq eval ".services.\"$svc\".depends_on | type" "$HUB_COMPOSE_FILE" 2>/dev/null)
+        local deps_type
+        deps_type=$(yq eval ".services.\"$svc\".depends_on | type" "$HUB_COMPOSE_FILE" 2>/dev/null)
 
         if [ "$deps_type" = "!!seq" ]; then
             # Simple array format: [opa, mongodb]
-            local deps=$(yq eval ".services.\"$svc\".depends_on.[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+            local deps
+            deps=$(yq eval ".services.\"$svc\".depends_on.[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
         elif [ "$deps_type" = "!!map" ]; then
             # Object format with conditions: {opa: {condition: ...}}
-            local deps=$(yq eval ".services.\"$svc\".depends_on | keys | .[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+            local deps
+            deps=$(yq eval ".services.\"$svc\".depends_on | keys | .[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
         else
             # No dependencies or null
             local deps=""
         fi
 
         if [ -z "$deps" ]; then
-            service_deps["$svc"]="none"
+            _service_deps["$svc"]="none"
         else
-            service_deps["$svc"]="$deps"
+            _service_deps["$svc"]="$deps"
         fi
     done
 
     # Calculate dependency level for each service
-    declare -A service_levels
+    declare -A _service_levels
     declare -A level_services  # Reverse map: level -> services
     local max_level=0
 
     for svc in $all_services; do
-        local level=$(calculate_service_level "$svc")
-        service_levels["$svc"]=$level
+        local level
+        level=$(calculate_service_level "$svc")
+        _service_levels["$svc"]=$level
 
         # Add to level_services map
         if [ -z "${level_services[$level]:-}" ]; then
@@ -140,15 +151,18 @@ hub_parallel_startup() {
     for ((lvl=0; lvl<=max_level; lvl++)); do
         local services_at_level="${level_services[$lvl]:-}"
         if [ -n "$services_at_level" ]; then
-            local count=$(echo "$services_at_level" | wc -w | tr -d ' ')
+            local count
+            count=$(echo "$services_at_level" | wc -w | tr -d ' ')
             log_verbose "  Level $lvl: $services_at_level ($count services)"
         fi
     done
 
-    local total_services=$(echo "$all_services" | wc -w | tr -d ' ')
+    local total_services
+    total_services=$(echo "$all_services" | wc -w | tr -d ' ')
     local total_started=0
     local total_failed=0
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     log_verbose "Service graph has $((max_level + 1)) dependency levels (0-$max_level) with $total_services total services"
 
@@ -163,7 +177,8 @@ hub_parallel_startup() {
         fi
 
         # Convert to array
-        local -a current_level_services=($level_services_str)
+        local -a current_level_services=()
+        read -r -a current_level_services <<<"$level_services_str"
 
         log_info "Level $level: Starting ${current_level_services[*]}"
 
@@ -195,7 +210,8 @@ hub_parallel_startup() {
 
                 # Check if already running and healthy
                 if ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${container}$"; then
-                    local health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+                    local health
+                    health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
                     if [ "$health" = "healthy" ]; then
                         log_verbose "Service $service already running and healthy"
                         exit 0
@@ -211,7 +227,8 @@ hub_parallel_startup() {
                     log_error "Docker compose output: $start_output"
                     log_error "Check service definition in $HUB_COMPOSE_FILE"
                     # FIXED (2026-01-28): Escape brackets in grep pattern to prevent "brackets not balanced" error
-                    local deps_pattern=$(echo "${current_level_services[@]}" | tr ' ' '|')
+                    local deps_pattern
+                    deps_pattern=$(echo "${current_level_services[@]}" | tr ' ' '|')
                     log_error "Verify dependencies are running: docker ps | grep -E '($deps_pattern)'"
                     exit 1
                 fi
@@ -222,7 +239,8 @@ hub_parallel_startup() {
 
                 while [ $elapsed -lt $timeout ]; do
                     # Check container state
-                    local state=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Status}}' 2>/dev/null || echo "not_found")
+                    local state
+                    state=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Status}}' 2>/dev/null || echo "not_found")
 
                     if [ "$state" = "not_found" ]; then
                         log_error "Container $container not found"
@@ -235,7 +253,8 @@ hub_parallel_startup() {
                     fi
 
                     # Check health status
-                    local health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+                    local health
+                    health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
 
                     # Trim whitespace and handle empty/none cases
                     health=$(echo "$health" | tr -d '[:space:]')
@@ -280,7 +299,7 @@ hub_parallel_startup() {
             ) &
 
             local pid=$!
-            pids+=($pid)
+            pids+=("$pid")
             service_pid_map[$pid]=$service
         done
 
@@ -379,11 +398,12 @@ hub_parallel_startup() {
         log_verbose "Level $level complete in ${level_time}s (cumulative)"
     done
 
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local total_time=$((end_time - start_time))
 
     # Summary
-    local core_started=$((total_started - total_failed))
+    local _core_started=$((total_started - total_failed))
     log_success "Parallel startup complete: $total_started services started in ${total_time}s"
     if [ $total_failed -gt 0 ]; then
         log_warn "Note: $total_failed optional/stretch services did not start (see warnings above)"
@@ -412,7 +432,8 @@ hub_wait_healthy() {
         log_verbose "Waiting for $service..."
 
         while [ $elapsed -lt $max_wait ]; do
-            local status=$(${DOCKER_CMD:-docker} inspect "$service" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+            local status
+            status=$(${DOCKER_CMD:-docker} inspect "$service" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
 
             if [ "$status" = "healthy" ]; then
                 log_success "$service is healthy"
@@ -549,7 +570,8 @@ hub_configure_keycloak() {
             log_warn "Terraform state exists - checking for potential conflicts..."
 
             # Count resources in state
-            local state_resources=$(cd "${DIVE_ROOT}/terraform/hub" && terraform state list 2>/dev/null | wc -l | tr -d ' ')
+            local state_resources
+            state_resources=$(cd "${DIVE_ROOT}/terraform/hub" && terraform state list 2>/dev/null | wc -l | tr -d ' ')
 
             if [ "$state_resources" -gt 0 ]; then
                 log_warn "Found $state_resources resources in Terraform state"
@@ -608,27 +630,26 @@ hub_configure_keycloak() {
 
             # Build extra -var overrides for EC2 external access
             # -var flags override -var-file (highest precedence)
-            local tf_extra_vars=""
+            local -a tf_extra_vars=()
             if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
                 if [ -n "${CADDY_DOMAIN_IDP:-}" ]; then
                     # Caddy mode: domain-based URLs (standard HTTPS port)
-                    tf_extra_vars="-var idp_url=https://${CADDY_DOMAIN_IDP}"
-                    tf_extra_vars="$tf_extra_vars -var app_url=https://${CADDY_DOMAIN_APP}"
-                    tf_extra_vars="$tf_extra_vars -var api_url=https://${CADDY_DOMAIN_API}"
+                    tf_extra_vars+=(-var "idp_url=https://${CADDY_DOMAIN_IDP}")
+                    tf_extra_vars+=(-var "app_url=https://${CADDY_DOMAIN_APP}")
+                    tf_extra_vars+=(-var "api_url=https://${CADDY_DOMAIN_API}")
                 else
                     # IP mode: port-based URLs
                     local ext="$HUB_EXTERNAL_ADDRESS"
-                    tf_extra_vars="-var idp_url=https://${ext}:${KEYCLOAK_HTTPS_PORT:-8443}"
-                    tf_extra_vars="$tf_extra_vars -var app_url=https://${ext}:${FRONTEND_PORT:-3000}"
-                    tf_extra_vars="$tf_extra_vars -var api_url=https://${ext}:${BACKEND_PORT:-4000}"
+                    tf_extra_vars+=(-var "idp_url=https://${ext}:${KEYCLOAK_HTTPS_PORT:-8443}")
+                    tf_extra_vars+=(-var "app_url=https://${ext}:${FRONTEND_PORT:-3000}")
+                    tf_extra_vars+=(-var "api_url=https://${ext}:${BACKEND_PORT:-4000}")
                 fi
             fi
 
-            # shellcheck disable=SC2086
             terraform apply \
                 -auto-approve \
                 -var-file="hub.tfvars" \
-                $tf_extra_vars \
+                "${tf_extra_vars[@]}" \
                 -parallelism=20 \
                 -compact-warnings \
                 -no-color
@@ -816,7 +837,8 @@ hub_status() {
     echo ""
     echo "Health:"
     for container in dive-hub-postgres dive-hub-keycloak dive-hub-backend dive-hub-frontend; do
-        local health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+        local health
+        health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
         printf "  %-25s %s\n" "$container" "$health"
     done
 
@@ -842,7 +864,9 @@ hub_reset() {
     ${DOCKER_CMD:-docker} volume rm dive-hub-postgres-data dive-hub-mongodb-data 2>/dev/null || true
 
     # Clean data directory
-    rm -rf "${HUB_DATA_DIR}"/*
+    if [ -n "${HUB_DATA_DIR:-}" ] && [ -d "$HUB_DATA_DIR" ]; then
+        find "$HUB_DATA_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    fi
 
     log_success "Hub reset complete"
     echo "Run './dive hub deploy' to redeploy"
@@ -854,7 +878,7 @@ hub_reset() {
 hub_logs() {
     local service="${1:-}"
 
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
 
     if [ -n "$service" ]; then
         ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES logs -f "$service"

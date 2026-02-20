@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Certificate Core
 # =============================================================================
@@ -143,7 +144,8 @@ _rebuild_ca_bundle() {
 ##
 _rebuild_spoke_ca_bundle() {
     local spoke_code="${1:?Spoke code required}"
-    local spoke_dir="${DIVE_ROOT}/instances/$(lower "$spoke_code")"
+    local spoke_dir
+    spoke_dir="${DIVE_ROOT}/instances/$(lower "$spoke_code")"
     local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
 
     # Ensure the SSOT bundle exists
@@ -363,7 +365,8 @@ generate_java_truststore() {
 ##
 generate_spoke_truststore() {
     local instance_code="${1:?Instance code required}"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local certs_dir="$spoke_dir/certs"
 
@@ -566,7 +569,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 # Return --cacert flag for curl when Vault is TLS-enabled.
 # Uses VAULT_CACERT env var or auto-detects from node1/ca.pem.
 #
-# Output: "--cacert /path/to/ca.pem" or empty string
+# Output: one curl argument per line (e.g., "--insecure", or "--cacert" + path)
 ##
 _vault_curl_cacert_flag() {
     local vault_addr="${VAULT_CLI_ADDR:-${VAULT_ADDR:-https://localhost:8200}}"
@@ -586,7 +589,8 @@ _vault_curl_cacert_flag() {
     fi
 
     if [ -n "$cacert_path" ] && [ -f "$cacert_path" ]; then
-        echo "--cacert $cacert_path"
+        echo "--cacert"
+        echo "$cacert_path"
     fi
 }
 
@@ -661,13 +665,15 @@ _vault_pki_issue_cert() {
 
     # Issue certificate via Vault PKI API (curl + jq, not vault CLI)
     # Retries up to 3 times for transient failures (Vault leader election, etc.)
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
     local response curl_err attempt=0 max_attempts=3
     while [ $attempt -lt $max_attempts ]; do
         curl_err=""
-        # shellcheck disable=SC2086
-        response=$(curl -sL $cacert_flag -X POST \
+        response=$(curl -sL "${cacert_args[@]}" -X POST \
             -H "X-Vault-Token: $vault_token" \
             -H "Content-Type: application/json" \
             -d "{
@@ -926,3 +932,5 @@ generate_spoke_certificate_vault() {
     fi
 }
 
+# sc2034-anchor
+: "${HUB_KEYCLOAK_INTERNAL_HOST:-}"

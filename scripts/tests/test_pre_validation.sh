@@ -168,7 +168,7 @@ if type pre_validate_hub &>/dev/null; then
 
     # Test 11: Hub validation returns 0 when Docker is running
     if docker info &>/dev/null 2>&1; then
-        local _hub_rc=0
+        _hub_rc=0
         pre_validate_hub &>/dev/null || _hub_rc=$?
         assert_eq "0" "$_hub_rc" "hub validate: passes when Docker running"
     fi
@@ -193,7 +193,7 @@ if type pre_validate_spoke &>/dev/null; then
 
     # Test 13: Spoke validation returns 0 when Docker is running
     if docker info &>/dev/null 2>&1; then
-        local _spoke_rc=0
+        _spoke_rc=0
         pre_validate_spoke "GBR" &>/dev/null || _spoke_rc=$?
         assert_eq "0" "$_spoke_rc" "spoke validate: passes when Docker running"
     fi

@@ -92,10 +92,12 @@ update_hub_certificate_sans() {
     fi
 
     # Generate certificate with wildcard SANs
-    # shellcheck disable=SC2086
+    local -a all_hostnames_args=()
+    local _all_host
+    read -r -a all_hostnames_args <<<"$all_hostnames"
     if mkcert -key-file "$hub_certs_dir/key.pem" \
               -cert-file "$hub_certs_dir/certificate.pem" \
-              $all_hostnames 2>/dev/null; then
+              "${all_hostnames_args[@]}" 2>/dev/null; then
         chmod 644 "$hub_certs_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
         chmod 644 "$hub_certs_dir/certificate.pem"
 
@@ -233,10 +235,12 @@ generate_spoke_certificate() {
     # Root cause: mkcert tries to verify NSS (Firefox) trust stores, causing hung certutil processes
     # Solution: Set TRUST_STORES="" to skip all trust store operations (we only need cert files)
     # Best practice: Certificate generation should NOT modify system trust stores
-    # shellcheck disable=SC2086
+    local -a hostnames_args=()
+    local _hostname
+    read -r -a hostnames_args <<<"$hostnames"
     if TRUST_STORES="" mkcert -key-file "$certs_dir/key.pem" \
               -cert-file "$certs_dir/certificate.pem" \
-              $hostnames 2>/dev/null; then
+              "${hostnames_args[@]}" 2>/dev/null; then
         chmod 644 "$certs_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
         chmod 644 "$certs_dir/certificate.pem"
 
