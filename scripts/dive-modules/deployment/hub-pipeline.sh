@@ -826,7 +826,7 @@ hub_deploy() {
     export DIVE_ONLY_PHASE=""
     export DIVE_FROM_PHASE=""
     export DIVE_FORCE_BUILD="false"
-    export DIVE_DRY_RUN="false"
+    export DIVE_DRY_RUN="${DIVE_DRY_RUN:-${DRY_RUN:-false}}"
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
