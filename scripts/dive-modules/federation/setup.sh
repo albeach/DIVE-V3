@@ -389,8 +389,8 @@ _get_federation_secret() {
 
     # Sort codes alphabetically for consistent naming
     local codes=("$source_code" "$target_code")
-    IFS=$'\n' sorted_codes=($(sort <<<"${codes[*]}"))
-    unset IFS
+    local sorted_codes
+    mapfile -t sorted_codes < <(printf '%s\n' "${codes[@]}" | sort)
     local secret_name="dive-v3-federation-${sorted_codes[0]}-${sorted_codes[1]}"
 
     # Try to fetch from GCP if authenticated
