@@ -306,6 +306,12 @@ case "$COMMAND" in
         module_dns "$@"
         ;;
 
+    # Shared tier commands (shared/module.sh)
+    shared)
+        source "${MODULES_DIR}/shared/module.sh"
+        module_shared "$@"
+        ;;
+
     # Hub commands (deployment/hub.sh - Phase 3 enhanced spoke management)
     hub)
         source "${MODULES_DIR}/deployment/hub.sh"
