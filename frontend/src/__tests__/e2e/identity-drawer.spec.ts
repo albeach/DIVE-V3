@@ -51,17 +51,17 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
 
     test('Cmd+I opens the identity drawer for USA SECRET user', async ({ page }) => {
         // Skip if OTP is required but we can't handle it
-        test.step('Login as USA SECRET user', async () => {
+        await test.step('Login as USA SECRET user', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
         });
 
-        test.step('Navigate to dashboard', async () => {
+        await test.step('Navigate to dashboard', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goto();
             await dashboard.verifyLoggedIn();
         });
 
-        test.step('Open identity drawer with Cmd+I', async () => {
+        await test.step('Open identity drawer with Cmd+I', async () => {
             const dashboard = new DashboardPage(page);
             
             // Press Cmd+I (Meta+I on Mac, Control+I on Windows/Linux)
@@ -75,7 +75,7 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
             });
         });
 
-        test.step('Verify drawer shows user attributes', async () => {
+        await test.step('Verify drawer shows user attributes', async () => {
             // Should show clearance
             const clearance = page.getByText(/SECRET/);
             await expect(clearance).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
@@ -94,7 +94,7 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
             await aal.isVisible().catch(() => false);
         });
 
-        test.step('Close drawer with Escape', async () => {
+        await test.step('Close drawer with Escape', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.closeIdentityDrawer();
 
@@ -106,17 +106,17 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
     });
 
     test('Cmd+I works for UNCLASSIFIED user (no MFA)', async ({ page }) => {
-        test.step('Login as USA UNCLASSIFIED user', async () => {
+        await test.step('Login as USA UNCLASSIFIED user', async () => {
             await loginAs(page, TEST_USERS.USA.UNCLASS);
         });
 
-        test.step('Navigate to dashboard', async () => {
+        await test.step('Navigate to dashboard', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goto();
             await dashboard.verifyLoggedIn();
         });
 
-        test.step('Open identity drawer', async () => {
+        await test.step('Open identity drawer', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.openIdentityDrawer();
 
@@ -125,7 +125,7 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
             });
         });
 
-        test.step('Verify drawer shows UNCLASSIFIED clearance', async () => {
+        await test.step('Verify drawer shows UNCLASSIFIED clearance', async () => {
             const clearance = page.getByText(/UNCLASSIFIED/);
             await expect(clearance).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
         });
@@ -135,17 +135,17 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
         // Skip if FRA spoke not deployed
         test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
         
-        test.step('Login as France SECRET user', async () => {
+        await test.step('Login as France SECRET user', async () => {
             await loginAs(page, TEST_USERS.FRA.SECRET, { otpCode: '123456' });
         });
 
-        test.step('Navigate to dashboard', async () => {
+        await test.step('Navigate to dashboard', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goto();
             await dashboard.verifyLoggedIn();
         });
 
-        test.step('Open identity drawer', async () => {
+        await test.step('Open identity drawer', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.openIdentityDrawer();
 
@@ -154,7 +154,7 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
             });
         });
 
-        test.step('Verify drawer shows France attributes', async () => {
+        await test.step('Verify drawer shows France attributes', async () => {
             // Should show SECRET clearance
             const clearance = page.getByText(/SECRET/);
             await expect(clearance).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
@@ -170,18 +170,18 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
     });
 
     test('Identity drawer shows correct COI badges', async ({ page }) => {
-        test.step('Login as USA TOP_SECRET user', async () => {
+        await test.step('Login as USA TOP_SECRET user', async () => {
             // TOP_SECRET user has multiple COIs: FVEY, NATO-COSMIC
             await loginAs(page, TEST_USERS.USA.TOP_SECRET);
         });
 
-        test.step('Open identity drawer', async () => {
+        await test.step('Open identity drawer', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goto();
             await dashboard.openIdentityDrawer();
         });
 
-        test.step('Verify all COI badges are displayed', async () => {
+        await test.step('Verify all COI badges are displayed', async () => {
             const expectedCOIs = TEST_USERS.USA.TOP_SECRET.coi; // ["NATO-COSMIC", "FVEY", "CAN-US"]
 
             for (const coi of expectedCOIs) {
