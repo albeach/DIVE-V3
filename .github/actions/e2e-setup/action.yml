@@ -34,32 +34,6 @@ runs:
       shell: bash
       run: cd backend && npm ci --legacy-peer-deps
 
-    - name: Normalize E2E test.step awaits (CI hotfix)
-      shell: bash
-      run: |
-        cd frontend
-        count_unawaited_test_steps() {
-          local total=0
-          local file_count=0
-          while IFS= read -r -d '' file; do
-            file_count=$(awk '/^[[:space:]]*test\.step\(/ {count++} END {print count+0}' "$file")
-            total=$((total + file_count))
-          done < <(find src/__tests__/e2e -type f -name '*.spec.ts' -print0)
-          echo "$total"
-        }
-
-        before_count=$(count_unawaited_test_steps)
-
-        if [ "${before_count}" -gt 0 ]; then
-          while IFS= read -r -d '' file; do
-            sed -i -E 's/^([[:space:]]*)test\.step\(/\1await test.step(/' "$file"
-          done < <(find src/__tests__/e2e -type f -name '*.spec.ts' -print0)
-        fi
-
-        after_count=$(count_unawaited_test_steps)
-        fixed_count=$((before_count - after_count))
-        echo "::notice::Normalized un-awaited test.step calls in CI: $fixed_count"
-
     - name: Generate SSL Certificates
       shell: bash
       run: |

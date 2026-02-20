@@ -1,0 +1,105 @@
+name: 'Backend Test Setup'
+description: 'Shared setup for DIVE V3 backend test jobs: Node.js, deps, certs, RSA keys, MongoDB cache, OPA server'
+
+inputs:
+  generate-rsa-keys:
+    description: 'Whether to generate test RSA keys (true/false)'
+    required: false
+    default: 'false'
+  start-opa:
+    description: 'Whether to start OPA server with TLS (true/false)'
+    required: false
+    default: 'true'
+  install-mongodb-deps:
+    description: 'Whether to install MongoDB Memory Server system deps (true/false)'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install Dependencies
+      shell: bash
+      run: cd backend && npm ci
+
+    - name: Cache MongoDB Binary
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/mongodb-binaries
+        key: ${{ runner.os }}-mongodb-binary-7.0.0
+        restore-keys: |
+          ${{ runner.os }}-mongodb-binary-
+
+    - name: Install MongoDB System Dependencies
+      if: inputs.install-mongodb-deps == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libssl-dev
+
+    - name: Generate Test Certificates
+      shell: bash
+      run: |
+        cd backend
+        chmod +x scripts/generate-test-certs.sh
+        if ! ./scripts/generate-test-certs.sh; then
+          echo "::error::Certificate generation failed"
+          exit 1
+        fi
+        if [ ! -f "certs/signing/policy-signer.pem" ]; then
+          echo "::error::Policy signer certificate not found"
+          ls -la certs/ 2>/dev/null || echo "No certs directory"
+          exit 1
+        fi
+        echo "::notice::Test certificates generated and verified"
+
+    - name: Generate Test RSA Keys
+      if: inputs.generate-rsa-keys == 'true'
+      shell: bash
+      run: |
+        cd backend
+        chmod +x scripts/generate-test-rsa-keys.sh
+        if ! ./scripts/generate-test-rsa-keys.sh; then
+          echo "::error::RSA key generation failed"
+          exit 1
+        fi
+        if [ ! -f "src/__tests__/keys/test-private-key.pem" ] || [ ! -f "src/__tests__/keys/test-public-key.pem" ]; then
+          echo "::error::Test RSA keys not found"
+          ls -la src/__tests__/keys/ 2>/dev/null || echo "No keys directory"
+          exit 1
+        fi
+        echo "::notice::Test RSA keys generated and verified"
+
+    - name: Generate OPA TLS Certificates
+      if: inputs.start-opa == 'true'
+      shell: bash
+      run: |
+        mkdir -p ${{ github.workspace }}/certs
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/certs/key.pem \
+          -out ${{ github.workspace }}/certs/certificate.pem \
+          -days 1 \
+          -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
+        echo "::notice::OPA TLS certificates generated"
+
+    - name: Start OPA Server
+      if: inputs.start-opa == 'true'
+      shell: bash
+      run: |
+        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
+        chmod +x opa
+        nohup ./opa run --server --addr=:8181 --log-level=error \
+          --tls-cert-file=${{ github.workspace }}/certs/certificate.pem \
+          --tls-private-key-file=${{ github.workspace }}/certs/key.pem \
+          > opa.log 2>&1 &
+        sleep 5
+        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
+        echo "::notice::OPA server ready on https://localhost:8181"

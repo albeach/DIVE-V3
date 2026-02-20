@@ -32,7 +32,7 @@ test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }
     });
 
     test('New user completes OTP setup', async ({ page }) => {
-        test.step('Attempt login triggers OTP setup', async () => {
+        await test.step('Attempt login triggers OTP setup', async () => {
             // First-time CONFIDENTIAL user should trigger OTP setup
             await loginAs(page, TEST_USERS.USA.CONFIDENTIAL, {
                 expectMFASetup: true,
@@ -40,7 +40,7 @@ test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }
             });
         });
 
-        test.step('Verify successful login after OTP setup', async () => {
+        await test.step('Verify successful login after OTP setup', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -52,7 +52,7 @@ test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }
     });
 
     test('Returning user logs in with existing OTP', async ({ page }) => {
-        test.step('Login with OTP code', async () => {
+        await test.step('Login with OTP code', async () => {
             // SECRET user may have OTP already configured
             await loginAs(page, TEST_USERS.USA.SECRET, {
                 expectMFASetup: false, // Not first time
@@ -60,7 +60,7 @@ test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }
             });
         });
 
-        test.step('Verify successful login', async () => {
+        await test.step('Verify successful login', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -72,11 +72,11 @@ test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }
     });
 
     test('UNCLASSIFIED user skips MFA entirely', async ({ page }) => {
-        test.step('Login without MFA', async () => {
+        await test.step('Login without MFA', async () => {
             await loginAs(page, TEST_USERS.USA.UNCLASS);
         });
 
-        test.step('Verify successful login without OTP prompt', async () => {
+        await test.step('Verify successful login without OTP prompt', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -100,7 +100,7 @@ test.describe('MFA Flow - Error Handling (Refactored)', () => {
     });
 
     test('Invalid OTP code shows error message', async ({ page }) => {
-        test.step('Attempt login with invalid OTP', async () => {
+        await test.step('Attempt login with invalid OTP', async () => {
             try {
                 await loginAs(page, TEST_USERS.USA.SECRET, {
                     otpCode: '000000', // Invalid code
@@ -113,7 +113,7 @@ test.describe('MFA Flow - Error Handling (Refactored)', () => {
             }
         });
 
-        test.step('Verify error message displayed', async () => {
+        await test.step('Verify error message displayed', async () => {
             // Look for error message on page
             const errorMessage = page.getByText(/invalid.*code|incorrect.*otp|authentication failed/i);
             
@@ -148,7 +148,7 @@ test.describe('MFA Flow - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of confidentialUsers) {
-            test.step(`${user.countryCode} CONFIDENTIAL user MFA flow`, async () => {
+            await test.step(`${user.countryCode} CONFIDENTIAL user MFA flow`, async () => {
                 await loginAs(page, user, {
                     expectMFASetup: true,
                     otpCode: '123456',
@@ -171,7 +171,7 @@ test.describe('MFA Flow - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of unclassUsers) {
-            test.step(`${user.countryCode} UNCLASS user no MFA`, async () => {
+            await test.step(`${user.countryCode} UNCLASS user no MFA`, async () => {
                 await loginAs(page, user);
 
                 const dashboard = new DashboardPage(page);
@@ -190,7 +190,7 @@ test.describe('MFA Flow - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of secretUsers) {
-            test.step(`${user.countryCode} SECRET user MFA setup`, async () => {
+            await test.step(`${user.countryCode} SECRET user MFA setup`, async () => {
                 await loginAs(page, user, {
                     expectMFASetup: true,
                     otpCode: '123456',
@@ -212,7 +212,7 @@ test.describe('MFA Flow - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of mfaUsers) {
-            test.step(`${user.clearance} user requires MFA`, async () => {
+            await test.step(`${user.clearance} user requires MFA`, async () => {
                 await loginAs(page, user, {
                     expectMFASetup: true,
                     otpCode: '123456',
@@ -239,20 +239,20 @@ test.describe('MFA Flow - Session Persistence (Refactored)', () => {
     });
 
     test('Session persists after MFA login', async ({ page }) => {
-        test.step('Login with MFA', async () => {
+        await test.step('Login with MFA', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET, {
                 otpCode: '123456',
             });
         });
 
-        test.step('Verify session persists on page reload', async () => {
+        await test.step('Verify session persists on page reload', async () => {
             await page.reload();
 
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
         });
 
-        test.step('Verify session persists on navigation', async () => {
+        await test.step('Verify session persists on navigation', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goToResources();
 
@@ -262,22 +262,22 @@ test.describe('MFA Flow - Session Persistence (Refactored)', () => {
     });
 
     test('Logout clears MFA session', async ({ page }) => {
-        test.step('Login with MFA', async () => {
+        await test.step('Login with MFA', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET, {
                 otpCode: '123456',
             });
         });
 
-        test.step('Verify logged in', async () => {
+        await test.step('Verify logged in', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
         });
 
-        test.step('Logout', async () => {
+        await test.step('Logout', async () => {
             await logout(page);
         });
 
-        test.step('Verify session cleared', async () => {
+        await test.step('Verify session cleared', async () => {
             // Should be on home/login page
             await page.waitForURL(/^\/$|\/login/, {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
