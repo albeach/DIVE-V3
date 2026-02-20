@@ -567,6 +567,64 @@ test_cli_setup_wizard() {
 }
 
 ##
+# Test error recovery module (Phase 6)
+#
+test_cli_error_recovery() {
+    log_verbose "Testing error recovery module..."
+
+    local recovery="${DIVE_ROOT}/scripts/dive-modules/orchestration/error-recovery.sh"
+    if [ ! -f "$recovery" ]; then
+        log_error "error-recovery.sh not found"
+        return 1
+    fi
+
+    source "$recovery"
+
+    # Verify functions exist
+    if ! type error_recovery_suggest &>/dev/null; then
+        log_error "error_recovery_suggest function not found"
+        return 1
+    fi
+    if ! type _error_get_remediation &>/dev/null; then
+        log_error "_error_get_remediation function not found"
+        return 1
+    fi
+
+    # Test that remediation text exists for all hub phases
+    local hub_phases="VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY KAS_REGISTER SEEDING"
+    for phase in $hub_phases; do
+        local text
+        text=$(_error_get_remediation "$phase" "hub")
+        if [ -z "$text" ]; then
+            log_error "No remediation text for hub phase: $phase"
+            return 1
+        fi
+    done
+
+    # Test spoke phases
+    local spoke_phases="PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
+    for phase in $spoke_phases; do
+        local text
+        text=$(_error_get_remediation "$phase" "spoke")
+        if [ -z "$text" ]; then
+            log_error "No remediation text for spoke phase: $phase"
+            return 1
+        fi
+    done
+
+    # Test non-interactive mode auto-aborts
+    local result
+    DIVE_NON_INTERACTIVE=true error_recovery_suggest "VAULT_BOOTSTRAP" "hub" "USA" >/dev/null 2>&1
+    result=$?
+    if [ $result -ne 1 ]; then
+        log_error "error_recovery_suggest should return 1 (abort) in non-interactive mode, got $result"
+        return 1
+    fi
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -580,6 +638,7 @@ test_run_cli_module_tests() {
         "test_cli_config_validator"
         "test_cli_deploy_summary"
         "test_cli_setup_wizard"
+        "test_cli_error_recovery"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
