@@ -642,6 +642,8 @@ resolve_spoke_public_url() {
     local service="${2:-idp}"
     local code_lower
     code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     # Get port for the requested service
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
@@ -653,6 +655,19 @@ resolve_spoke_public_url() {
         kas) port="${SPOKE_KAS_PORT:-9000}" ;;
         *)   port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
     esac
+
+    # Priority 0: Per-spoke custom domain (e.g., SPOKE_GBR_DOMAIN=gbr.mod.uk)
+    local domain_var="SPOKE_${code_upper}_DOMAIN"
+    if [ -n "${!domain_var:-}" ]; then
+        echo "https://${service}.${!domain_var}"
+        return 0
+    fi
+
+    # Priority 0b: Active session SPOKE_CUSTOM_DOMAIN (set by --domain flag)
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        echo "https://${service}.${SPOKE_CUSTOM_DOMAIN}"
+        return 0
+    fi
 
     # Priority 1: FQDN via DIVE_DOMAIN_SUFFIX (Caddy reverse proxy)
     if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
@@ -722,6 +737,215 @@ resolve_hub_public_url() {
     echo "https://localhost:${port}"
 }
 export -f resolve_hub_public_url
+
+# =============================================================================
+# INTERNAL URL RESOLUTION (Federation Cross-Network Support)
+# =============================================================================
+# These functions resolve server-to-server (back-channel) URLs for Keycloak
+# federation. Unlike public URLs (browser-facing), internal URLs must resolve
+# from the TARGET container's perspective:
+#   - Co-located (same Docker network): container hostname (e.g., dive-spoke-gbr-keycloak:8443)
+#   - External (separate network): public domain via Caddy/ingress (e.g., idp.gbr.mod.uk)
+# =============================================================================
+
+##
+# Check if a spoke's containers are reachable on the local Docker network.
+#
+# Arguments:
+#   $1 - Instance code (e.g., GBR)
+#
+# Returns:
+#   0 if spoke containers are on the local Docker network, 1 if external
+##
+is_spoke_local() {
+    local instance_code="${1:?Instance code required}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    # USA (hub) is always local
+    [ "$code_lower" = "usa" ] && return 0
+
+    # Check explicit external marker
+    local ext_var="SPOKE_${instance_code^^}_EXTERNAL"
+    if [ "${!ext_var:-}" = "true" ]; then
+        return 1
+    fi
+
+    # Check if spoke has a custom domain (implies external network)
+    local domain_var="SPOKE_${instance_code^^}_DOMAIN"
+    if [ -n "${!domain_var:-}" ]; then
+        return 1
+    fi
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        return 1
+    fi
+
+    # Check if the spoke container exists on the local Docker daemon
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^dive-spoke-${code_lower}-keycloak$"; then
+        return 0
+    fi
+
+    # No container found — assume external
+    return 1
+}
+export -f is_spoke_local
+
+##
+# Resolve spoke internal URL (server-to-server, back-channel).
+# Used for Keycloak tokenUrl, userInfoUrl, jwksUrl in IdP config.
+#
+# Priority:
+#   1) Explicit override: SPOKE_{CODE}_INTERNAL_{SERVICE}_URL
+#   2) Per-spoke custom domain: SPOKE_{CODE}_DOMAIN → https://{service}.{domain}
+#   3) Active SPOKE_CUSTOM_DOMAIN → https://{service}.{custom_domain}
+#   4) Public URL (when spoke is external, no custom domain)
+#   5) Docker container hostname (co-located fallback)
+#
+# Arguments:
+#   $1 - Instance code (e.g., GBR)
+#   $2 - Service: idp|api|app|kas (default: idp)
+#
+# Returns:
+#   Internal URL on stdout
+##
+resolve_spoke_internal_url() {
+    local instance_code="${1:?Instance code required}"
+    local service="${2:-idp}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    # Priority 1: Explicit per-spoke override (e.g., SPOKE_GBR_INTERNAL_IDP_URL)
+    local service_upper
+    service_upper=$(upper "$service")
+    local override_var="SPOKE_${code_upper}_INTERNAL_${service_upper}_URL"
+    if [ -n "${!override_var:-}" ]; then
+        echo "${!override_var}"
+        return 0
+    fi
+
+    # Priority 2: Per-spoke custom domain (e.g., SPOKE_GBR_DOMAIN=gbr.mod.uk)
+    local domain_var="SPOKE_${code_upper}_DOMAIN"
+    if [ -n "${!domain_var:-}" ]; then
+        echo "https://${service}.${!domain_var}"
+        return 0
+    fi
+
+    # Priority 3: Active session SPOKE_CUSTOM_DOMAIN (set by --domain flag)
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        echo "https://${service}.${SPOKE_CUSTOM_DOMAIN}"
+        return 0
+    fi
+
+    # Priority 4: Spoke is external (no custom domain) — use public URL
+    if ! is_spoke_local "$instance_code"; then
+        resolve_spoke_public_url "$instance_code" "$service"
+        return 0
+    fi
+
+    # Priority 5: Co-located — Docker container hostname
+    local port
+    case "$service" in
+        idp) port="8443" ;;
+        api) port="4000" ;;
+        app) port="3000" ;;
+        kas) port="9000" ;;
+        *)   port="8443" ;;
+    esac
+    echo "https://dive-spoke-${code_lower}-keycloak:${port}"
+}
+export -f resolve_spoke_internal_url
+
+##
+# Resolve hub internal URL (server-to-server, back-channel).
+#
+# Priority:
+#   1) Explicit override: HUB_INTERNAL_{SERVICE}_URL
+#   2) Public URL (when hub is on external network)
+#   3) Docker container hostname (co-located fallback)
+#
+# Arguments:
+#   $1 - Service: idp|api|app|opal|vault (default: idp)
+#
+# Returns:
+#   Internal URL on stdout
+##
+resolve_hub_internal_url() {
+    local service="${1:-idp}"
+
+    # Priority 1: Explicit override (e.g., HUB_INTERNAL_IDP_URL)
+    local service_upper
+    service_upper=$(upper "$service")
+    local override_var="HUB_INTERNAL_${service_upper}_URL"
+    if [ -n "${!override_var:-}" ]; then
+        echo "${!override_var}"
+        return 0
+    fi
+
+    # Priority 2: If we have a domain suffix or external address, use public URL
+    # (hub is always reachable via its public URL from spokes)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ] || { [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${HUB_EXTERNAL_ADDRESS}" != "localhost" ]; }; then
+        resolve_hub_public_url "$service"
+        return 0
+    fi
+
+    # Priority 3: Co-located — Docker container hostname
+    local port
+    case "$service" in
+        idp)   port="8443" ;;
+        api)   port="4000" ;;
+        app)   port="3000" ;;
+        opal)  port="7002" ;;
+        vault) port="8200" ;;
+        *)     port="8443" ;;
+    esac
+    echo "https://dive-hub-keycloak:${port}"
+}
+export -f resolve_hub_internal_url
+
+##
+# Resolve the Keycloak admin API base URL for a given instance.
+# Used by keycloak_admin_api() to determine whether to use docker exec or HTTPS.
+#
+# For local instances:  Returns "local://{container_name}" (signals docker exec path)
+# For remote instances: Returns "https://{public_domain}" (signals HTTPS path)
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#
+# Returns:
+#   Admin URL on stdout (prefixed with "local://" for docker exec, "https://" for remote)
+##
+resolve_keycloak_admin_url() {
+    local instance_code="${1:?Instance code required}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    # Determine container name
+    local container_name
+    if [ "$code_upper" = "USA" ]; then
+        container_name="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    else
+        container_name="dive-spoke-${code_lower}-keycloak"
+    fi
+
+    # Check if instance is local
+    if is_spoke_local "$instance_code"; then
+        echo "local://${container_name}"
+        return 0
+    fi
+
+    # Remote: return public Keycloak URL
+    if [ "$code_upper" = "USA" ]; then
+        resolve_hub_public_url "idp"
+    else
+        resolve_spoke_public_url "$instance_code" "idp"
+    fi
+}
+export -f resolve_keycloak_admin_url
 
 # =============================================================================
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)
