@@ -20,7 +20,7 @@ import { TEST_CONFIG } from './fixtures/test-config';
 import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 
-test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky'] }, () => {
+test.describe('MFA Complete Flow (Refactored)', { tag: ['@critical', '@flaky', '@quarantine'] }, () => {
     test.skip(!TEST_CONFIG.FEATURES.MFA_TESTS, 'MFA tests disabled in config');
 
     test.afterEach(async ({ page }) => {

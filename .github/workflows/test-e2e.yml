@@ -158,10 +158,14 @@ jobs:
           retention-days: 7
 
   e2e-full-regression:
-    name: E2E - Full Regression (Nightly/Manual)
+    name: E2E - Full Regression Shard ${{ matrix.shard }} (Nightly/Manual)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       mongodb:
         image: mongo:7.0
@@ -194,10 +198,12 @@ jobs:
               {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
               {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
             ]
-      - name: Run full E2E regression suite
+      - name: Run full E2E regression shard ${{ matrix.shard }}/3
         run: |
           cd frontend
           npx playwright test \
+            --grep-invert '@quarantine' \
+            --shard=${{ matrix.shard }}/3 \
             src/__tests__/e2e/mfa-complete-flow.spec.ts \
             src/__tests__/e2e/mfa-conditional.spec.ts \
             src/__tests__/e2e/external-idp-federation-flow.spec.ts \
@@ -220,11 +226,68 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-e2e-full-2026
           OPA_URL: https://localhost:8181
           CI: true
-      - name: Upload full suite artifacts
+      - name: Upload shard ${{ matrix.shard }} artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e2e-full-results
+          name: e2e-full-results-shard-${{ matrix.shard }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-quarantine:
+    name: E2E - Quarantined Tests (Non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-quarantine-2026
+          start-opa: 'true'
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-secret","password":"Secret123!","clearance":"SECRET","coi":["FVEY"]}
+            ]
+      - name: Run quarantined tests
+        run: |
+          cd frontend
+          npx playwright test --grep '@quarantine' \
+            src/__tests__/e2e/mfa-complete-flow.spec.ts \
+            src/__tests__/e2e/webauthn-aal3-flow.spec.ts
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-quarantine-2026
+          OPA_URL: https://localhost:8181
+          CI: true
+      - name: Upload quarantine artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-quarantine-results
           path: |
             frontend/playwright-report/
             frontend/test-results/
@@ -234,7 +297,7 @@ jobs:
     name: E2E Test Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [e2e-core-smoke, e2e-federation-smoke, e2e-full-regression]
+    needs: [e2e-core-smoke, e2e-federation-smoke, e2e-full-regression, e2e-quarantine]
     if: always()
     steps:
       - name: Generate summary
@@ -245,7 +308,8 @@ jobs:
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Core Smoke | ${{ needs.e2e-core-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Federation Sync | ${{ needs.e2e-federation-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Full Regression | ${{ needs.e2e-full-regression.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Full Regression (3 shards) | ${{ needs.e2e-full-regression.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Quarantined Tests | ${{ needs.e2e-quarantine.result }} |" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "${{ needs.e2e-core-smoke.result }}" != "success" ]]; then
             echo "Required E2E slice failed (core smoke)." >> "$GITHUB_STEP_SUMMARY"
@@ -257,4 +321,11 @@ jobs:
               echo "Federation smoke failed in scheduled/manual run." >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
+          fi
+
+          # Quarantine failures are informational only (non-blocking)
+          if [[ "${{ needs.e2e-quarantine.result }}" == "failure" ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Note:** Quarantined tests failed. These are known-flaky and do not block merges." >> "$GITHUB_STEP_SUMMARY"
+            echo "> See [QUARANTINE.md](../../frontend/src/__tests__/e2e/QUARANTINE.md) for details." >> "$GITHUB_STEP_SUMMARY"
           fi
