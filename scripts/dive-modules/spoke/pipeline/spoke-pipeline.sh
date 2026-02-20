@@ -225,6 +225,9 @@ _spoke_pipeline_execute_internal() {
     if ! type pre_validate_spoke &>/dev/null; then
         [ -f "${_utils_dir}/pre-validation.sh" ] && source "${_utils_dir}/pre-validation.sh"
     fi
+    if ! type health_sentinel_start &>/dev/null; then
+        [ -f "${_utils_dir}/health-sentinel.sh" ] && source "${_utils_dir}/health-sentinel.sh"
+    fi
     if type deployment_log_start &>/dev/null; then
         if deployment_log_start "spoke" "$code_upper"; then
             log_verbose "Deployment log: $(deployment_log_path)"
@@ -347,6 +350,11 @@ _spoke_pipeline_execute_internal() {
         fi
     fi
 
+    # Health Sentinel: Start monitoring during configuration phases (4-6)
+    if [ $phase_result -eq 0 ] && type health_sentinel_start &>/dev/null; then
+        health_sentinel_start "spoke" "dive-spoke-${code_lower}" || true
+    fi
+
     # Phase 4: Configuration (always runs)
     if [ $phase_result -eq 0 ]; then
         if _spoke_should_skip_phase "$PIPELINE_PHASE_CONFIGURATION"; then
@@ -421,6 +429,11 @@ _spoke_pipeline_execute_internal() {
 
     log_verbose "Phase execution complete (result: $phase_result)"
 
+    # Stop Health Sentinel
+    if type health_sentinel_stop &>/dev/null; then
+        health_sentinel_stop || true
+    fi
+
     # Calculate duration
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -455,6 +468,11 @@ _spoke_pipeline_execute_internal() {
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
 
+        # Health sentinel report (if any alerts during configuration phases)
+        if type health_sentinel_report &>/dev/null; then
+            health_sentinel_report || true
+        fi
+
         # Post-deployment summary with URLs and next steps
         if type deployment_post_summary &>/dev/null; then
             deployment_post_summary "spoke" "$code_upper" "$duration"
@@ -472,6 +490,11 @@ _spoke_pipeline_execute_internal() {
             deployment_log_stop 0 "$duration"
         fi
 
+        # Cleanup sentinel temp files
+        if type health_sentinel_cleanup &>/dev/null; then
+            health_sentinel_cleanup
+        fi
+
         return 0
     else
         orch_db_set_state "$code_upper" "FAILED" "Pipeline failed" \
@@ -480,6 +503,11 @@ _spoke_pipeline_execute_internal() {
         # Generate error summary
         if type orch_generate_error_summary &>/dev/null; then
             orch_generate_error_summary "$code_upper"
+        fi
+
+        # Health sentinel report (may show service crashes that caused failure)
+        if type health_sentinel_report &>/dev/null; then
+            health_sentinel_report || true
         fi
 
         spoke_pipeline_print_failure "$code_upper" "$instance_name" "$duration"
@@ -494,6 +522,11 @@ _spoke_pipeline_execute_internal() {
         # Finalize log file
         if type deployment_log_stop &>/dev/null; then
             deployment_log_stop 1 "$duration"
+        fi
+
+        # Cleanup sentinel temp files
+        if type health_sentinel_cleanup &>/dev/null; then
+            health_sentinel_cleanup
         fi
 
         return 1
