@@ -97,6 +97,11 @@ spoke_remote_normalize_hub_endpoints() {
 
     # Guard against invalid input like bare domain without env/service prefix
     if [ -z "$_env_prefix" ] || [ "$_env_prefix" = "$_base" ]; then
+        # Check if Hub URLs are already explicitly set (custom domain hub)
+        if [ -n "${HUB_API_URL:-}" ] && [ -n "${HUB_KC_URL:-}" ]; then
+            log_info "Hub endpoints already configured — skipping normalization"
+            return 0
+        fi
         log_warn "Could not normalize Hub endpoints from HUB_EXTERNAL_ADDRESS=${hub_host}"
         return 0
     fi
@@ -452,6 +457,15 @@ spoke_deploy() {
     code_upper=$(upper "$instance_code")
     code_lower=$(lower "$instance_code")
     instance_code="$code_upper"
+
+    # Set per-spoke custom domain for Phase 1 URL resolution layer
+    # This enables resolve_spoke_internal_url, resolve_spoke_public_url, etc.
+    # to correctly resolve URLs for this specific spoke instance.
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        local _domain_var="SPOKE_${code_upper}_DOMAIN"
+        export "${_domain_var}=${SPOKE_CUSTOM_DOMAIN}"
+        log_verbose "Per-spoke domain: ${_domain_var}=${SPOKE_CUSTOM_DOMAIN}"
+    fi
 
     # Set default name from NATO database or parameter
     if [ -z "$instance_name" ]; then

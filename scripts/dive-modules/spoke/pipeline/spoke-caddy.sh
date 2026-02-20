@@ -60,14 +60,26 @@ spoke_caddy_generate_snippet() {
     local code="$1"
     local code_lower
     code_lower="$(echo "$code" | tr '[:upper:]' '[:lower:]')"
+    local code_upper
+    code_upper="$(echo "$code" | tr '[:lower:]' '[:upper:]')"
 
-    local _env_prefix _base_domain
-    _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
-    _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+    # Resolve domain names: custom domain takes priority over DIVE_DOMAIN_SUFFIX
+    local domain_app domain_api domain_idp
+    local _per_spoke_var="SPOKE_${code_upper}_DOMAIN"
+    local _spoke_domain="${!_per_spoke_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
 
-    local domain_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
-    local domain_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
-    local domain_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+    if [ -n "$_spoke_domain" ]; then
+        domain_app="app.${_spoke_domain}"
+        domain_api="api.${_spoke_domain}"
+        domain_idp="idp.${_spoke_domain}"
+    else
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        domain_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
+        domain_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
+        domain_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+    fi
 
     # Spoke container names (on dive-shared network)
     local container_frontend="dive-spoke-${code_lower}-frontend"
@@ -313,12 +325,14 @@ spoke_caddy_generate_local() {
 
     # Derive domain names for Caddy env vars
     local domain_app domain_api domain_idp
+    local _per_spoke_var="SPOKE_${code_upper}_DOMAIN"
+    local _effective_domain="${!_per_spoke_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
 
-    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+    if [ -n "$_effective_domain" ]; then
         # Custom domain: app.<domain>, api.<domain>, idp.<domain>
-        domain_app="app.${SPOKE_CUSTOM_DOMAIN}"
-        domain_api="api.${SPOKE_CUSTOM_DOMAIN}"
-        domain_idp="idp.${SPOKE_CUSTOM_DOMAIN}"
+        domain_app="app.${_effective_domain}"
+        domain_api="api.${_effective_domain}"
+        domain_idp="idp.${_effective_domain}"
     else
         local _env_prefix _base_domain
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
