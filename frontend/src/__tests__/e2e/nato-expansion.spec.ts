@@ -33,11 +33,11 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
     });
 
     test('DEU (Germany) - User can log in', async ({ page }) => {
-        test.step('Login as German SECRET user', async () => {
+        await test.step('Login as German SECRET user', async () => {
             await loginAs(page, TEST_USERS.DEU.SECRET);
         });
 
-        test.step('Verify dashboard loaded', async () => {
+        await test.step('Verify dashboard loaded', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -47,18 +47,18 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
             );
         });
 
-        test.step('Verify NATO-COSMIC COI', async () => {
+        await test.step('Verify NATO-COSMIC COI', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyCOIBadges(['NATO-COSMIC']);
         });
     });
 
     test('GBR (United Kingdom) - User can log in', async ({ page }) => {
-        test.step('Login as UK SECRET user', async () => {
+        await test.step('Login as UK SECRET user', async () => {
             await loginAs(page, TEST_USERS.GBR.SECRET);
         });
 
-        test.step('Verify dashboard shows UK user info', async () => {
+        await test.step('Verify dashboard shows UK user info', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -68,7 +68,7 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
             );
         });
 
-        test.step('Verify FVEY COI badge', async () => {
+        await test.step('Verify FVEY COI badge', async () => {
             // UK is in FVEY
             const dashboard = new DashboardPage(page);
             await dashboard.verifyCOIBadges(['NATO-COSMIC', 'FVEY']);
@@ -76,11 +76,11 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
     });
 
     test('ITA (Italy) - User can log in', async ({ page }) => {
-        test.step('Login as Italian SECRET user', async () => {
+        await test.step('Login as Italian SECRET user', async () => {
             await loginAs(page, TEST_USERS.ITA.SECRET);
         });
 
-        test.step('Verify dashboard loaded', async () => {
+        await test.step('Verify dashboard loaded', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -92,11 +92,11 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
     });
 
     test('ESP (Spain) - User can log in', async ({ page }) => {
-        test.step('Login as Spanish SECRET user', async () => {
+        await test.step('Login as Spanish SECRET user', async () => {
             await loginAs(page, TEST_USERS.ESP.SECRET);
         });
 
-        test.step('Verify dashboard loaded', async () => {
+        await test.step('Verify dashboard loaded', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -108,11 +108,11 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
     });
 
     test('POL (Poland) - User can log in', async ({ page }) => {
-        test.step('Login as Polish SECRET user', async () => {
+        await test.step('Login as Polish SECRET user', async () => {
             await loginAs(page, TEST_USERS.POL.SECRET);
         });
 
-        test.step('Verify dashboard loaded', async () => {
+        await test.step('Verify dashboard loaded', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -124,11 +124,11 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
     });
 
     test('NLD (Netherlands) - User can log in', async ({ page }) => {
-        test.step('Login as Dutch SECRET user', async () => {
+        await test.step('Login as Dutch SECRET user', async () => {
             await loginAs(page, TEST_USERS.NLD.SECRET);
         });
 
-        test.step('Verify dashboard loaded', async () => {
+        await test.step('Verify dashboard loaded', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -152,16 +152,16 @@ test.describe('NATO Expansion: Cross-Nation Authorization (Refactored)', () => {
     });
 
     test('German user can access NATO document', async ({ page }) => {
-        test.step('Login as German SECRET user', async () => {
+        await test.step('Login as German SECRET user', async () => {
             await loginAs(page, TEST_USERS.DEU.SECRET);
         });
 
-        test.step('Verify access to NATO document', async () => {
+        await test.step('Verify access to NATO document', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
         });
 
-        test.step('Verify NATO document content visible', async () => {
+        await test.step('Verify NATO document content visible', async () => {
             const content = page.getByText(TEST_RESOURCES.SECRET.NATO.content);
             await expect(content).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -170,38 +170,38 @@ test.describe('NATO Expansion: Cross-Nation Authorization (Refactored)', () => {
     });
 
     test('UK user can access FVEY document', async ({ page }) => {
-        test.step('Login as UK SECRET user', async () => {
+        await test.step('Login as UK SECRET user', async () => {
             await loginAs(page, TEST_USERS.GBR.SECRET);
         });
 
-        test.step('Verify access to FVEY document', async () => {
+        await test.step('Verify access to FVEY document', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
         });
     });
 
     test('Italian user can access NATO but not FVEY', async ({ page }) => {
-        test.step('Login as Italian SECRET user', async () => {
+        await test.step('Login as Italian SECRET user', async () => {
             await loginAs(page, TEST_USERS.ITA.SECRET);
         });
 
-        test.step('Verify access to NATO document (ALLOW)', async () => {
+        await test.step('Verify access to NATO document (ALLOW)', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
         });
 
-        test.step('Verify FVEY document is denied (Italy not in FVEY)', async () => {
+        await test.step('Verify FVEY document is denied (Italy not in FVEY)', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
         });
     });
 
     test('German user denied access to USA-only document', async ({ page }) => {
-        test.step('Login as German SECRET user', async () => {
+        await test.step('Login as German SECRET user', async () => {
             await loginAs(page, TEST_USERS.DEU.SECRET);
         });
 
-        test.step('Verify USA-only document is denied', async () => {
+        await test.step('Verify USA-only document is denied', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.USA_ONLY.resourceId);
             
@@ -236,7 +236,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
         ];
 
         for (const user of natoUsers) {
-            test.step(`${user.countryCode} user can access NATO document`, async () => {
+            await test.step(`${user.countryCode} user can access NATO document`, async () => {
                 await loginAs(page, user);
 
                 const resources = new ResourcesPage(page);
@@ -251,7 +251,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
         let unclassCount = 0;
         let secretCount = 0;
 
-        test.step('UNCLASSIFIED user resource count', async () => {
+        await test.step('UNCLASSIFIED user resource count', async () => {
             await loginAs(page, TEST_USERS.DEU.UNCLASS);
 
             const resources = new ResourcesPage(page);
@@ -261,7 +261,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
             await logout(page);
         });
 
-        test.step('SECRET user resource count', async () => {
+        await test.step('SECRET user resource count', async () => {
             await loginAs(page, TEST_USERS.DEU.SECRET);
 
             const resources = new ResourcesPage(page);
@@ -271,7 +271,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
             await logout(page);
         });
 
-        test.step('Verify SECRET user sees more resources', async () => {
+        await test.step('Verify SECRET user sees more resources', async () => {
             expect(secretCount).toBeGreaterThan(unclassCount);
         });
     });
@@ -279,7 +279,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
     test('UK and USA users both can access FVEY documents', async ({ page }) => {
         // Test FVEY COI intersection
 
-        test.step('UK user can access FVEY document', async () => {
+        await test.step('UK user can access FVEY document', async () => {
             await loginAs(page, TEST_USERS.GBR.SECRET);
 
             const resources = new ResourcesPage(page);
@@ -288,7 +288,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
             await logout(page);
         });
 
-        test.step('USA user can access FVEY document', async () => {
+        await test.step('USA user can access FVEY document', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET);
 
             const resources = new ResourcesPage(page);
@@ -297,7 +297,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
             await logout(page);
         });
 
-        test.step('France (non-FVEY) user denied access', async () => {
+        await test.step('France (non-FVEY) user denied access', async () => {
             await loginAs(page, TEST_USERS.FRA.SECRET);
 
             const resources = new ResourcesPage(page);
@@ -313,7 +313,7 @@ test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
         ];
 
         for (const { user, country } of testUsers) {
-            test.step(`${country} user identity drawer`, async () => {
+            await test.step(`${country} user identity drawer`, async () => {
                 await loginAs(page, user);
 
                 const dashboard = new DashboardPage(page);
