@@ -22,11 +22,17 @@ export default defineConfig({
     forbidOnly: !!process.env.CI, // Fail CI if test.only is committed
     retries: process.env.CI ? 2 : 0, // Retry failed tests in CI
     workers: process.env.CI ? 4 : 2, // ✅ INCREASED: 4 workers in CI, 2 locally
-    reporter: [
-        ['html', { outputFolder: 'playwright-report' }],
-        ['json', { outputFile: 'playwright-report/results.json' }],
-        ['list']
-    ],
+    reporter: process.env.CI
+        ? [
+            ['html', { outputFolder: 'playwright-report', open: 'never' }],
+            ['json', { outputFile: 'playwright-report/results.json' }],
+            ['github'],
+        ]
+        : [
+            ['html', { outputFolder: 'playwright-report' }],
+            ['json', { outputFile: 'playwright-report/results.json' }],
+            ['list'],
+        ],
 
     use: {
         // Zero Trust Architecture: ALWAYS use HTTPS
@@ -63,6 +69,9 @@ export default defineConfig({
 
     // ✅ Test timeout increased from 15s to 30s for complex flows (Keycloak, OPA, DB operations)
     timeout: 30000,
+
+    // Expect timeout for assertions
+    expect: { timeout: 10000 },
 
     // ✅ Test tag support for selective execution (e.g., TEST_TAG=@smoke npm test)
     grep: process.env.TEST_TAG ? new RegExp(process.env.TEST_TAG) : undefined,
