@@ -9,6 +9,7 @@ on:
     - 'docker/**'
     - 'kas/**'
     - '.github/workflows/ci-comprehensive.yml'
+    - '.github/actions/backend-test-setup/**'
   schedule:
   - cron: '0 2 * * *'   # Daily at 2 AM UTC
   workflow_dispatch:
@@ -19,111 +20,36 @@ jobs:
   # ============================================
   # Backend Tests - Split into Parallel Jobs
   # ============================================
-  # Best Practice: Split large test suites into parallel jobs
-  # Benefits:
-  # - Faster overall CI time (parallel execution)
-  # - Better resource utilization
-  # - Individual timeouts prevent one slow test from blocking all
-  # - Easier debugging (isolate failures)
+  # Uses shared backend-test-setup composite to eliminate duplication.
+  # Coverage is merged into the unit test job to avoid re-running all tests.
   backend-unit-tests:
-    name: Backend - Unit Tests
+    name: Backend - Unit Tests + Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # Realistic for 1,643+ comprehensive tests
-    # Use MongoDB Memory Server for isolated testing (sequential execution to avoid conflicts)
+    timeout-minutes: 20
     steps:
     - name: Checkout Code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       with:
         persist-credentials: false
-    - name: Setup Node.js 20
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+    - name: Backend Test Setup
+      uses: ./.github/actions/backend-test-setup
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
-    - name: Install Dependencies
-      run: cd backend && npm ci
-    - name: Cache MongoDB Binary
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-      with:
-        path: ~/.cache/mongodb-binaries
-        key: ${{ runner.os }}-mongodb-binary-7.0.0
-        restore-keys: |
-          ${{ runner.os }}-mongodb-binary-
-    - name: Install MongoDB dependencies
-      run: |
-        # Ensure required system dependencies for MongoDB Memory Server
-        sudo apt-get update
-        sudo apt-get install -y libssl-dev
-    - name: Generate Test Certificates
-      run: |
-        cd backend
-        chmod +x scripts/generate-test-certs.sh
-
-        # Run with error handling
-        if ! ./scripts/generate-test-certs.sh; then
-          echo "❌ Certificate generation failed"
-          exit 1
-        fi
-
-        # Verify certificates were created
-        if [ ! -f "certs/signing/policy-signer.pem" ]; then
-          echo "❌ Policy signer certificate not found"
-          ls -la certs/ 2>/dev/null || echo "No certs directory"
-          exit 1
-        fi
-
-        echo "✅ Test certificates generated and verified"
-    - name: Generate Test RSA Keys
-      run: |
-        cd backend
-        chmod +x scripts/generate-test-rsa-keys.sh
-
-        # Run with error handling
-        if ! ./scripts/generate-test-rsa-keys.sh; then
-          echo "❌ RSA key generation failed"
-          exit 1
-        fi
-
-        # Verify keys were created
-        if [ ! -f "src/__tests__/keys/test-private-key.pem" ] || [ ! -f "src/__tests__/keys/test-public-key.pem" ]; then
-          echo "❌ Test RSA keys not found"
-          ls -la src/__tests__/keys/ 2>/dev/null || echo "No keys directory"
-          exit 1
-        fi
-
-        echo "✅ Test RSA keys generated and verified"
-    - name: Generate Test Certificates for CI
-      run: |
-        mkdir -p ${{ github.workspace }}/certs
-
-        # Generate self-signed certificate for CI testing
-        openssl req -x509 -newkey rsa:4096 -nodes \
-          -keyout ${{ github.workspace }}/certs/key.pem \
-          -out ${{ github.workspace }}/certs/certificate.pem \
-          -days 1 \
-          -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
-          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
-
-        echo "✅ Generated test certificates for CI"
-        ls -la ${{ github.workspace }}/certs/
-    - name: Start OPA Server
-      run: |
-        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
-        chmod +x opa
-        nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
-        sleep 5
-        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
-    - name: Run Unit Tests
+        generate-rsa-keys: 'true'
+        start-opa: 'true'
+    - name: COI Logic Lint
+      run: cd backend && SKIP_MONGODB=true npm run lint:coi
+    - name: Run Unit Tests with Coverage
       run: |
         cd backend
         START_TIME=$(date +%s)
-        npm run test:unit
+        npm run test:unit -- --coverage
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
-        echo "## ⏱️ Backend Unit Test Duration" >> $GITHUB_STEP_SUMMARY
+        echo "## Backend Unit Tests + Coverage" >> $GITHUB_STEP_SUMMARY
         echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
-        echo "**MongoDB:** Real service (GitHub Actions service container)" >> $GITHUB_STEP_SUMMARY
+        if [ -f "coverage/coverage-summary.json" ]; then
+          echo "**Coverage:** $(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')% lines" >> $GITHUB_STEP_SUMMARY
+        fi
       env:
         NODE_ENV: test
         MONGODB_AUTH_DISABLED: true
@@ -135,69 +61,28 @@ jobs:
         KEYCLOAK_URL: http://localhost:8081
         KEYCLOAK_REALM: dive-v3-broker-usa
         KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+    - name: Upload Backend Coverage
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: backend-coverage
+        path: backend/coverage/
+        retention-days: 7
   backend-integration-tests:
     name: Backend - Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10 # Increased for integration test suite
-    # Use MongoDB Memory Server for isolated testing
+    timeout-minutes: 10
     steps:
     - name: Checkout Code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       with:
         persist-credentials: false
-    - name: Setup Node.js 20
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+    - name: Backend Test Setup
+      uses: ./.github/actions/backend-test-setup
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
-    - name: Install Dependencies
-      run: cd backend && npm ci
-    - name: Cache MongoDB Binary
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-      with:
-        path: ~/.cache/mongodb-binaries
-        key: ${{ runner.os }}-mongodb-binary-7.0.0
-    - name: Generate Test Certificates
-      run: |
-        cd backend
-        chmod +x scripts/generate-test-certs.sh
-
-        # Run with error handling
-        if ! ./scripts/generate-test-certs.sh; then
-          echo "❌ Certificate generation failed"
-          exit 1
-        fi
-
-        # Verify certificates were created
-        if [ ! -f "certs/signing/policy-signer.pem" ]; then
-          echo "❌ Policy signer certificate not found"
-          ls -la certs/ 2>/dev/null || echo "No certs directory"
-          exit 1
-        fi
-
-        echo "✅ Test certificates generated and verified"
-    - name: Generate Test Certificates for CI
-      run: |
-        mkdir -p ${{ github.workspace }}/certs
-
-        # Generate self-signed certificate for CI testing
-        openssl req -x509 -newkey rsa:4096 -nodes \
-          -keyout ${{ github.workspace }}/certs/key.pem \
-          -out ${{ github.workspace }}/certs/certificate.pem \
-          -days 1 \
-          -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
-          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
-
-        echo "✅ Generated test certificates for CI"
-        ls -la ${{ github.workspace }}/certs/
-    - name: Start OPA Server
-      run: |
-        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
-        chmod +x opa
-        nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
-        sleep 5
-        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
+        generate-rsa-keys: 'false'
+        start-opa: 'true'
+        install-mongodb-deps: 'false'
     - name: Run Integration Tests
       run: cd backend && npm run test:integration
       env:
@@ -212,111 +97,6 @@ jobs:
       env:
         NODE_ENV: test
         OPA_URL: https://localhost:8181
-  backend-coverage:
-    name: Backend - Coverage Report
-    runs-on: ubuntu-latest
-    timeout-minutes: 20 # Coverage generation needs time
-    # Use MongoDB Memory Server for isolated testing
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      with:
-        persist-credentials: false
-    - name: Setup Node.js 20
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
-    - name: Install Dependencies
-      run: cd backend && npm ci
-    - name: Cache MongoDB Binary
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-      with:
-        path: ~/.cache/mongodb-binaries
-        key: ${{ runner.os }}-mongodb-binary-7.0.0
-    - name: Generate Test Certificates
-      run: |
-        cd backend
-        chmod +x scripts/generate-test-certs.sh
-
-        # Run with error handling
-        if ! ./scripts/generate-test-certs.sh; then
-          echo "❌ Certificate generation failed"
-          exit 1
-        fi
-
-        # Verify certificates were created
-        if [ ! -f "certs/signing/policy-signer.pem" ]; then
-          echo "❌ Policy signer certificate not found"
-          ls -la certs/ 2>/dev/null || echo "No certs directory"
-          exit 1
-        fi
-
-        echo "✅ Test certificates generated and verified"
-    - name: Generate Test RSA Keys
-      run: |
-        cd backend
-        chmod +x scripts/generate-test-rsa-keys.sh
-
-        # Run with error handling
-        if ! ./scripts/generate-test-rsa-keys.sh; then
-          echo "❌ RSA key generation failed"
-          exit 1
-        fi
-
-        # Verify keys were created
-        if [ ! -f "src/__tests__/keys/test-private-key.pem" ] || [ ! -f "src/__tests__/keys/test-public-key.pem" ]; then
-          echo "❌ Test RSA keys not found"
-          ls -la src/__tests__/keys/ 2>/dev/null || echo "No keys directory"
-          exit 1
-        fi
-
-        echo "✅ Test RSA keys generated and verified"
-    - name: Generate Test Certificates for CI
-      run: |
-        mkdir -p ${{ github.workspace }}/certs
-        openssl req -x509 -newkey rsa:4096 -nodes \
-          -keyout ${{ github.workspace }}/certs/key.pem \
-          -out ${{ github.workspace }}/certs/certificate.pem \
-          -days 1 \
-          -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
-          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
-    - name: Start OPA Server
-      run: |
-        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
-        chmod +x opa
-        nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
-        sleep 5
-        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
-    - name: COI Logic Lint
-      run: cd backend && SKIP_MONGODB=true npm run lint:coi
-    - name: Generate Coverage Report
-      run: |
-        cd backend
-        npm run test:coverage
-
-        # Check if coverage report was generated
-        if [ -f "coverage/coverage-summary.json" ]; then
-          echo "✅ Coverage report generated successfully"
-          cat coverage/coverage-summary.json | jq '.total'
-        else
-          echo "❌ Coverage report not found"
-          exit 1
-        fi
-      env:
-        NODE_ENV: test
-        OPA_URL: https://localhost:8181
-        KAS_URL: http://localhost:8080
-        JWT_SECRET: test-jwt-secret-for-ci
-        JWT_ISSUER: dive-v3-test
-        JWT_AUDIENCE: dive-v3-api-test
-    - name: Upload Backend Coverage
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-      with:
-        name: backend-coverage
-        path: backend/coverage/
-        retention-days: 7
   frontend-tests:
     name: Frontend - Unit & Component Tests
     runs-on: ubuntu-latest
@@ -335,11 +115,11 @@ jobs:
       id: setup-node-frontend
     - name: Report Frontend npm Cache Status
       run: |
-        echo "## 📦 Frontend npm Cache" >> $GITHUB_STEP_SUMMARY
+        echo "## Frontend npm Cache" >> $GITHUB_STEP_SUMMARY
         if [ "${{ steps.setup-node-frontend.outputs.cache-hit }}" == "true" ]; then
-          echo "✅ **Cache HIT** - Dependencies restored from cache" >> $GITHUB_STEP_SUMMARY
+          echo "Cache HIT - Dependencies restored from cache" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⚠️ **Cache MISS** - Dependencies downloaded fresh" >> $GITHUB_STEP_SUMMARY
+          echo "Cache MISS - Dependencies downloaded fresh" >> $GITHUB_STEP_SUMMARY
         fi
     - name: Install Dependencies
       run: cd frontend && npm ci --legacy-peer-deps
@@ -350,7 +130,7 @@ jobs:
         npm test
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
-        echo "## ⏱️ Frontend Test Duration" >> $GITHUB_STEP_SUMMARY
+        echo "## Frontend Test Duration" >> $GITHUB_STEP_SUMMARY
         echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
       env:
         NEXTAUTH_URL: http://localhost:3000
@@ -385,7 +165,7 @@ jobs:
       run: |
         cd policies
         opa test . -v
-    - name: OPA Benchmark (GAP FIX)
+    - name: OPA Benchmark
       run: |
         cd policies
         echo "## OPA Performance Benchmark" >> $GITHUB_STEP_SUMMARY
@@ -438,15 +218,10 @@ jobs:
       run: |
         echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Targets Met:" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Backend: Authorization decisions < 500ms" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Frontend: Authentication flow < 15s" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ API: Response time < 1s" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Benchmarks Established:" >> $GITHUB_STEP_SUMMARY
-        echo "- E2E authentication flow timing" >> $GITHUB_STEP_SUMMARY
-        echo "- Authorization decision latency" >> $GITHUB_STEP_SUMMARY
-        echo "- API response performance" >> $GITHUB_STEP_SUMMARY
+        echo "### Targets:" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: Authorization decisions < 500ms" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: Authentication flow < 15s" >> $GITHUB_STEP_SUMMARY
+        echo "- API: Response time < 1s" >> $GITHUB_STEP_SUMMARY
   docker-build:
     name: Docker - Build Images
     runs-on: ubuntu-latest
@@ -480,7 +255,7 @@ jobs:
         docker images | grep dive-v3-kas
     - name: Security Scan - Backend
       run: |
-        echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         trivy image --format table --output - dive-v3-backend:test | head -20 >> $GITHUB_STEP_SUMMARY
     - name: Security Scan - Frontend
@@ -520,8 +295,6 @@ jobs:
     - name: Check Hardcoded Secrets
       run: |
         echo "Scanning for hardcoded secrets..."
-        # Scan for actual hardcoded secrets (exclude test files, HTML attributes, legitimate code)
-        # Look for suspicious patterns like: API_KEY="sk-xxxxx", password="Pa$$w0rd123"
         if grep -r -E "(API_KEY|SECRET_KEY|PRIVATE_KEY|ACCESS_TOKEN)\s*=\s*['\"][a-zA-Z0-9_-]{20,}" \
           --exclude-dir="__tests__" \
           --exclude-dir="e2e" \
@@ -530,16 +303,16 @@ jobs:
           backend/src frontend/src 2>/dev/null | \
           grep -v "process.env" | \
           grep -v "//"; then
-          echo "⚠️ Potential hardcoded secrets found"
+          echo "Potential hardcoded secrets found"
           exit 1
         else
-          echo "✅ No hardcoded secrets detected"
+          echo "No hardcoded secrets detected"
         fi
   coverage-summary:
     name: Coverage Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [backend-coverage, frontend-tests]
+    needs: [backend-unit-tests, frontend-tests]
     if: always()
     steps:
     - name: Download Backend Coverage
@@ -554,99 +327,86 @@ jobs:
         path: frontend-coverage/
     - name: Generate Summary
       run: |
-        echo "## 📊 Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Current Status (Week 4)" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ **Frontend:** 183/183 (100%)" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ **Backend Critical Path:** 36/36 authz.middleware (100%)" >> $GITHUB_STEP_SUMMARY
-        echo "- ⚡ **Performance:** authz.middleware 2.3s (was 193s, 99% faster)" >> $GITHUB_STEP_SUMMARY
+
+        # Extract backend coverage dynamically
+        if [ -f "backend-coverage/coverage-summary.json" ]; then
+          BE_LINES=$(cat backend-coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          BE_BRANCHES=$(cat backend-coverage/coverage-summary.json | jq -r '.total.branches.pct')
+          BE_FUNCTIONS=$(cat backend-coverage/coverage-summary.json | jq -r '.total.functions.pct')
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Lines: ${BE_LINES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Branches: ${BE_BRANCHES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Functions: ${BE_FUNCTIONS}%" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
+
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Coverage Reports" >> $GITHUB_STEP_SUMMARY
-        echo "Backend coverage report available in artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "Frontend coverage report available in artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Thresholds" >> $GITHUB_STEP_SUMMARY
-        echo "- Backend: 95% (excluding MongoDB integration tests)" >> $GITHUB_STEP_SUMMARY
-        echo "- Frontend: 100% ✅ **ACHIEVED**" >> $GITHUB_STEP_SUMMARY
+
+        # Extract frontend coverage dynamically
+        if [ -f "frontend-coverage/coverage-summary.json" ]; then
+          FE_LINES=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          FE_BRANCHES=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.branches.pct')
+          FE_FUNCTIONS=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.functions.pct')
+          echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Lines: ${FE_LINES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Branches: ${FE_BRANCHES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Functions: ${FE_FUNCTIONS}%" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
   performance-dashboard:
     name: Performance Dashboard
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [frontend-tests, backend-unit-tests, backend-integration-tests, backend-coverage, opa-tests, performance-tests, security-audit, docker-build]
+    needs: [frontend-tests, backend-unit-tests, backend-integration-tests, opa-tests, performance-tests, security-audit, docker-build]
     if: always()
     steps:
     - name: Generate Performance Dashboard
       run: |
-        echo "# 📈 CI/CD Performance Dashboard" >> $GITHUB_STEP_SUMMARY
+        echo "# CI/CD Performance Dashboard" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Run Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
-        echo "## ✅ Critical Path Status" >> $GITHUB_STEP_SUMMARY
+        echo "## Critical Path Status" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Component | Status | Tests | Performance |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----------|--------|-------|-------------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Frontend | ${{ needs.frontend-tests.result == 'success' && '✅' || '❌' }} | 183/183 (100%) | ~52s (baseline) |" >> $GITHUB_STEP_SUMMARY
-        echo "| Backend Unit Tests | ${{ needs.backend-unit-tests.result == 'success' && '✅' || contains(needs.backend-unit-tests.result, 'failure') && '⚠️' || '❓' }} | 1,643+ tests | Parallel job |" >> $GITHUB_STEP_SUMMARY
-        echo "| Backend Integration | ${{ needs.backend-integration-tests.result == 'success' && '✅' || contains(needs.backend-integration-tests.result, 'failure') && '⚠️' || '❓' }} | Integration tests | Parallel job |" >> $GITHUB_STEP_SUMMARY
-        echo "| Backend Coverage | ${{ needs.backend-coverage.result == 'success' && '✅' || contains(needs.backend-coverage.result, 'failure') && '⚠️' || '❓' }} | 95%+ coverage | Parallel job |" >> $GITHUB_STEP_SUMMARY
-        echo "| OPA Policies | ${{ needs.opa-tests.result == 'success' && '✅' || '❌' }} | All passing | ~5s (baseline) |" >> $GITHUB_STEP_SUMMARY
-        echo "| Security Audit | ${{ needs.security-audit.result == 'success' && '✅' || '❌' }} | Zero false positives | ~11s (baseline) |" >> $GITHUB_STEP_SUMMARY
-        echo "| Performance Tests | ${{ needs.performance-tests.result == 'success' && '✅' || '❌' }} | 8/8 (100%) | ~52s (baseline) |" >> $GITHUB_STEP_SUMMARY
-        echo "| Docker Builds | ${{ needs.docker-build.result == 'success' && '✅' || '❌' }} | 3 images | ~3m20s (baseline) |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        echo "## 🎯 Performance Baselines (Week 4 Day 3)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Metric | Current | Target | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------|---------|--------|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| authz.middleware runtime | 2.3s | <60s | ✅ **99% under target** |" >> $GITHUB_STEP_SUMMARY
-        echo "| Frontend tests | 52s | <120s | ✅ 57% under target |" >> $GITHUB_STEP_SUMMARY
-        echo "| OPA tests | 5s | <30s | ✅ 83% under target |" >> $GITHUB_STEP_SUMMARY
-        echo "| Performance tests | 52s | <120s | ✅ 57% under target |" >> $GITHUB_STEP_SUMMARY
-        echo "| Total CI time (critical) | ~5min | <8min | ✅ 37% under target |" >> $GITHUB_STEP_SUMMARY
-        echo "| Cache hit rate | 100% | >80% | ✅ **20% above target** |" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend Tests | ${{ needs.frontend-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend Unit + Coverage | ${{ needs.backend-unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend Integration | ${{ needs.backend-integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| OPA Policies | ${{ needs.opa-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security Audit | ${{ needs.security-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Performance Tests | ${{ needs.performance-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Builds | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
-        echo "## 📊 Performance Trends" >> $GITHUB_STEP_SUMMARY
+        echo "## Quick Actions" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Recent Improvements (Day 2 → Day 3):**" >> $GITHUB_STEP_SUMMARY
-        echo "- Frontend: 61s → 52s (**⬇️ 15% improvement**)" >> $GITHUB_STEP_SUMMARY
-        echo "- OPA: 8s → 5s (**⬇️ 38% improvement**)" >> $GITHUB_STEP_SUMMARY
-        echo "- Docker: 3m54s → 3m20s (**⬇️ 15% improvement**)" >> $GITHUB_STEP_SUMMARY
-        echo "- Cache: 100% hit rate (**maintained**)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        echo "## ⚠️ Known Deferred Items" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Backend Test Failures (41 tests - infrastructure dependencies):**" >> $GITHUB_STEP_SUMMARY
-        echo "- Certificate tests: 20 (missing cert files - Week 5)" >> $GITHUB_STEP_SUMMARY
-        echo "- MongoDB tests: 4 (auth/infrastructure - Week 5)" >> $GITHUB_STEP_SUMMARY
-        echo "- Logic/edge cases: 17 (96-76% passing - acceptable)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Note:** All failures documented and categorized. Critical path at 100%." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        echo "## 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        FAILURES=""
         if [[ "${{ needs.frontend-tests.result }}" != "success" ]]; then
-          echo "- ⚠️ **Frontend tests failed** - Review test logs" >> $GITHUB_STEP_SUMMARY
+          FAILURES="${FAILURES}- Frontend tests: ${{ needs.frontend-tests.result }}\n"
+        fi
+        if [[ "${{ needs.backend-unit-tests.result }}" != "success" ]]; then
+          FAILURES="${FAILURES}- Backend unit tests: ${{ needs.backend-unit-tests.result }}\n"
         fi
         if [[ "${{ needs.opa-tests.result }}" != "success" ]]; then
-          echo "- ⚠️ **OPA tests failed** - Review policy tests" >> $GITHUB_STEP_SUMMARY
+          FAILURES="${FAILURES}- OPA tests: ${{ needs.opa-tests.result }}\n"
         fi
         if [[ "${{ needs.security-audit.result }}" != "success" ]]; then
-          echo "- ⚠️ **Security audit failed** - Check for hardcoded secrets or npm vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          FAILURES="${FAILURES}- Security audit: ${{ needs.security-audit.result }}\n"
         fi
-        if [[ "${{ needs.performance-tests.result }}" != "success" ]]; then
-          echo "- ⚠️ **Performance tests failed** - Check latency/throughput targets" >> $GITHUB_STEP_SUMMARY
+        if [ -z "$FAILURES" ]; then
+          echo "All critical workflows passing - Ready to merge" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Failures detected:" >> $GITHUB_STEP_SUMMARY
+          echo -e "$FAILURES" >> $GITHUB_STEP_SUMMARY
         fi
-        if [[ "${{ needs.frontend-tests.result }}" == "success" && "${{ needs.opa-tests.result }}" == "success" && "${{ needs.security-audit.result }}" == "success" ]]; then
-          echo "- ✅ **All critical workflows passing** - Ready to merge" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "*Dashboard generated by Week 4 CI/CD optimization*" >> $GITHUB_STEP_SUMMARY
 permissions:
   contents: read
