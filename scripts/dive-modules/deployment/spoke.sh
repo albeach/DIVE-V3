@@ -152,6 +152,19 @@ module_spoke() {
             fi
             ;;
 
+        # === Parallel Multi-Spoke Deployment ===
+        deploy-all)
+            if [ -f "${SPOKE_DIR}/parallel-deploy.sh" ]; then
+                source "${SPOKE_DIR}/parallel-deploy.sh"
+            fi
+            if type -t spoke_parallel_deploy &>/dev/null; then
+                spoke_parallel_deploy "$@"
+            else
+                log_error "spoke_parallel_deploy not available - spoke/parallel-deploy.sh not loaded"
+                return 1
+            fi
+            ;;
+
         # === Deployment Operations ===
         deploy)
             # Check authorization before deployment
@@ -372,6 +385,7 @@ Usage: ./dive spoke <command> [args]
 
 Commands:
   deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)
+  deploy-all [CODES...]       Deploy multiple spokes in parallel (--all for all)
   authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)
   revoke <CODE>               Revoke a spoke's federation authorization
   prepare <CODE>              Generate config package on Hub (ECR-based remote)
@@ -402,6 +416,11 @@ Zero-Config Remote Deployment (fresh instance):
 
 ECR-Based Remote Deployment (AWS):
   ./dive --env dev spoke deploy GBR  # Auto: prepare → start → configure
+
+Parallel Multi-Spoke Deployment:
+  ./dive spoke deploy-all GBR FRA DEU   # Deploy 3 spokes concurrently
+  ./dive spoke deploy-all --all          # Deploy all provisioned spokes
+  ./dive spoke deploy-all --dry-run GBR  # Preview without deploying
 
 Local Spoke Deployment:
   ./dive spoke deploy ALB "Albania"  # Full local pipeline (build from source)
