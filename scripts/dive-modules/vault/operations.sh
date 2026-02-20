@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Vault Operations (PKI DR + Secret Seeding)
 # =============================================================================
@@ -311,8 +312,8 @@ module_vault_seed() {
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         # Extract AppRole credentials using grep (safe - doesn't execute corrupted env files)
         # CRITICAL FIX: Don't source .env.hub - it may contain error messages from previous runs
-        local vault_role_id=$(grep "^VAULT_ROLE_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
-        local vault_secret_id=$(grep "^VAULT_SECRET_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        local vault_role_id; vault_role_id=$(grep "^VAULT_ROLE_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        local vault_secret_id; vault_secret_id=$(grep "^VAULT_SECRET_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
 
         if [ -n "$vault_role_id" ] && [ -n "$vault_secret_id" ]; then
             # Authenticate with AppRole
@@ -476,11 +477,11 @@ module_vault_seed() {
     # ==========================================================================
     log_info "Seeding shared secrets..."
 
-    local keycloak_client_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local redis_blacklist_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local opal_master_token=$(openssl rand -hex 32)
-    local kas_signing_key=$(openssl rand -base64 32)
-    local kas_encryption_key=$(openssl rand -base64 32)
+    local keycloak_client_secret; keycloak_client_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local redis_blacklist_pw; redis_blacklist_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local opal_master_token; opal_master_token=$(openssl rand -hex 32)
+    local kas_signing_key; kas_signing_key=$(openssl rand -base64 32)
+    local kas_encryption_key; kas_encryption_key=$(openssl rand -base64 32)
 
     local shared_secrets=(
         "auth:shared/keycloak-client:{\"secret\":\"${keycloak_client_secret}\"}"
@@ -508,7 +509,6 @@ module_vault_seed() {
     # ==========================================================================
     # Federation secrets — skipped at seed time (created during vault provision)
     # ==========================================================================
-    local -a pairs=()
     log_verbose "Federation pairs are generated during spoke provisioning"
 
     # ==========================================================================
@@ -519,16 +519,16 @@ module_vault_seed() {
     # Sync hub secrets to .env.hub
     local hub_env="${DIVE_ROOT}/.env.hub"
     if [ -f "$hub_env" ]; then
-        local usa_pg=$(vault_get_secret "core" "usa/postgres" "password")
-        local usa_mongo=$(vault_get_secret "core" "usa/mongodb" "password")
-        local usa_redis=$(vault_get_secret "core" "usa/redis" "password")
-        local usa_kc=$(vault_get_secret "core" "usa/keycloak-admin" "password")
-        local usa_kc_db=$(vault_get_secret "core" "usa/keycloak-db" "password")
-        local usa_na_db=$(vault_get_secret "core" "usa/nextauth-db" "password")
-        local shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret")
-        local shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password")
-        local opal_token=$(vault_get_secret "opal" "master-token" "token")
-        local usa_auth=$(vault_get_secret "auth" "usa/nextauth" "secret")
+        local usa_pg; usa_pg=$(vault_get_secret "core" "usa/postgres" "password")
+        local usa_mongo; usa_mongo=$(vault_get_secret "core" "usa/mongodb" "password")
+        local usa_redis; usa_redis=$(vault_get_secret "core" "usa/redis" "password")
+        local usa_kc; usa_kc=$(vault_get_secret "core" "usa/keycloak-admin" "password")
+        local usa_kc_db; usa_kc_db=$(vault_get_secret "core" "usa/keycloak-db" "password")
+        local usa_na_db; usa_na_db=$(vault_get_secret "core" "usa/nextauth-db" "password")
+        local shared_client; shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret")
+        local shared_blacklist; shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password")
+        local opal_token; opal_token=$(vault_get_secret "opal" "master-token" "token")
+        local usa_auth; usa_auth=$(vault_get_secret "auth" "usa/nextauth" "secret")
 
         # Instance-scoped secrets
         _vault_update_env "$hub_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
@@ -603,7 +603,7 @@ _vault_update_env() {
     fi
 
     if grep -q "^${var_name}=" "$env_file" 2>/dev/null; then
-        local tmpfile=$(mktemp)
+        local tmpfile; tmpfile=$(mktemp)
         sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file" > "$tmpfile" && mv "$tmpfile" "$env_file"
     else
         echo "${var_name}=${var_value}" >> "$env_file"
@@ -616,7 +616,7 @@ _vault_update_env() {
 # Returns 0 if provisioned, 1 if not
 ##
 vault_spoke_is_provisioned() {
-    local code=$(lower "${1:?spoke code required}")
+    local code; code=$(lower "${1:?spoke code required}")
 
     # Check AppRole exists
     if ! vault read "auth/approle/role/spoke-${code}" >/dev/null 2>&1; then
