@@ -15,6 +15,17 @@ hub_pipeline_execute() {
 
     log_info "Starting Hub pipeline: $instance_code ($pipeline_mode mode)"
 
+    # Start deployment log capture
+    if ! type deployment_log_start &>/dev/null; then
+        local _logging="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-logging.sh"
+        [ -f "$_logging" ] && source "$_logging"
+    fi
+    if type deployment_log_start &>/dev/null; then
+        if deployment_log_start "hub" "$instance_code"; then
+            log_verbose "Deployment log: $(deployment_log_path)"
+        fi
+    fi
+
     # Handle resume mode
     local resume_mode=false
     if [ "$pipeline_mode" = "resume" ]; then
@@ -133,21 +144,25 @@ _hub_pipeline_execute_internal() {
     # Phase 1: Vault Bootstrap (start, init, setup, seed)
     # =========================================================================
     # Vault MUST be first — all other phases depend on secrets from Vault
-    local phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 1 "Vault bootstrap"
-    fi
+    if _hub_should_skip_phase "VAULT_BOOTSTRAP"; then
+        phase_times+=("Phase 1 (Vault Bootstrap): skipped")
+    else
+        local phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 1 "Vault bootstrap"
+        fi
 
-    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_BOOTSTRAP" "hub_phase_vault_bootstrap" "$pipeline_mode" "$resume_mode"; then
-        phase_result=1
-    fi
-
-    local phase_end=$(date +%s)
-    phase_times+=("Phase 1 (Vault Bootstrap): $((phase_end - phase_start))s")
-
-    if [ $phase_result -eq 0 ]; then
-        if ! _hub_check_threshold "$instance_code" "VAULT_BOOTSTRAP"; then
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_BOOTSTRAP" "hub_phase_vault_bootstrap" "$pipeline_mode" "$resume_mode"; then
             phase_result=1
+        fi
+
+        local phase_end=$(date +%s)
+        phase_times+=("Phase 1 (Vault Bootstrap): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "VAULT_BOOTSTRAP"; then
+                phase_result=1
+            fi
         fi
     fi
 
@@ -155,21 +170,25 @@ _hub_pipeline_execute_internal() {
     # Phase 2: Database Infrastructure (PostgreSQL + orchestration DB)
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 2 "Database infrastructure"
-        fi
+        if _hub_should_skip_phase "DATABASE_INIT"; then
+            phase_times+=("Phase 2 (Database Init): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 2 "Database infrastructure"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "DATABASE_INIT" "hub_phase_database_init" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 2 (Database Init): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "DATABASE_INIT"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "DATABASE_INIT" "hub_phase_database_init" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 2 (Database Init): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "DATABASE_INIT"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -197,21 +216,25 @@ _hub_pipeline_execute_internal() {
     # Phase 3: Preflight
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 3 "Preflight checks"
-        fi
+        if _hub_should_skip_phase "PREFLIGHT"; then
+            phase_times+=("Phase 3 (Preflight): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 3 "Preflight checks"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 3 (Preflight): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 3 (Preflight): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -220,21 +243,25 @@ _hub_pipeline_execute_internal() {
     # Phase 4: Initialization
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 4 "Initialization"
-        fi
+        if _hub_should_skip_phase "INITIALIZATION"; then
+            phase_times+=("Phase 4 (Initialization): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 4 "Initialization"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "INITIALIZATION" "hub_phase_initialization" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 4 (Initialization): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "INITIALIZATION"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "INITIALIZATION" "hub_phase_initialization" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 4 (Initialization): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "INITIALIZATION"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -243,21 +270,25 @@ _hub_pipeline_execute_internal() {
     # Phase 5: MongoDB Replica Set
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 5 "MongoDB replica set"
-        fi
+        if _hub_should_skip_phase "MONGODB_INIT"; then
+            phase_times+=("Phase 5 (MongoDB): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 5 "MongoDB replica set"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "MONGODB_INIT" "hub_phase_mongodb_init" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 5 (MongoDB): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "MONGODB_INIT"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "MONGODB_INIT" "hub_phase_mongodb_init" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 5 (MongoDB): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "MONGODB_INIT"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -269,31 +300,35 @@ _hub_pipeline_execute_internal() {
     # circuit breakers that capture output. Docker builds stream gigabytes
     # of layer data that must go directly to stdout/logs, not Bash variables.
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 6 "Building Docker images"
-        fi
+        if _hub_should_skip_phase "BUILD"; then
+            phase_times+=("Phase 6 (Build): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 6 "Building Docker images"
+            fi
 
-        # NOTE: State remains INITIALIZING during build
-        # State will transition to DEPLOYING at Phase 7 (Services)
+            # NOTE: State remains INITIALIZING during build
+            # State will transition to DEPLOYING at Phase 7 (Services)
 
-        # Build phase uses direct execution (no circuit breaker output capture)
-        if ! hub_phase_build "$instance_code" "$pipeline_mode"; then
-            phase_result=1
-            log_error "Docker image build failed"
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 6 (Build): $((phase_end - phase_start))s")
-
-        # Mark checkpoint manually (build phase doesn't use circuit breaker)
-        if [ $phase_result -eq 0 ] && type hub_checkpoint_mark_complete &>/dev/null; then
-            hub_checkpoint_mark_complete "BUILD" "$((phase_end - phase_start))"
-        fi
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "BUILD"; then
+            # Build phase uses direct execution (no circuit breaker output capture)
+            if ! hub_phase_build "$instance_code" "$pipeline_mode"; then
                 phase_result=1
+                log_error "Docker image build failed"
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 6 (Build): $((phase_end - phase_start))s")
+
+            # Mark checkpoint manually (build phase doesn't use circuit breaker)
+            if [ $phase_result -eq 0 ] && type hub_checkpoint_mark_complete &>/dev/null; then
+                hub_checkpoint_mark_complete "BUILD" "$((phase_end - phase_start))"
+            fi
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "BUILD"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -302,32 +337,36 @@ _hub_pipeline_execute_internal() {
     # Phase 7: Services
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 7 "Starting services"
-            progress_set_services 0 12
-        fi
+        if _hub_should_skip_phase "SERVICES"; then
+            phase_times+=("Phase 7 (Services): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 7 "Starting services"
+                progress_set_services 0 12
+            fi
 
-        # State transition: INITIALIZING → DEPLOYING
-        # (Infrastructure ready, now deploying services)
-        if type deployment_set_state &>/dev/null; then
-            deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"SERVICES\"}"
-        fi
+            # State transition: INITIALIZING → DEPLOYING
+            # (Infrastructure ready, now deploying services)
+            if type deployment_set_state &>/dev/null; then
+                deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"SERVICES\"}"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "SERVICES" "hub_phase_services" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        if type progress_set_services &>/dev/null; then
-            progress_set_services 12 12
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 7 (Services): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "SERVICES"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "SERVICES" "hub_phase_services" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            if type progress_set_services &>/dev/null; then
+                progress_set_services 12 12
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 7 (Services): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "SERVICES"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -337,43 +376,51 @@ _hub_pipeline_execute_internal() {
     # =========================================================================
     # Non-fatal: if this fails, backend falls back to static credentials
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 8 "Vault database engine"
+        if _hub_should_skip_phase "VAULT_DB_ENGINE"; then
+            phase_times+=("Phase 8 (Vault DB Engine): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 8 "Vault database engine"
+            fi
+
+            _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_DB_ENGINE" "hub_phase_vault_db_engine" "$pipeline_mode" "$resume_mode" || \
+                log_warn "Vault database engine setup failed — backend will use static credentials"
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 8 (Vault DB Engine): $((phase_end - phase_start))s")
         fi
-
-        _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_DB_ENGINE" "hub_phase_vault_db_engine" "$pipeline_mode" "$resume_mode" || \
-            log_warn "Vault database engine setup failed — backend will use static credentials"
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 8 (Vault DB Engine): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
     # Phase 9: Keycloak Configuration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 9 "Keycloak configuration"
-        fi
+        if _hub_should_skip_phase "KEYCLOAK_CONFIG"; then
+            phase_times+=("Phase 9 (Keycloak): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 9 "Keycloak configuration"
+            fi
 
-        # State transition: DEPLOYING → CONFIGURING
-        # (Services deployed, now configuring Keycloak realm)
-        if type deployment_set_state &>/dev/null; then
-            deployment_set_state "$instance_code" "CONFIGURING" "" "{\"phase\":\"KEYCLOAK_CONFIG\"}"
-        fi
+            # State transition: DEPLOYING → CONFIGURING
+            # (Services deployed, now configuring Keycloak realm)
+            if type deployment_set_state &>/dev/null; then
+                deployment_set_state "$instance_code" "CONFIGURING" "" "{\"phase\":\"KEYCLOAK_CONFIG\"}"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "KEYCLOAK_CONFIG" "hub_phase_keycloak_config" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 9 (Keycloak): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "KEYCLOAK_CONFIG"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "KEYCLOAK_CONFIG" "hub_phase_keycloak_config" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 9 (Keycloak): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "KEYCLOAK_CONFIG"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -382,24 +429,28 @@ _hub_pipeline_execute_internal() {
     # Phase 10: Realm Verification
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
+        if _hub_should_skip_phase "REALM_VERIFY"; then
+            phase_times+=("Phase 10 (Realm Verify): skipped")
+        else
+            phase_start=$(date +%s)
 
-        # State transition: CONFIGURING → VERIFYING
-        # (Keycloak realm configuration complete, now verifying it works)
-        if type deployment_set_state &>/dev/null; then
-            deployment_set_state "$instance_code" "VERIFYING" "" "{\"phase\":\"REALM_VERIFY\"}"
-        fi
+            # State transition: CONFIGURING → VERIFYING
+            # (Keycloak realm configuration complete, now verifying it works)
+            if type deployment_set_state &>/dev/null; then
+                deployment_set_state "$instance_code" "VERIFYING" "" "{\"phase\":\"REALM_VERIFY\"}"
+            fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "REALM_VERIFY" "hub_phase_realm_verify" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 10 (Realm Verify): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "REALM_VERIFY"; then
+            if ! _hub_run_phase_with_circuit_breaker "$instance_code" "REALM_VERIFY" "hub_phase_realm_verify" "$pipeline_mode" "$resume_mode"; then
                 phase_result=1
+            fi
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 10 (Realm Verify): $((phase_end - phase_start))s")
+
+            if [ $phase_result -eq 0 ]; then
+                if ! _hub_check_threshold "$instance_code" "REALM_VERIFY"; then
+                    phase_result=1
+                fi
             fi
         fi
     fi
@@ -408,48 +459,60 @@ _hub_pipeline_execute_internal() {
     # Phase 11: KAS Registration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
+        if _hub_should_skip_phase "KAS_REGISTER"; then
+            phase_times+=("Phase 11 (KAS Register): skipped")
+        else
+            phase_start=$(date +%s)
 
-        # KAS registration is non-fatal
-        _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_REGISTER" "hub_phase_kas_register" "$pipeline_mode" "$resume_mode" || \
-            log_warn "Hub KAS registration failed - KAS decryption may not work"
+            # KAS registration is non-fatal
+            _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_REGISTER" "hub_phase_kas_register" "$pipeline_mode" "$resume_mode" || \
+                log_warn "Hub KAS registration failed - KAS decryption may not work"
 
-        phase_end=$(date +%s)
-        phase_times+=("Phase 11 (KAS Register): $((phase_end - phase_start))s")
+            phase_end=$(date +%s)
+            phase_times+=("Phase 11 (KAS Register): $((phase_end - phase_start))s")
+        fi
     fi
 
     # =========================================================================
     # Phase 12: Seeding
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 12 "Database seeding"
+        if _hub_should_skip_phase "SEEDING"; then
+            phase_times+=("Phase 12 (Seeding): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 12 "Database seeding"
+            fi
+
+            # Seeding is non-fatal
+            _hub_run_phase_with_circuit_breaker "$instance_code" "SEEDING" "hub_phase_seeding" "$pipeline_mode" "$resume_mode" || \
+                log_warn "Database seeding failed - can be done manually: ./dive hub seed"
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 12 (Seeding): $((phase_end - phase_start))s")
         fi
-
-        # Seeding is non-fatal
-        _hub_run_phase_with_circuit_breaker "$instance_code" "SEEDING" "hub_phase_seeding" "$pipeline_mode" "$resume_mode" || \
-            log_warn "Database seeding failed - can be done manually: ./dive hub seed"
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 12 (Seeding): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
     # Phase 13: KAS Initialization
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 13 "KAS initialization"
+        if _hub_should_skip_phase "KAS_INIT"; then
+            phase_times+=("Phase 13 (KAS Init): skipped")
+        else
+            phase_start=$(date +%s)
+            if type progress_set_phase &>/dev/null; then
+                progress_set_phase 13 "KAS initialization"
+            fi
+
+            # KAS init is non-fatal
+            _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_INIT" "hub_phase_kas_init" "$pipeline_mode" "$resume_mode" || \
+                log_warn "KAS initialization had issues"
+
+            phase_end=$(date +%s)
+            phase_times+=("Phase 13 (KAS Init): $((phase_end - phase_start))s")
         fi
-
-        # KAS init is non-fatal
-        _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_INIT" "hub_phase_kas_init" "$pipeline_mode" "$resume_mode" || \
-            log_warn "KAS initialization had issues"
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 13 (KAS Init): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
@@ -485,6 +548,18 @@ _hub_pipeline_execute_internal() {
             deployment_post_summary "hub" "$instance_code" "$duration"
         fi
 
+        # Show log file location
+        if type deployment_log_path &>/dev/null; then
+            local _log
+            _log=$(deployment_log_path)
+            [ -n "$_log" ] && log_info "Full deployment log: $_log"
+        fi
+
+        # Finalize log file
+        if type deployment_log_stop &>/dev/null; then
+            deployment_log_stop 0 "$duration"
+        fi
+
         return 0
     else
         # Mark failed
@@ -504,6 +579,18 @@ _hub_pipeline_execute_internal() {
         fi
 
         deployment_print_failure "$instance_code" "Hub" "$duration" "hub"
+
+        # Show log file location
+        if type deployment_log_path &>/dev/null; then
+            local _log
+            _log=$(deployment_log_path)
+            [ -n "$_log" ] && log_info "Full deployment log: $_log"
+        fi
+
+        # Finalize log file
+        if type deployment_log_stop &>/dev/null; then
+            deployment_log_stop 1 "$duration"
+        fi
 
         return 1
     fi
@@ -640,6 +727,42 @@ _hub_check_threshold() {
 }
 
 ##
+# Check if a phase should be skipped based on DIVE_SKIP_PHASES or DIVE_ONLY_PHASE
+#
+# Arguments:
+#   $1 - Phase name (e.g., VAULT_BOOTSTRAP, SEEDING)
+#
+# Returns:
+#   0 - Phase should be skipped
+#   1 - Phase should run
+##
+_hub_should_skip_phase() {
+    local phase_name="$1"
+
+    # --only-phase: if set, skip everything except the specified phase
+    if [ -n "${DIVE_ONLY_PHASE:-}" ]; then
+        if [ "$phase_name" != "$DIVE_ONLY_PHASE" ]; then
+            log_info "Skipping $phase_name (--only-phase ${DIVE_ONLY_PHASE})"
+            return 0
+        fi
+        return 1
+    fi
+
+    # --skip-phase: check if this phase is in the skip list
+    if [ -n "${DIVE_SKIP_PHASES:-}" ]; then
+        local skip_phase
+        for skip_phase in ${DIVE_SKIP_PHASES}; do
+            if [ "$skip_phase" = "$phase_name" ]; then
+                log_info "Skipping $phase_name (--skip-phase)"
+                return 0
+            fi
+        done
+    fi
+
+    return 1
+}
+
+##
 # Print performance summary
 ##
 _hub_print_performance_summary() {
@@ -676,10 +799,14 @@ _hub_print_performance_summary() {
 # Uses orchestrated pipeline with circuit breakers and checkpoints
 #
 # Arguments:
-#   --resume    Resume from last checkpoint
+#   --resume              Resume from last checkpoint
+#   --skip-phase PHASE    Skip specified phase (can be repeated)
+#   --only-phase PHASE    Run only the specified phase
 ##
 hub_deploy() {
     local resume_mode=false
+    export DIVE_SKIP_PHASES=""
+    export DIVE_ONLY_PHASE=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -688,11 +815,47 @@ hub_deploy() {
                 resume_mode=true
                 shift
                 ;;
+            --skip-phase)
+                if [ -n "${2:-}" ]; then
+                    local phase_upper
+                    phase_upper=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+                    DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+$DIVE_SKIP_PHASES }${phase_upper}"
+                    shift 2
+                else
+                    log_error "--skip-phase requires a phase name"
+                    log_info "Valid phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
+                    return 1
+                fi
+                ;;
+            --only-phase)
+                if [ -n "${2:-}" ]; then
+                    DIVE_ONLY_PHASE=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+                    shift 2
+                else
+                    log_error "--only-phase requires a phase name"
+                    log_info "Valid phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
+                    return 1
+                fi
+                ;;
             *)
                 shift
                 ;;
         esac
     done
+
+    # Validate: --skip-phase and --only-phase are mutually exclusive
+    if [ -n "$DIVE_SKIP_PHASES" ] && [ -n "$DIVE_ONLY_PHASE" ]; then
+        log_error "--skip-phase and --only-phase are mutually exclusive"
+        return 1
+    fi
+
+    # Log phase control flags
+    if [ -n "$DIVE_SKIP_PHASES" ]; then
+        log_info "Skipping phases: $DIVE_SKIP_PHASES"
+    fi
+    if [ -n "$DIVE_ONLY_PHASE" ]; then
+        log_info "Running only phase: $DIVE_ONLY_PHASE"
+    fi
 
     # Execute orchestrated pipeline
     if ! type hub_pipeline_execute &>/dev/null; then
