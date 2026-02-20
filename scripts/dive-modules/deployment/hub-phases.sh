@@ -456,42 +456,6 @@ BOOTSTRAP_EOF
     fi
     log_success "Vault healthy"
 
-    # Wait for Raft leader election (required after container restart/recreation)
-    # Docker health check passes before Raft cluster elects a leader, which causes
-    # "local node not active but active cluster node not found" errors.
-    if [ "$vault_profile" = "vault-ha" ]; then
-        log_info "Waiting for Vault Raft leader election..."
-        local leader_elected=false
-        local leader_wait=0
-        local leader_timeout=60  # Total timeout: 60s (two 30s rounds)
-
-        while [ $leader_wait -lt $leader_timeout ]; do
-            if VAULT_SKIP_VERIFY=1 vault status 2>/dev/null | grep -q "HA Mode.*active"; then
-                log_success "Vault Raft leader elected (${leader_wait}s)"
-                leader_elected=true
-                break
-            fi
-
-            # At the halfway mark, log a warning so operators know it's slow
-            if [ $leader_wait -eq 30 ]; then
-                log_warn "Vault leader not elected after 30s — retrying (timeout: ${leader_timeout}s)..."
-            fi
-
-            sleep 2
-            leader_wait=$((leader_wait + 2))
-        done
-
-        if [ "$leader_elected" = false ]; then
-            log_error "Vault Raft leader election failed after ${leader_timeout}s"
-            log_error "Diagnostics:"
-            log_error "  vault status:  $(VAULT_SKIP_VERIFY=1 vault status 2>&1 | head -5)"
-            log_error "  vault-1 logs:  docker logs dive-hub-vault-1 --tail 20"
-            log_error "  vault-2 logs:  docker logs dive-hub-vault-2 --tail 20"
-            log_error "  vault-3 logs:  docker logs dive-hub-vault-3 --tail 20"
-            return 1
-        fi
-    fi
-
     fi  # end: vault_already_running=false
 
     # -------------------------------------------------------------------------
@@ -539,6 +503,45 @@ BOOTSTRAP_EOF
         log_error "Vault is sealed after init — Transit auto-unseal may have failed"
         log_info "Check seal vault: docker logs ${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
         return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 3b: Wait for Raft leader election (HA mode only)
+    # -------------------------------------------------------------------------
+    # This MUST happen AFTER initialization + auto-unseal. An uninitialized
+    # Vault cluster cannot elect a Raft leader — init bootstraps the Raft
+    # storage, Transit auto-unseal unseals the nodes, and only then can
+    # leader election proceed.
+    if [ "$vault_profile" = "vault-ha" ]; then
+        log_info "Waiting for Vault Raft leader election..."
+        local leader_elected=false
+        local leader_wait=0
+        local leader_timeout=60
+
+        while [ $leader_wait -lt $leader_timeout ]; do
+            if VAULT_SKIP_VERIFY=1 vault status 2>/dev/null | grep -q "HA Mode.*active"; then
+                log_success "Vault Raft leader elected (${leader_wait}s)"
+                leader_elected=true
+                break
+            fi
+
+            if [ $leader_wait -eq 30 ]; then
+                log_warn "Vault leader not elected after 30s — retrying (timeout: ${leader_timeout}s)..."
+            fi
+
+            sleep 2
+            leader_wait=$((leader_wait + 2))
+        done
+
+        if [ "$leader_elected" = false ]; then
+            log_error "Vault Raft leader election failed after ${leader_timeout}s"
+            log_error "Diagnostics:"
+            log_error "  vault status:  $(VAULT_SKIP_VERIFY=1 vault status 2>&1 | head -5)"
+            log_error "  vault-1 logs:  docker logs ${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1 --tail 20"
+            log_error "  vault-2 logs:  docker logs ${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2 --tail 20"
+            log_error "  vault-3 logs:  docker logs ${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3 --tail 20"
+            return 1
+        fi
     fi
 
     # -------------------------------------------------------------------------
