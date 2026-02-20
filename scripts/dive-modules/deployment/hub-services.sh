@@ -628,7 +628,8 @@ hub_configure_keycloak() {
 _hub_ensure_amr_mapper_exists() {
     local realm="dive-v3-broker-usa"
     local client_id="dive-v3-broker-usa"
-    local keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+    local keycloak_url
+    keycloak_url=$(resolve_hub_public_url "idp")
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
     if [ -z "$admin_pass" ]; then
@@ -729,7 +730,8 @@ _hub_ensure_amr_mapper_exists() {
 ##
 hub_verify_realm() {
     local realm="dive-v3-broker-usa"
-    local keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+    local keycloak_url
+    keycloak_url=$(resolve_hub_public_url "idp")
     local max_retries=10
     local retry_delay=3
 
