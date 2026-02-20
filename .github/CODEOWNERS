@@ -1,0 +1,26 @@
+# DIVE V3 Code Owners
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for all files
+* @albeach
+
+# CI/CD and workflow changes require review
+.github/ @albeach
+
+# Backend service
+backend/ @albeach
+
+# Frontend application
+frontend/ @albeach
+
+# OPA/Rego policies
+policies/ @albeach
+
+# Infrastructure as code
+terraform/ @albeach
+
+# Deployment scripts
+scripts/ @albeach
+
+# Kubernetes manifests
+k8s/ @albeach
