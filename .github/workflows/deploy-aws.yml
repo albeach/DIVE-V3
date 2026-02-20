@@ -12,24 +12,17 @@
 # =============================================================================
 
 name: Deploy to AWS
-
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'keycloak/**'
-      - 'kas/**'
-      - 'policies/**'
-      - 'docker-compose*.yml'
-      - 'scripts/**'
-      - 'terraform/aws-*/**'
-      - 'terraform/modules/aws-*/**'
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
+      target_env:
+        description: 'Target environment (normalized input)'
+        required: false
+        default: dev
+        type: choice
+        options:
+          - dev
+          - staging
       environment:
         description: 'Target environment'
         required: true
@@ -43,46 +36,54 @@ on:
         required: false
         default: ''
         type: string
-
+      dry_run:
+        description: 'Dry run (no remote deploy changes)'
+        required: false
+        default: false
+        type: boolean
+      force:
+        description: 'Force deployment'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Deployment reason'
+        required: false
+        default: 'Manual deployment'
+        type: string
 env:
   AWS_REGION: us-gov-east-1
   ECR_PREFIX: dive-v3
   TERRAFORM_VERSION: '1.13.4'
-
 # Only one deployment at a time per environment
 concurrency:
-  group: deploy-aws-${{ github.event.inputs.environment || (github.event_name == 'release' && 'staging' || 'dev') }}
+  group: deploy-aws-${{ github.event.inputs.target_env || github.event.inputs.environment || 'dev' }}
   cancel-in-progress: false
-
 jobs:
   # ===========================================================================
   # Determine target environment
   # ===========================================================================
   setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       deploy_hub: ${{ steps.env.outputs.deploy_hub }}
       spoke_codes: ${{ steps.env.outputs.spoke_codes }}
       spoke_matrix: ${{ steps.env.outputs.spoke_matrix }}
+      dry_run: ${{ steps.env.outputs.dry_run }}
     steps:
       - name: Determine environment
         id: env
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            ENVIRONMENT="staging"
-            SPOKE_CODES="GBR,FRA,DEU,NZL"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ENVIRONMENT="${{ github.event.inputs.environment }}"
-            SPOKE_CODES="${{ github.event.inputs.deploy_spokes }}"
-          else
-            ENVIRONMENT="dev"
-            SPOKE_CODES="GBR,FRA"
-          fi
+          ENVIRONMENT="${{ github.event.inputs.target_env || github.event.inputs.environment || 'dev' }}"
+          SPOKE_CODES="${{ github.event.inputs.deploy_spokes }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
 
           echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
           echo "deploy_hub=true" >> $GITHUB_OUTPUT
           echo "spoke_codes=${SPOKE_CODES}" >> $GITHUB_OUTPUT
+          echo "dry_run=${DRY_RUN}" >> $GITHUB_OUTPUT
 
           # Build JSON array for matrix strategy
           if [ -n "$SPOKE_CODES" ]; then
@@ -91,30 +92,30 @@ jobs:
             SPOKE_MATRIX="[]"
           fi
           echo "spoke_matrix=${SPOKE_MATRIX}" >> $GITHUB_OUTPUT
-
   # ===========================================================================
   # Test Suite
   # ===========================================================================
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: setup
     strategy:
       fail-fast: false
       matrix:
         suite: [backend, frontend, opa]
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - name: Setup Node.js
         if: matrix.suite != 'opa'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-
       - name: Backend tests
         if: matrix.suite == 'backend'
         working-directory: backend
@@ -122,7 +123,6 @@ jobs:
           npm ci
           npm run build
           npm test -- --forceExit --detectOpenHandles
-
       - name: Frontend lint & build
         if: matrix.suite == 'frontend'
         working-directory: frontend
@@ -130,19 +130,18 @@ jobs:
           npm ci
           npm run lint
           npm run build
-
       - name: OPA policy tests
         if: matrix.suite == 'opa'
         run: |
           curl -L -o /tmp/opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
           chmod +x /tmp/opa
           /tmp/opa test policies/ -v
-
   # ===========================================================================
   # Build & Push Docker Images to ECR
   # ===========================================================================
   build-images:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [setup, test]
     permissions:
       id-token: write
@@ -150,25 +149,23 @@ jobs:
     env:
       ENVIRONMENT: ${{ needs.setup.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          persist-credentials: false
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: dive-v3-build-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Login to ECR
         id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
       - name: Set image tag
         id: tag
         run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
       - name: Build & push backend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: backend
           file: backend/Dockerfile.prod
@@ -176,9 +173,8 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-backend:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-backend:latest
-
       - name: Build & push frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: frontend
           file: frontend/Dockerfile.prod.optimized
@@ -186,27 +182,24 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-frontend:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-frontend:latest
-
       - name: Build & push keycloak
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: keycloak
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-keycloak:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-keycloak:latest
-
       - name: Build & push KAS
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: kas
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:latest
-
       - name: Build & push OPAL Server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: docker
           file: docker/opal-server.Dockerfile
@@ -214,9 +207,8 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-server:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-server:latest
-
       - name: Build & push OPAL Client
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: docker
           file: docker/opal-client.Dockerfile
@@ -224,36 +216,38 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-client:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-client:latest
-
       - name: Build & push Caddy
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: docker/caddy
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-caddy:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-caddy:latest
-
   # ===========================================================================
   # Deploy Hub
   # ===========================================================================
   deploy-hub:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [setup, build-images]
-    if: needs.setup.outputs.deploy_hub == 'true'
+    if: needs.setup.outputs.deploy_hub == 'true' && needs.setup.outputs.dry_run != 'true'
+    permissions:
+      id-token: write
+      contents: read
     environment: ${{ needs.setup.outputs.environment }}
     env:
       ENVIRONMENT: ${{ needs.setup.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          persist-credentials: false
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: dive-v3-deploy-hub-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Discover hub instance
         id: hub
         run: |
@@ -265,9 +259,8 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           echo "ip=$HUB_IP" >> $GITHUB_OUTPUT
-
       - name: Deploy to hub EC2
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         with:
           host: ${{ steps.hub.outputs.ip }}
           username: ec2-user
@@ -275,13 +268,12 @@ jobs:
           script_stop: true
           script: |
             cd /opt/dive-v3
-            git fetch origin && git reset --hard origin/main
+            git fetch origin && git checkout ${{ github.sha }}
             export ENVIRONMENT=local
             export SECRETS_PROVIDER=aws
             ./dive hub deploy
-
       - name: Verify hub health
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         with:
           host: ${{ steps.hub.outputs.ip }}
           username: ec2-user
@@ -289,14 +281,17 @@ jobs:
           script: |
             cd /opt/dive-v3
             ./dive verify hub
-
   # ===========================================================================
   # Deploy Spokes (matrix)
   # ===========================================================================
   deploy-spokes:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [setup, deploy-hub]
-    if: needs.setup.outputs.spoke_codes != ''
+    if: needs.setup.outputs.spoke_codes != '' && needs.setup.outputs.dry_run != 'true'
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -305,15 +300,15 @@ jobs:
     env:
       ENVIRONMENT: ${{ needs.setup.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          persist-credentials: false
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: dive-v3-deploy-spokes-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Discover spoke instance
         id: spoke
         run: |
@@ -326,9 +321,8 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           echo "ip=$SPOKE_IP" >> $GITHUB_OUTPUT
-
       - name: Deploy spoke ${{ matrix.spoke }}
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         with:
           host: ${{ steps.spoke.outputs.ip }}
           username: ec2-user
@@ -336,13 +330,12 @@ jobs:
           script_stop: true
           script: |
             cd /opt/dive-v3
-            git fetch origin && git reset --hard origin/main
+            git fetch origin && git checkout ${{ github.sha }}
             export ENVIRONMENT=local
             export SECRETS_PROVIDER=aws
             ./dive spoke deploy ${{ matrix.spoke }}
-
       - name: Verify spoke ${{ matrix.spoke }}
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         with:
           host: ${{ steps.spoke.outputs.ip }}
           username: ec2-user
@@ -350,12 +343,12 @@ jobs:
           script: |
             cd /opt/dive-v3
             ./dive --instance ${{ matrix.spoke }} verify spoke
-
   # ===========================================================================
   # Post-Deployment Notification
   # ===========================================================================
   notify:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [setup, deploy-hub, deploy-spokes]
     if: always()
     steps:
@@ -364,7 +357,11 @@ jobs:
           echo "## DIVE V3 AWS Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run:** ${{ needs.setup.outputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reason:** ${{ github.event.inputs.reason || 'Manual deployment' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Hub:** ${{ needs.deploy-hub.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Spokes:** ${{ needs.deploy-spokes.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by:** ${{ github.actor }} via ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+permissions:
+  contents: read

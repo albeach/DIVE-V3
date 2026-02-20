@@ -1,0 +1,53 @@
+name: Reusable Terraform Validation
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        description: Terraform version to use
+        required: false
+        type: string
+        default: "1.13.4"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reusable-terraform-validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-validate:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: Validate Root Configuration
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Module Configurations
+        run: |
+          while IFS= read -r dir; do
+            echo "Validating ${dir}"
+            (
+              cd "${dir}"
+              terraform init -backend=false
+              terraform validate
+            )
+          done < <(find terraform/modules -mindepth 1 -maxdepth 1 -type d | sort)

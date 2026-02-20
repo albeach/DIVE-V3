@@ -2,315 +2,224 @@ name: Policy Drift Detection
 
 on:
   schedule:
-    # Run every 6 hours
     - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
-      force_check:
-        description: 'Force drift check even if recently run'
-        required: false
-        default: 'false'
-        type: boolean
       alert_on_drift:
-        description: 'Send alerts if drift detected'
+        description: 'Create or update a GitHub issue when drift is detected'
         required: false
-        default: 'true'
+        default: true
         type: boolean
+      update_baseline:
+        description: 'Generate a baseline update artifact (no automatic commit)'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Execution reason'
+        required: false
+        default: 'Scheduled drift check'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-drift-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  OPA_VERSION: '0.68.0'
+  OPA_VERSION: '1.12.3'
   NODE_VERSION: '20'
 
 jobs:
-  # ============================================
-  # Stage 1: Capture Current State
-  # ============================================
   capture-state:
-    name: Capture Running Policy State
+    name: Capture Policy State
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 20
     outputs:
-      has_drift: ${{ steps.drift-check.outputs.has_drift }}
-      drift_summary: ${{ steps.drift-check.outputs.drift_summary }}
-
+      has_drift: ${{ steps.drift.outputs.has_drift }}
+      drift_summary: ${{ steps.drift.outputs.drift_summary }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: 'package.json'
 
       - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
         with:
           version: ${{ env.OPA_VERSION }}
 
-      - name: Install Dependencies
+      - name: Install drift dependencies
         run: |
-          npm install typescript ts-node @types/node --save-dev
-          npm install axios glob --save
+          npm install --no-save typescript ts-node axios glob
 
-      - name: Capture Source Policy State
-        id: source-state
+      - name: Capture source policy state
+        id: source
         run: |
-          echo "📸 Capturing source policy state..."
+          set -euo pipefail
 
-          # Count policy files
-          POLICY_COUNT=$(find policies -name "*.rego" -type f | wc -l | tr -d ' ')
-          echo "policy_count=${POLICY_COUNT}" >> $GITHUB_OUTPUT
-
-          # Generate policy checksums
-          find policies -name "*.rego" -type f -exec sha256sum {} \; | sort > source-checksums.txt
-
-          # Calculate overall hash
+          POLICY_COUNT=$(find policies -name '*.rego' -type f | wc -l | tr -d ' ')
+          find policies -name '*.rego' -type f -exec sha256sum {} \; | sort > source-checksums.txt
           OVERALL_HASH=$(sha256sum source-checksums.txt | awk '{print $1}')
-          echo "overall_hash=${OVERALL_HASH}" >> $GITHUB_OUTPUT
+          POLICY_COMMIT=$(git log -1 --format='%H' -- policies/)
 
-          # Get latest commit for policies
-          POLICY_COMMIT=$(git log -1 --format="%H" -- policies/)
-          echo "policy_commit=${POLICY_COMMIT}" >> $GITHUB_OUTPUT
+          echo "policy_count=${POLICY_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "overall_hash=${OVERALL_HASH}" >> "$GITHUB_OUTPUT"
+          echo "policy_commit=${POLICY_COMMIT}" >> "$GITHUB_OUTPUT"
 
-          echo "📊 Source state captured:"
-          echo "   Policy files: ${POLICY_COUNT}"
-          echo "   Overall hash: ${OVERALL_HASH}"
-          echo "   Last policy commit: ${POLICY_COMMIT}"
+      - name: Build tenant bundles
+        run: npx ts-node --esm scripts/policy/build-tenant-bundle.ts build --all
 
-      - name: Build Tenant Bundles
+      - name: Run policy tests
+        run: opa test policies/ -v --coverage --format=json > test-results.json
+
+      - name: Evaluate drift
+        id: drift
         run: |
-          echo "📦 Building tenant bundles for comparison..."
-          npx ts-node --esm scripts/policy/build-tenant-bundle.ts build --all
+          set -euo pipefail
 
-      - name: Run Policy Tests
-        run: |
-          echo "🧪 Running policy tests..."
-          opa test policies/ -v --coverage --format=json > test-results.json || true
+          HAS_DRIFT=false
+          DRIFT_SUMMARY=''
 
-          # Extract key metrics
-          PASS_COUNT=$(jq 'length' test-results.json 2>/dev/null || echo "0")
-          echo "✅ ${PASS_COUNT} tests executed"
+          if [ -f 'policies/baselines/policy-baseline.json' ]; then
+            STORED_HASH=$(jq -r '.source.hash // ""' policies/baselines/policy-baseline.json)
+            CURRENT_HASH='${{ steps.source.outputs.overall_hash }}'
 
-      - name: Generate Drift Report
-        id: drift-check
-        run: |
-          echo "🔍 Checking for policy drift..."
+            if [ -n "$STORED_HASH" ] && [ "$STORED_HASH" != "$CURRENT_HASH" ]; then
+              HAS_DRIFT=true
+              DRIFT_SUMMARY="Policy hash changed from ${STORED_HASH:0:12} to ${CURRENT_HASH:0:12}"
+            else
+              DRIFT_SUMMARY='No drift detected against baseline hash'
+            fi
+          else
+            HAS_DRIFT=true
+            DRIFT_SUMMARY='No baseline file exists; baseline initialization required'
+          fi
 
-          # Create drift report
-          cat > drift-report.json << EOF
+          cat > drift-report.json <<REPORT
           {
             "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
             "source": {
-              "commit": "${{ steps.source-state.outputs.policy_commit }}",
-              "hash": "${{ steps.source-state.outputs.overall_hash }}",
-              "policy_count": ${{ steps.source-state.outputs.policy_count }}
+              "commit": "${{ steps.source.outputs.policy_commit }}",
+              "hash": "${{ steps.source.outputs.overall_hash }}",
+              "policy_count": ${{ steps.source.outputs.policy_count }}
             },
-            "bundles": {
-              "usa": $(test -f dist/bundles/usa/manifest.json && cat dist/bundles/usa/manifest.json || echo "null"),
-              "fra": $(test -f dist/bundles/fra/manifest.json && cat dist/bundles/fra/manifest.json || echo "null"),
-              "gbr": $(test -f dist/bundles/gbr/manifest.json && cat dist/bundles/gbr/manifest.json || echo "null"),
-              "deu": $(test -f dist/bundles/deu/manifest.json && cat dist/bundles/deu/manifest.json || echo "null")
+            "drift": {
+              "has_drift": ${HAS_DRIFT},
+              "summary": "${DRIFT_SUMMARY}"
             },
-            "test_results": $(cat test-results.json 2>/dev/null || echo "[]"),
-            "status": "captured"
+            "reason": "${{ inputs.reason || 'Scheduled drift check' }}"
           }
-          EOF
+          REPORT
 
-          # Check for drift indicators
-          # Note: In production, this would compare against deployed OPA instances
-          HAS_DRIFT="false"
-          DRIFT_SUMMARY=""
+          echo "has_drift=${HAS_DRIFT}" >> "$GITHUB_OUTPUT"
+          echo "drift_summary=${DRIFT_SUMMARY}" >> "$GITHUB_OUTPUT"
 
-          # Check if stored baseline exists
-          if [ -f "policies/baselines/policy-baseline.json" ]; then
-            STORED_HASH=$(jq -r '.source.hash // ""' policies/baselines/policy-baseline.json)
-            CURRENT_HASH="${{ steps.source-state.outputs.overall_hash }}"
-
-            if [ "${STORED_HASH}" != "${CURRENT_HASH}" ] && [ -n "${STORED_HASH}" ]; then
-              HAS_DRIFT="true"
-              DRIFT_SUMMARY="Policy hash changed from ${STORED_HASH:0:12} to ${CURRENT_HASH:0:12}"
-            fi
-          else
-            DRIFT_SUMMARY="No baseline found - creating initial baseline"
-          fi
-
-          echo "has_drift=${HAS_DRIFT}" >> $GITHUB_OUTPUT
-          echo "drift_summary=${DRIFT_SUMMARY}" >> $GITHUB_OUTPUT
-
-          echo "📋 Drift check result: ${HAS_DRIFT}"
-          if [ -n "${DRIFT_SUMMARY}" ]; then
-            echo "   ${DRIFT_SUMMARY}"
-          fi
-
-      - name: Upload Drift Report
-        uses: actions/upload-artifact@v4
+      - name: Upload drift artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: drift-report-${{ github.run_number }}
+          name: policy-drift-${{ github.run_number }}
           path: |
             drift-report.json
             source-checksums.txt
             test-results.json
           retention-days: 30
 
-  # ============================================
-  # Stage 2: Alert on Drift (if detected)
-  # ============================================
   alert:
-    name: Send Drift Alerts
+    name: Alert on Drift
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: capture-state
-    if: needs.capture-state.outputs.has_drift == 'true' && (github.event.inputs.alert_on_drift != 'false')
-
+    if: needs.capture-state.outputs.has_drift == 'true' && (github.event_name == 'schedule' || inputs.alert_on_drift == true)
+    permissions:
+      contents: read
+      issues: write
     steps:
-      - name: Download Drift Report
-        uses: actions/download-artifact@v4
+      - name: Download drift report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: drift-report-${{ github.run_number }}
+          name: policy-drift-${{ github.run_number }}
 
-      - name: Create GitHub Issue
-        uses: actions/github-script@v7
+      - name: Create or update drift issue
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
             const fs = require('fs');
             const report = JSON.parse(fs.readFileSync('drift-report.json', 'utf8'));
+            const title = `Policy Drift Detected - ${new Date().toISOString().slice(0, 10)}`;
+            const body = [
+              '## Policy Drift Detection Alert',
+              '',
+              `**Timestamp:** ${report.timestamp}`,
+              `**Summary:** ${report.drift.summary}`,
+              `**Commit:** \\`${report.source.commit}\\``,
+              `**Hash:** \\`${report.source.hash}\\``,
+              '',
+              '### Required Actions',
+              '1. Review policy changes since last baseline.',
+              '2. Verify deployed OPA/OPAL state.',
+              '3. Run `npm run test:policy` and resolve drift cause.'
+            ].join('\\n');
 
-            const issueTitle = `⚠️ Policy Drift Detected - ${new Date().toISOString().split('T')[0]}`;
-            const issueBody = `
-            ## Policy Drift Detection Alert
-
-            **Timestamp:** ${report.timestamp}
-            **Summary:** ${{ needs.capture-state.outputs.drift_summary }}
-
-            ### Source State
-            - **Commit:** \`${report.source.commit}\`
-            - **Policy Hash:** \`${report.source.hash}\`
-            - **Policy Count:** ${report.source.policy_count}
-
-            ### Actions Required
-
-            1. Review recent policy changes
-            2. Verify deployed OPA instances have latest policies
-            3. Check OPAL synchronization status
-            4. Run full policy test suite
-
-            ### Remediation Commands
-
-            \`\`\`bash
-            # Rebuild all tenant bundles
-            npx ts-node --esm scripts/policy/build-tenant-bundle.ts build --all
-
-            # Verify bundles
-            npx ts-node --esm scripts/policy/build-tenant-bundle.ts verify --tenant USA
-
-            # Trigger OPAL update
-            npx ts-node --esm backend/src/scripts/opal-publisher.ts --trigger-update
-            \`\`\`
-
-            ---
-            _This issue was created automatically by the Policy Drift Detection workflow._
-            `;
-
-            // Check for existing open issue
-            const issues = await github.rest.issues.listForRepo({
+            const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
               labels: 'policy-drift'
             });
 
-            if (issues.data.length === 0) {
+            if (issues.length === 0) {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: issueTitle,
-                body: issueBody,
+                title,
+                body,
                 labels: ['policy-drift', 'security', 'automation']
               });
-              console.log('Created new drift detection issue');
             } else {
-              // Add comment to existing issue
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issues.data[0].number,
-                body: `### Updated Drift Detection\n\n${issueBody}`
+                issue_number: issues[0].number,
+                body
               });
-              console.log(`Added comment to existing issue #${issues.data[0].number}`);
             }
 
-      - name: Summary
-        run: |
-          echo "## ⚠️ Policy Drift Detected" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Summary:** ${{ needs.capture-state.outputs.drift_summary }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "A GitHub issue has been created/updated with details." >> $GITHUB_STEP_SUMMARY
-
-  # ============================================
-  # Stage 3: Update Baseline (if no drift or forced)
-  # ============================================
-  update-baseline:
-    name: Update Policy Baseline
+  baseline-candidate:
+    name: Baseline Candidate Artifact
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: capture-state
-    if: needs.capture-state.outputs.has_drift == 'false' || github.event_name == 'workflow_dispatch'
-
+    if: github.event_name == 'workflow_dispatch' && inputs.update_baseline == true
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Download drift report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          name: policy-drift-${{ github.run_number }}
 
-      - name: Download Drift Report
-        uses: actions/download-artifact@v4
-        with:
-          name: drift-report-${{ github.run_number }}
-
-      - name: Update Baseline File
+      - name: Create baseline candidate
         run: |
-          echo "📝 Updating policy baseline..."
+          mkdir -p baseline-candidate
+          cp drift-report.json baseline-candidate/policy-baseline.json
+          jq '.status = "baseline-candidate" | .generated_at = now' baseline-candidate/policy-baseline.json > baseline-candidate/tmp.json
+          mv baseline-candidate/tmp.json baseline-candidate/policy-baseline.json
 
-          mkdir -p policies/baselines
-          mv drift-report.json policies/baselines/policy-baseline.json
-
-          # Update timestamp
-          jq '.status = "baseline" | .baseline_updated = now' \
-            policies/baselines/policy-baseline.json > tmp.json && \
-            mv tmp.json policies/baselines/policy-baseline.json
-
-          echo "✅ Baseline updated"
-          cat policies/baselines/policy-baseline.json | jq '.source'
-
-      - name: Commit Baseline Update
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Upload baseline candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          commit_message: "chore(policy): update policy baseline [skip ci]"
-          file_pattern: "policies/baselines/*.json"
-          commit_user_name: "DIVE Policy Bot"
-          commit_user_email: "dive-bot@dive25.local"
+          name: policy-baseline-candidate-${{ github.run_number }}
+          path: baseline-candidate/policy-baseline.json
+          retention-days: 30
 
       - name: Summary
         run: |
-          echo "## ✅ Policy Baseline Updated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No drift detected. Baseline has been updated." >> $GITHUB_STEP_SUMMARY
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          echo "## Baseline Candidate Generated" >> "$GITHUB_STEP_SUMMARY"
+          echo "A candidate baseline artifact was generated for manual review and commit." >> "$GITHUB_STEP_SUMMARY"

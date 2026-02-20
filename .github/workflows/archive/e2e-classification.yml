@@ -23,10 +23,10 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
           cache: 'npm'
@@ -66,7 +66,7 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-e2e-ci
       
       - name: Upload Playwright Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: playwright-report-classification
@@ -74,7 +74,7 @@ jobs:
           retention-days: 30
       
       - name: Upload Test Screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: failure()
         with:
           name: playwright-screenshots-classification
@@ -82,7 +82,7 @@ jobs:
           retention-days: 7
       
       - name: Upload Test Videos
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: failure()
         with:
           name: playwright-videos-classification

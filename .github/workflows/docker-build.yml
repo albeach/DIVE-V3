@@ -1,5 +1,4 @@
 name: Build and Push Docker Images
-
 on:
   push:
     branches:
@@ -26,15 +25,17 @@ on:
         description: 'Force rebuild all images'
         required: false
         default: 'false'
-
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository_owner }}/dive-v3
-
+concurrency:
+  group: docker-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   build-matrix:
     name: Build Images
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -62,30 +63,27 @@ jobs:
             context: ./docker
             dockerfile: ./docker/opal-server.Dockerfile
             image: opal-server
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-
+          persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
         with:
-          version: latest
+          version: v0.12.1
           driver-opts: |
-            image=moby/buildkit:latest
-
+            image=moby/buildkit:v0.12.5
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
           tags: |
@@ -95,7 +93,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Check if image needs building
         id: check
         shell: bash
@@ -115,7 +112,7 @@ jobs:
           else
             CHANGED_FILES=$(git ls-files)
           fi
-          
+
           # Check if this service's files changed
           if echo "$CHANGED_FILES" | grep -E -q "^${CONTEXT_PATH}/|^${DOCKERFILE_PATH}$"; then
             echo "needs_build=true" >> $GITHUB_OUTPUT
@@ -127,10 +124,9 @@ jobs:
             echo "needs_build=false" >> $GITHUB_OUTPUT
             echo "No changes detected for ${{ matrix.name }} - skipping build"
           fi
-
       - name: Build and push Docker image
         if: steps.check.outputs.needs_build == 'true' || github.event_name == 'workflow_dispatch'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -144,14 +140,13 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ steps.meta.outputs.version }}
-
       - name: Image digest
         if: steps.check.outputs.needs_build == 'true'
         run: echo "Image pushed with tags ${{ steps.meta.outputs.tags }}"
-
   post-build:
     name: Post-Build Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: build-matrix
     if: always()
     steps:
@@ -176,3 +171,5 @@ jobs:
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:latest" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+permissions:
+  contents: read

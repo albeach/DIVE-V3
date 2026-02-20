@@ -18,7 +18,7 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js 20
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '20'
         cache: 'npm'
@@ -38,9 +38,17 @@ runs:
       shell: bash
       run: |
         cd frontend
-        before_count=$( (find src/__tests__/e2e -type f -name '*.spec.ts' -print0 \
-          | xargs -0 -r grep -Ehn '^[[:space:]]*test\.step\(' 2>/dev/null || true) \
-          | wc -l | tr -d ' ' )
+        count_unawaited_test_steps() {
+          local total=0
+          local file_count=0
+          while IFS= read -r -d '' file; do
+            file_count=$(awk '/^[[:space:]]*test\.step\(/ {count++} END {print count+0}' "$file")
+            total=$((total + file_count))
+          done < <(find src/__tests__/e2e -type f -name '*.spec.ts' -print0)
+          echo "$total"
+        }
+
+        before_count=$(count_unawaited_test_steps)
 
         if [ "${before_count}" -gt 0 ]; then
           while IFS= read -r -d '' file; do
@@ -48,9 +56,7 @@ runs:
           done < <(find src/__tests__/e2e -type f -name '*.spec.ts' -print0)
         fi
 
-        after_count=$( (find src/__tests__/e2e -type f -name '*.spec.ts' -print0 \
-          | xargs -0 -r grep -Ehn '^[[:space:]]*test\.step\(' 2>/dev/null || true) \
-          | wc -l | tr -d ' ' )
+        after_count=$(count_unawaited_test_steps)
         fixed_count=$((before_count - after_count))
         echo "::notice::Normalized un-awaited test.step calls in CI: $fixed_count"
 
@@ -122,7 +128,9 @@ runs:
 
           if ! docker ps --filter "name=^/keycloak$" --filter "status=running" --format '{{.Names}}' | grep -q '^keycloak$'; then
             echo "::error::Keycloak container exited before becoming ready"
-            docker logs --tail 300 keycloak || true
+            if docker ps -a --format '{{.Names}}' | grep -q '^keycloak$'; then
+              docker logs --tail 300 keycloak
+            fi
             exit 1
           fi
 
@@ -156,9 +164,13 @@ runs:
         REALM="dive-v3-broker-usa"
 
         # Create realm
-        curl -sk -X POST https://localhost:8443/admin/realms \
+        REALM_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST https://localhost:8443/admin/realms \
           -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-          -d "{\"realm\":\"$REALM\",\"enabled\":true}" || true
+          -d "{\"realm\":\"$REALM\",\"enabled\":true}")
+        if [ "$REALM_CREATE_HTTP" != "201" ] && [ "$REALM_CREATE_HTTP" != "409" ]; then
+          echo "::error::Failed to create realm '$REALM' (HTTP $REALM_CREATE_HTTP)"
+          exit 1
+        fi
 
         # Extend token lifetimes for CI stability (PUT works even if realm already existed).
         # Default access token lifetime is 300s (5 min) which causes token refresh
@@ -172,7 +184,7 @@ runs:
         echo "::notice::Realm $REALM accessTokenLifespan=${REALM_ATL}s"
 
         # Create OIDC client for NextAuth
-        curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/clients" \
+        CLIENT_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/clients" \
           -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
           -d '{
             "clientId": "dive-v3-broker-usa",
@@ -184,7 +196,11 @@ runs:
             "webOrigins": ["https://localhost:3000"],
             "directAccessGrantsEnabled": true,
             "standardFlowEnabled": true
-          }' || true
+          }')
+        if [ "$CLIENT_CREATE_HTTP" != "201" ] && [ "$CLIENT_CREATE_HTTP" != "409" ]; then
+          echo "::error::Failed to create OIDC client in realm '$REALM' (HTTP $CLIENT_CREATE_HTTP)"
+          exit 1
+        fi
         echo "::notice::OIDC client created in $REALM"
 
         CLIENT_UUID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/clients?clientId=dive-v3-broker-usa" \
@@ -201,19 +217,28 @@ runs:
             -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
 
           if [ -z "$SCOPE_ID" ]; then
-            curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+            SCOPE_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes" \
               -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-              -d "{\"name\":\"$scope\",\"protocol\":\"openid-connect\",\"attributes\":{\"include.in.token.scope\":\"true\",\"display.on.consent.screen\":\"false\"}}" || true
+              -d "{\"name\":\"$scope\",\"protocol\":\"openid-connect\",\"attributes\":{\"include.in.token.scope\":\"true\",\"display.on.consent.screen\":\"false\"}}")
+            if [ "$SCOPE_CREATE_HTTP" != "201" ] && [ "$SCOPE_CREATE_HTTP" != "409" ]; then
+              echo "::error::Failed to create client scope '$scope' (HTTP $SCOPE_CREATE_HTTP)"
+              exit 1
+            fi
             SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
               -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
           fi
 
           if [ -n "$SCOPE_ID" ]; then
-            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/clients/$CLIENT_UUID/default-client-scopes/$SCOPE_ID" \
-              -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1 || true
+            SCOPE_ASSIGN_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/clients/$CLIENT_UUID/default-client-scopes/$SCOPE_ID" \
+              -H "Authorization: Bearer $TOKEN")
+            if [ "$SCOPE_ASSIGN_HTTP" != "201" ] && [ "$SCOPE_ASSIGN_HTTP" != "204" ] && [ "$SCOPE_ASSIGN_HTTP" != "409" ]; then
+              echo "::error::Failed to assign default client scope '$scope' (HTTP $SCOPE_ASSIGN_HTTP)"
+              exit 1
+            fi
             echo "::notice::Ensured client scope on dive-v3-broker-usa: $scope"
           else
-            echo "::warning::Unable to resolve/create client scope: $scope"
+            echo "::error::Unable to resolve/create client scope: $scope"
+            exit 1
           fi
         done
 
@@ -292,9 +317,13 @@ runs:
           ACTION_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/authentication/required-actions" \
             -H "Authorization: Bearer $TOKEN" | jq -c ".[] | select(.alias == \"$alias\")" | head -n1)
           if [ -n "$ACTION_JSON" ]; then
-            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/authentication/required-actions/$alias" \
+            ACTION_UPDATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/authentication/required-actions/$alias" \
               -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-              -d "$(echo "$ACTION_JSON" | jq '.defaultAction=false')" >/dev/null 2>&1 || true
+              -d "$(echo "$ACTION_JSON" | jq '.defaultAction=false')")
+            if [ "$ACTION_UPDATE_HTTP" != "200" ] && [ "$ACTION_UPDATE_HTTP" != "204" ]; then
+              echo "::error::Failed to disable required action '$alias' (HTTP $ACTION_UPDATE_HTTP)"
+              exit 1
+            fi
             echo "::notice::Disabled default required action: $alias"
           fi
         done
@@ -333,13 +362,23 @@ runs:
               }
             }')
 
-          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
-            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "$user_payload" >/dev/null 2>&1 || true
-
           local user_id
           user_id=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
             -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+
+          if [ -z "$user_id" ]; then
+            local user_create_http
+            user_create_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/users" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$user_payload")
+            if [ "$user_create_http" != "201" ] && [ "$user_create_http" != "409" ]; then
+              echo "::error::Failed to create Keycloak user '$username' (HTTP $user_create_http)"
+              return 1
+            fi
+            user_id=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+          fi
+
           if [ -z "$user_id" ]; then
             echo "::error::Failed to resolve Keycloak user id for $username"
             return 1
@@ -347,13 +386,23 @@ runs:
 
           local update_payload
           update_payload=$(echo "$user_payload" | jq -c --arg id "$user_id" '. + {"id": $id}')
-          curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
+          local user_update_http
+          user_update_http=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "$update_payload" >/dev/null
+            -d "$update_payload")
+          if [ "$user_update_http" != "200" ] && [ "$user_update_http" != "204" ]; then
+            echo "::error::Failed to update Keycloak user '$username' (HTTP $user_update_http)"
+            return 1
+          fi
 
-          curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id/reset-password" \
+          local reset_password_http
+          reset_password_http=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id/reset-password" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}" >/dev/null
+            -d "{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}")
+          if [ "$reset_password_http" != "200" ] && [ "$reset_password_http" != "204" ]; then
+            echo "::error::Failed to reset password for '$username' (HTTP $reset_password_http)"
+            return 1
+          fi
 
           local required_actions
           required_actions=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
@@ -371,10 +420,19 @@ runs:
           local username="$2"
           local role_name="$3"
 
-          # Create the realm role if it doesn't exist
-          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/roles" \
-            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"name\":\"$role_name\"}" >/dev/null 2>&1 || true
+          local role_exists_http
+          role_exists_http=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:8443/admin/realms/$REALM/roles/$role_name" \
+            -H "Authorization: Bearer $TOKEN")
+          if [ "$role_exists_http" = "404" ]; then
+            local role_create_http
+            role_create_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/roles" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"name\":\"$role_name\"}")
+            if [ "$role_create_http" != "201" ] && [ "$role_create_http" != "409" ]; then
+              echo "::error::Failed to create role '$role_name' (HTTP $role_create_http)"
+              return 1
+            fi
+          fi
 
           # Get role representation
           local role_json
@@ -390,9 +448,14 @@ runs:
           fi
 
           # Assign role to user
-          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users/$user_id/role-mappings/realm" \
+          local role_assign_http
+          role_assign_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/users/$user_id/role-mappings/realm" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "[{\"id\":\"$role_id\",\"name\":\"$role_name\"}]" >/dev/null 2>&1
+            -d "[{\"id\":\"$role_id\",\"name\":\"$role_name\"}]")
+          if [ "$role_assign_http" != "200" ] && [ "$role_assign_http" != "204" ] && [ "$role_assign_http" != "409" ]; then
+            echo "::error::Failed to assign role '$role_name' to '$username' (HTTP $role_assign_http)"
+            return 1
+          fi
 
           echo "::notice::Assigned role '$role_name' to user $username"
         }
@@ -435,12 +498,12 @@ runs:
 
     - name: Setup PostgreSQL Schema
       shell: bash
-      run: cd frontend && npx drizzle-kit push --force || true
+      run: cd frontend && npx drizzle-kit push --force
       env:
         DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
 
     - name: Cache Playwright Browsers
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       id: playwright-cache
       with:
         path: ~/.cache/ms-playwright
@@ -472,13 +535,17 @@ runs:
 
           if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
             echo "::error::Backend process exited before becoming ready"
-            tail -n 300 backend.log || true
+            if [ -f backend.log ]; then
+              tail -n 300 backend.log
+            fi
             exit 1
           fi
 
           if [ $i -eq 90 ]; then
             echo "::error::Backend failed to become ready on https://localhost:4000"
-            tail -n 300 backend.log || true
+            if [ -f backend.log ]; then
+              tail -n 300 backend.log
+            fi
             exit 1
           fi
           sleep 2
@@ -567,10 +634,14 @@ runs:
         cd frontend
         if ! npx tsx -e "import setup from './src/__tests__/e2e/fixtures/auth-setup.ts'; (async () => { await setup({ projects: [{ use: { baseURL: process.env.BASE_URL || 'https://localhost:3000' } }] } as any); })().catch((error) => { console.error(error); process.exit(1); });"; then
           echo "::group::Next.js log tail"
-          tail -n 300 nextjs.log || true
+          if [ -f nextjs.log ]; then
+            tail -n 300 nextjs.log
+          fi
           echo "::endgroup::"
           echo "::group::Backend log tail"
-          tail -n 300 ../backend/backend.log || true
+          if [ -f ../backend/backend.log ]; then
+            tail -n 300 ../backend/backend.log
+          fi
           echo "::endgroup::"
           exit 1
         fi
@@ -592,7 +663,7 @@ runs:
       if: inputs.start-opa == 'true'
       shell: bash
       run: |
-        curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
         chmod +x opa
         nohup ./opa run --server --addr=:8181 --log-level=error \
           --tls-cert-file=${{ github.workspace }}/certs/certificate.pem \

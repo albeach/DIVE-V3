@@ -52,16 +52,16 @@ module "vpc" {
 module "hub" {
   source = "../modules/aws-ec2"
 
-  instance_name         = "dive-staging-hub"
-  environment           = "staging"
-  role                  = "hub"
-  instance_type         = var.hub_instance_type
-  key_pair_name         = var.key_pair_name
-  subnet_id             = module.vpc.public_subnet_ids[0]
-  security_group_ids    = [module.vpc.hub_security_group_id]
-  volume_size           = var.hub_volume_size
-  assign_elastic_ip     = true
-  bootstrap_repo = "https://github.com/albeach/DIVE-V3.git"
+  instance_name      = "dive-staging-hub"
+  environment        = "staging"
+  role               = "hub"
+  instance_type      = var.hub_instance_type
+  key_pair_name      = var.key_pair_name
+  subnet_id          = module.vpc.public_subnet_ids[0]
+  security_group_ids = [module.vpc.hub_security_group_id]
+  volume_size        = var.hub_volume_size
+  assign_elastic_ip  = true
+  bootstrap_repo     = "https://github.com/albeach/DIVE-V3.git"
 }
 
 # =============================================================================
@@ -76,15 +76,15 @@ module "spokes" {
   source   = "../modules/aws-ec2"
   for_each = local.spoke_index
 
-  instance_name         = "dive-staging-spoke-${lower(each.key)}"
-  environment           = "staging"
-  role                  = "spoke"
-  spoke_code            = upper(each.key)
-  instance_type         = var.spoke_instance_type
-  key_pair_name         = var.key_pair_name
-  subnet_id             = module.vpc.public_subnet_ids[each.value % length(module.vpc.public_subnet_ids)]
-  security_group_ids    = [module.vpc.spoke_security_group_id]
-  volume_size           = var.spoke_volume_size
-  assign_elastic_ip     = true
-  bootstrap_repo = "https://github.com/albeach/DIVE-V3.git"
+  instance_name      = "dive-staging-spoke-${lower(each.key)}"
+  environment        = "staging"
+  role               = "spoke"
+  spoke_code         = upper(each.key)
+  instance_type      = var.spoke_instance_type
+  key_pair_name      = var.key_pair_name
+  subnet_id          = module.vpc.public_subnet_ids[each.value % length(module.vpc.public_subnet_ids)]
+  security_group_ids = [module.vpc.spoke_security_group_id]
+  volume_size        = var.spoke_volume_size
+  assign_elastic_ip  = true
+  bootstrap_repo     = "https://github.com/albeach/DIVE-V3.git"
 }

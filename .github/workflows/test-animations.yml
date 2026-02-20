@@ -8,7 +8,6 @@ on:
       - 'frontend/src/components/admin/shared/AdminPageTransition.tsx'
       - 'frontend/src/components/admin/shared/PresenceIndicator.tsx'
       - 'frontend/src/__tests__/e2e/animations/**'
-      - '.github/workflows/test-animations.yml'
   pull_request:
     branches: [main]
     paths:
@@ -17,23 +16,25 @@ on:
       - 'frontend/src/__tests__/e2e/animations/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-animations-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   animation-tests:
     name: Animation Component Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
+    timeout-minutes: 20
     services:
       mongodb:
         image: mongo:7.0
         ports:
           - 27017:27017
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
       postgres:
         image: postgres:15
         ports:
@@ -43,51 +44,50 @@ jobs:
           POSTGRES_PASSWORD: password
           POSTGRES_DB: dive_v3_app
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
-      
-      - name: Install Frontend Dependencies
+
+      - name: Install frontend dependencies
         run: cd frontend && npm ci --legacy-peer-deps
-      
-      - name: Generate SSL Certificates
+
+      - name: Generate SSL certificates
         run: |
-          mkdir -p ${{ github.workspace }}/frontend/certs
-          mkdir -p ${{ github.workspace }}/keycloak-certs
-          
+          mkdir -p "$GITHUB_WORKSPACE/frontend/certs"
+          mkdir -p "$GITHUB_WORKSPACE/keycloak-certs"
+
           openssl req -x509 -newkey rsa:4096 -nodes \
-            -keyout ${{ github.workspace }}/frontend/certs/key.pem \
-            -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+            -keyout "$GITHUB_WORKSPACE/frontend/certs/key.pem" \
+            -out "$GITHUB_WORKSPACE/frontend/certs/certificate.pem" \
             -days 365 \
-            -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
-          
+            -subj '/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost'
+
           openssl req -x509 -newkey rsa:4096 -nodes \
-            -keyout ${{ github.workspace }}/keycloak-certs/key.pem \
-            -out ${{ github.workspace }}/keycloak-certs/cert.pem \
+            -keyout "$GITHUB_WORKSPACE/keycloak-certs/key.pem" \
+            -out "$GITHUB_WORKSPACE/keycloak-certs/cert.pem" \
             -days 1 \
-            -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
-            -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
-          
-          chmod 644 ${{ github.workspace }}/keycloak-certs/cert.pem
-          chmod 644 ${{ github.workspace }}/keycloak-certs/key.pem
-      
+            -subj '/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost' \
+            -addext 'subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1'
+
+          chmod 644 "$GITHUB_WORKSPACE/keycloak-certs/cert.pem" "$GITHUB_WORKSPACE/keycloak-certs/key.pem"
+
       - name: Start Keycloak
         run: |
+          set -euo pipefail
           SERVICE_NETWORK=$(docker network ls -q -f name=github_network_ | head -1)
           if [ -z "$SERVICE_NETWORK" ]; then
-            SERVICE_NETWORK=$(docker network ls -q | head -1)
+            echo "Unable to locate GitHub Actions service network"
+            exit 1
           fi
 
           docker run -d \
@@ -95,7 +95,7 @@ jobs:
             --network "$SERVICE_NETWORK" \
             -p 8443:8443 \
             -p 9000:9000 \
-            -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
+            -v "$GITHUB_WORKSPACE/keycloak-certs:/opt/keycloak/certs:ro" \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=info \
             -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -108,59 +108,123 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
 
-          for i in {1..30}; do
-            if nc -z localhost 9000 2>/dev/null; then
-              echo "✅ Keycloak ready"
+          max_attempts=300
+          for i in $(seq 1 "$max_attempts"); do
+            if curl -kfsS https://localhost:9000/health/ready >/dev/null 2>&1; then
+              echo "Keycloak management endpoint is ready"
               break
+            fi
+
+            if curl -kfsS https://localhost:8443/realms/master/.well-known/openid-configuration >/dev/null 2>&1; then
+              echo "Keycloak OIDC endpoint is ready"
+              break
+            fi
+
+            if ! docker ps --filter "name=^/keycloak$" --filter "status=running" --format '{{.Names}}' | grep -q '^keycloak$'; then
+              echo "Keycloak container exited before becoming ready"
+              docker logs keycloak
+              exit 1
+            fi
+
+            if [ "$i" -eq "$max_attempts" ]; then
+              echo "Keycloak failed to become ready after 10 minutes"
+              docker logs keycloak
+              exit 1
             fi
             sleep 2
           done
-      
-      - name: Configure Keycloak
+
+      - name: Configure Keycloak realm and test user
         run: |
-          export KEYCLOAK_URL=https://localhost:8443
-          export ACCESS_TOKEN=$(curl -k -s -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
-            -d "client_id=admin-cli" -d "username=admin" -d "password=admin" -d "grant_type=password" | jq -r '.access_token')
-          
-          curl -k -s -X POST "$KEYCLOAK_URL/admin/realms" \
+          set -euo pipefail
+          KEYCLOAK_URL='https://localhost:8443'
+
+          ACCESS_TOKEN=$(curl -ksS -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+            -d 'client_id=admin-cli' \
+            -d 'username=admin' \
+            -d 'password=admin' \
+            -d 'grant_type=password' | jq -r '.access_token')
+
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = 'null' ]; then
+            echo 'Failed to acquire Keycloak admin token'
+            exit 1
+          fi
+
+          REALM_STATUS=$(curl -ks -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"realm":"dive-v3-broker-usa","enabled":true}' || true
-          
-          curl -k -s -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa/users" \
+            "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa")
+
+          if [ "$REALM_STATUS" = '404' ]; then
+            CREATE_REALM_STATUS=$(curl -ks -o /dev/null -w '%{http_code}' -X POST "$KEYCLOAK_URL/admin/realms" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{"realm":"dive-v3-broker-usa","enabled":true}')
+            if [ "$CREATE_REALM_STATUS" != '201' ]; then
+              echo "Realm creation failed with status $CREATE_REALM_STATUS"
+              exit 1
+            fi
+          elif [ "$REALM_STATUS" != '200' ]; then
+            echo "Realm lookup failed with status $REALM_STATUS"
+            exit 1
+          fi
+
+          USER_STATUS=$(curl -ks -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"testuser","enabled":true,"credentials":[{"type":"password","value":"password","temporary":false}],"attributes":{"clearance":["SECRET"],"countryOfAffiliation":["USA"]}}' || true
-      
-      - name: Initialize Database
-        run: cd frontend && npx drizzle-kit push:pg || true
+            "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa/users?username=testuser")
+
+          if [ "$USER_STATUS" != '200' ]; then
+            echo "User lookup failed with status $USER_STATUS"
+            exit 1
+          fi
+
+          USER_EXISTS=$(curl -ks \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa/users?username=testuser" | jq 'length')
+
+          if [ "$USER_EXISTS" = '0' ]; then
+            CREATE_USER_STATUS=$(curl -ks -o /dev/null -w '%{http_code}' -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa/users" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{"username":"testuser","enabled":true,"credentials":[{"type":"password","value":"password","temporary":false}],"attributes":{"clearance":["SECRET"],"countryOfAffiliation":["USA"]}}')
+            if [ "$CREATE_USER_STATUS" != '201' ]; then
+              echo "User creation failed with status $CREATE_USER_STATUS"
+              exit 1
+            fi
+          fi
+
+      - name: Initialize database
+        run: |
+          cd frontend
+          npx drizzle-kit push:pg
         env:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
-      
-      - name: Cache Playwright Browsers
-        uses: actions/cache@v4
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-      
-      - name: Install Playwright Browsers
+
+      - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd frontend && npx playwright install --with-deps chromium firefox webkit
-      
-      - name: Start Next.js Server
+
+      - name: Start Next.js server
         run: |
           cd frontend
-          export CERT_PATH="${{ github.workspace }}/frontend/certs"
+          export CERT_PATH="$GITHUB_WORKSPACE/frontend/certs"
           nohup npm run dev > nextjs.log 2>&1 &
-          
-          for i in {1..30}; do
-            if curl -k --max-time 10 -f https://localhost:3000 2>/dev/null; then
-              echo "✅ Next.js ready"
-              break
+
+          for i in {1..60}; do
+            if curl -k --max-time 10 -f https://localhost:3000 >/dev/null 2>&1; then
+              exit 0
             fi
             sleep 2
           done
+
+          cat nextjs.log
+          exit 1
         env:
           NODE_ENV: development
           NEXTAUTH_URL: https://localhost:3000
@@ -170,12 +234,11 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker-usa
           KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
           KEYCLOAK_CLIENT_SECRET: test-client-secret
-          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+          KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-      
-      - name: Run Animation Tests
-        id: animation_tests
-        continue-on-error: true
+
+      - name: Run animation tests
+        id: animation-tests
         run: cd frontend && npm run test:e2e:animations
         env:
           NODE_ENV: test
@@ -186,30 +249,36 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker-usa
           KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
           KEYCLOAK_CLIENT_SECRET: test-client-secret
-          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+          KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           BASE_URL: https://localhost:3000
           CI: true
           NODE_OPTIONS: --max-old-space-size=4096
-      
-      - name: Upload Test Results
+
+      - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: animation-test-results
           path: |
             frontend/playwright-report/
             frontend/test-results/
           retention-days: 7
-      
-      - name: Generate Summary
+
+      - name: Generate summary
         if: always()
         run: |
-          echo "## Animation Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.animation_tests.outcome }}" = "success" ]; then
-            echo "Animation E2E tests passed." >> $GITHUB_STEP_SUMMARY
+          echo '## Animation Test Results' >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.animation-tests.outcome }}" = 'success' ]; then
+            echo 'Animation E2E tests passed.' >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Animation E2E tests failed (non-blocking for this workflow)." >> $GITHUB_STEP_SUMMARY
+            echo 'Animation E2E tests failed.' >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "Check uploaded artifacts for detailed results." >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup containers
+        if: always()
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^keycloak$'; then
+            docker stop keycloak
+            docker rm keycloak
+          fi

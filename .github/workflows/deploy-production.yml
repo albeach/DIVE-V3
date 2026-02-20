@@ -27,30 +27,27 @@
 # ==============================================================================
 
 name: Deploy to Production
-
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'terraform/**'
-      - 'backend/src/**'
-      - 'frontend/src/**'
-      - 'policies/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/deploy-production.yml'
   workflow_dispatch:
     inputs:
+      target_env:
+        description: 'Target environment (normalized input)'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+        - production
       instances:
         description: 'Instances to deploy'
         required: true
         default: 'all'
         type: choice
         options:
-          - all
-          - usa
-          - fra
-          - gbr
-          - deu
+        - all
+        - usa
+        - fra
+        - gbr
+        - deu
       skip_tests:
         description: 'Skip tests (NOT RECOMMENDED)'
         required: false
@@ -66,18 +63,31 @@ on:
         required: false
         type: boolean
         default: false
-
+      force:
+        description: 'Force deployment (normalized alias)'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Run checks/plans only without apply/deploy'
+        required: false
+        type: boolean
+        default: false
+      reason:
+        description: 'Deployment reason'
+        required: false
+        type: string
+        default: 'Manual production deployment'
 permissions:
   contents: read
-  pull-requests: write
-  id-token: write  # Required for Workload Identity Federation
-
+concurrency:
+  group: deploy-production-${{ github.event.inputs.target_env || 'production' }}-${{ github.event.inputs.instances || 'all' }}
+  cancel-in-progress: false
 env:
   GCP_PROJECT_ID: dive25
   GCP_REGION: us-east4
   TERRAFORM_VERSION: '1.13.4'
   OPA_VERSION: '0.68.0'
-
 jobs:
   # ==============================================================================
   # PRE-FLIGHT CHECKS
@@ -90,39 +100,42 @@ jobs:
       deploy_fra: ${{ steps.parse.outputs.deploy_fra }}
       deploy_gbr: ${{ steps.parse.outputs.deploy_gbr }}
       deploy_deu: ${{ steps.parse.outputs.deploy_deu }}
-
     steps:
-      - name: Parse Deployment Targets
-        id: parse
-        run: |
-          INSTANCES="${{ inputs.instances || 'all' }}"
+    - name: Parse Deployment Targets
+      id: parse
+      run: |
+        INSTANCES="${{ inputs.instances || 'all' }}"
 
-          if [ "$INSTANCES" == "all" ]; then
-            echo "deploy_usa=true" >> $GITHUB_OUTPUT
-            echo "deploy_fra=true" >> $GITHUB_OUTPUT
-            echo "deploy_gbr=true" >> $GITHUB_OUTPUT
-            echo "deploy_deu=true" >> $GITHUB_OUTPUT
-          else
-            echo "deploy_usa=$([[ "$INSTANCES" == *"usa"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-            echo "deploy_fra=$([[ "$INSTANCES" == *"fra"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-            echo "deploy_gbr=$([[ "$INSTANCES" == *"gbr"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-            echo "deploy_deu=$([[ "$INSTANCES" == *"deu"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Display Deployment Plan
-        run: |
-          echo "## 🚀 DIVE V3 Production Deployment Plan" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Instance | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| USA | ${{ steps.parse.outputs.deploy_usa == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| FRA | ${{ steps.parse.outputs.deploy_fra == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| GBR | ${{ steps.parse.outputs.deploy_gbr == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| DEU | ${{ steps.parse.outputs.deploy_deu == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-
+        if [ "$INSTANCES" == "all" ]; then
+          echo "deploy_usa=true" >> $GITHUB_OUTPUT
+          echo "deploy_fra=true" >> $GITHUB_OUTPUT
+          echo "deploy_gbr=true" >> $GITHUB_OUTPUT
+          echo "deploy_deu=true" >> $GITHUB_OUTPUT
+        else
+          echo "deploy_usa=$([[ "$INSTANCES" == *"usa"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "deploy_fra=$([[ "$INSTANCES" == *"fra"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "deploy_gbr=$([[ "$INSTANCES" == *"gbr"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "deploy_deu=$([[ "$INSTANCES" == *"deu"* ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+        fi
+    - name: Display Deployment Plan
+      run: |
+        echo "## 🚀 DIVE V3 Production Deployment Plan" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Instance | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| USA | ${{ steps.parse.outputs.deploy_usa == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| FRA | ${{ steps.parse.outputs.deploy_fra == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| GBR | ${{ steps.parse.outputs.deploy_gbr == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| DEU | ${{ steps.parse.outputs.deploy_deu == 'true' && '✅ Deploy' || '⏭️ Skip' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+    - name: Record normalized deployment inputs
+      run: |
+        echo "**Target Env:** ${{ inputs.target_env || 'production' }}" >> "$GITHUB_STEP_SUMMARY"
+        echo "**Dry Run:** ${{ inputs.dry_run || false }}" >> "$GITHUB_STEP_SUMMARY"
+        echo "**Reason:** ${{ inputs.reason || 'Manual production deployment' }}" >> "$GITHUB_STEP_SUMMARY"
+    timeout-minutes: 10
   # ==============================================================================
   # TEST SUITE (PARALLEL)
   # ==============================================================================
@@ -130,243 +143,231 @@ jobs:
     name: Test - OPA Policies
     runs-on: ubuntu-latest
     if: ${{ inputs.skip_tests != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
-        with:
-          version: ${{ env.OPA_VERSION }}
-
-      - name: Run OPA Tests
-        run: |
-          cd policies
-          opa test . -v
-          echo "## ✅ OPA Tests Passed" >> $GITHUB_STEP_SUMMARY
-          echo "163/163 test cases passing" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup OPA
+      uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+      with:
+        version: ${{ env.OPA_VERSION }}
+    - name: Run OPA Tests
+      run: |
+        cd policies
+        opa test . -v
+        echo "## ✅ OPA Tests Passed" >> $GITHUB_STEP_SUMMARY
+        echo "163/163 test cases passing" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   test-backend:
     name: Test - Backend Build
     runs-on: ubuntu-latest
     if: ${{ inputs.skip_tests != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install Dependencies
-        run: cd backend && npm ci
-
-      - name: TypeScript Check
-        run: cd backend && npx tsc --noEmit
-
-      - name: Build
-        run: cd backend && npm run build
-
-      - name: Summary
-        run: |
-          echo "## ✅ Backend Build Passed" >> $GITHUB_STEP_SUMMARY
-          echo "TypeScript compilation successful" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    - name: Install Dependencies
+      run: cd backend && npm ci
+    - name: TypeScript Check
+      run: cd backend && npx tsc --noEmit
+    - name: Build
+      run: cd backend && npm run build
+    - name: Summary
+      run: |
+        echo "## ✅ Backend Build Passed" >> $GITHUB_STEP_SUMMARY
+        echo "TypeScript compilation successful" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   test-frontend:
     name: Test - Frontend Build
     runs-on: ubuntu-latest
     if: ${{ inputs.skip_tests != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install Dependencies
-        run: cd frontend && npm ci --legacy-peer-deps
-
-      - name: Build
-        run: cd frontend && npm run build
-        env:
-          NEXTAUTH_URL: http://localhost:3000
-          NEXTAUTH_SECRET: build-time-secret-for-ci
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
-
-      - name: Summary
-        run: |
-          echo "## ✅ Frontend Build Passed" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    - name: Install Dependencies
+      run: cd frontend && npm ci --legacy-peer-deps
+    - name: Build
+      run: cd frontend && npm run build
+      env:
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: build-time-secret-for-ci
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+    - name: Summary
+      run: |
+        echo "## ✅ Frontend Build Passed" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   # ==============================================================================
   # TERRAFORM PLAN (PARALLEL PER INSTANCE)
   # ==============================================================================
   terraform-plan-usa:
     name: Terraform Plan - USA
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight]
     if: ${{ needs.preflight.outputs.deploy_usa == 'true' && inputs.skip_terraform != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Terraform Init
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select usa || terraform workspace new usa
-
-      - name: Terraform Plan
-        run: |
-          cd terraform/instances
-          terraform plan -var-file=usa.tfvars -out=usa.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_USA }}
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-usa
-          path: terraform/instances/usa.tfplan
-          retention-days: 1
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Terraform Init
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select usa || terraform workspace new usa
+    - name: Terraform Plan
+      run: |
+        cd terraform/instances
+        terraform plan -var-file=usa.tfvars -out=usa.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_USA }}
+    - name: Upload Plan
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: tfplan-usa
+        path: terraform/instances/usa.tfplan
+        retention-days: 1
+    timeout-minutes: 30
   terraform-plan-fra:
     name: Terraform Plan - FRA
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight]
     if: ${{ needs.preflight.outputs.deploy_fra == 'true' && inputs.skip_terraform != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Terraform Init
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select fra || terraform workspace new fra
-
-      - name: Terraform Plan
-        run: |
-          cd terraform/instances
-          terraform plan -var-file=fra.tfvars -out=fra.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_FRA }}
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-fra
-          path: terraform/instances/fra.tfplan
-          retention-days: 1
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Terraform Init
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select fra || terraform workspace new fra
+    - name: Terraform Plan
+      run: |
+        cd terraform/instances
+        terraform plan -var-file=fra.tfvars -out=fra.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_FRA }}
+    - name: Upload Plan
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: tfplan-fra
+        path: terraform/instances/fra.tfplan
+        retention-days: 1
+    timeout-minutes: 30
   terraform-plan-gbr:
     name: Terraform Plan - GBR
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight]
     if: ${{ needs.preflight.outputs.deploy_gbr == 'true' && inputs.skip_terraform != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Terraform Init
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select gbr || terraform workspace new gbr
-
-      - name: Terraform Plan
-        run: |
-          cd terraform/instances
-          terraform plan -var-file=gbr.tfvars -out=gbr.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_GBR }}
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-gbr
-          path: terraform/instances/gbr.tfplan
-          retention-days: 1
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Terraform Init
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select gbr || terraform workspace new gbr
+    - name: Terraform Plan
+      run: |
+        cd terraform/instances
+        terraform plan -var-file=gbr.tfvars -out=gbr.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_GBR }}
+    - name: Upload Plan
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: tfplan-gbr
+        path: terraform/instances/gbr.tfplan
+        retention-days: 1
+    timeout-minutes: 30
   terraform-plan-deu:
     name: Terraform Plan - DEU
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight]
     if: ${{ needs.preflight.outputs.deploy_deu == 'true' && inputs.skip_terraform != true }}
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Terraform Init
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select deu || terraform workspace new deu
-
-      - name: Terraform Plan
-        run: |
-          cd terraform/instances
-          terraform plan -var-file=deu.tfvars -out=deu.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_DEU }}
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-deu
-          path: terraform/instances/deu.tfplan
-          retention-days: 1
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Terraform Init
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select deu || terraform workspace new deu
+    - name: Terraform Plan
+      run: |
+        cd terraform/instances
+        terraform plan -var-file=deu.tfvars -out=deu.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_DEU }}
+    - name: Upload Plan
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: tfplan-deu
+        path: terraform/instances/deu.tfplan
+        retention-days: 1
+    timeout-minutes: 30
   # ==============================================================================
   # APPROVAL GATE
   # ==============================================================================
@@ -376,216 +377,212 @@ jobs:
     needs: [test-opa, test-backend, test-frontend, terraform-plan-usa, terraform-plan-fra, terraform-plan-gbr, terraform-plan-deu]
     if: |
       always() &&
+      (inputs.dry_run != true) &&
       (needs.test-opa.result == 'success' || needs.test-opa.result == 'skipped') &&
       (needs.test-backend.result == 'success' || needs.test-backend.result == 'skipped') &&
       (needs.test-frontend.result == 'success' || needs.test-frontend.result == 'skipped') &&
-      (inputs.force_deploy == true || (
+      ((inputs.force_deploy == true || inputs.force == true) || (
         (needs.terraform-plan-usa.result == 'success' || needs.terraform-plan-usa.result == 'skipped') &&
         (needs.terraform-plan-fra.result == 'success' || needs.terraform-plan-fra.result == 'skipped') &&
         (needs.terraform-plan-gbr.result == 'success' || needs.terraform-plan-gbr.result == 'skipped') &&
         (needs.terraform-plan-deu.result == 'success' || needs.terraform-plan-deu.result == 'skipped')
       ))
-    environment: production  # Requires manual approval in GitHub
-
+    environment: production # Requires manual approval in GitHub
     steps:
-      - name: Approval Granted
-        run: |
-          echo "## ✅ Deployment Approved" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Approved by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-
+    - name: Approval Granted
+      run: |
+        echo "## ✅ Deployment Approved" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Approved by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 60
   # ==============================================================================
   # DEPLOYMENT (SEQUENTIAL)
   # ==============================================================================
   deploy-usa:
     name: Deploy - USA
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight, approval]
-    if: ${{ needs.preflight.outputs.deploy_usa == 'true' }}
+    if: ${{ needs.preflight.outputs.deploy_usa == 'true' && inputs.dry_run != true }}
     environment: production-usa
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Setup Terraform
-        if: ${{ inputs.skip_terraform != true }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Download Plan
-        if: ${{ inputs.skip_terraform != true }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-usa
-          path: terraform/instances/
-
-      - name: Terraform Apply
-        if: ${{ inputs.skip_terraform != true }}
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select usa
-          terraform apply -auto-approve usa.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_USA }}
-
-      - name: Deploy Notification
-        run: |
-          echo "## 🇺🇸 USA Instance Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: https://usa-app.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: https://usa-api.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Keycloak: https://usa-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Setup Terraform
+      if: ${{ inputs.skip_terraform != true }}
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Download Plan
+      if: ${{ inputs.skip_terraform != true }}
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: tfplan-usa
+        path: terraform/instances/
+    - name: Terraform Apply
+      if: ${{ inputs.skip_terraform != true }}
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select usa
+        terraform apply -auto-approve usa.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_USA }}
+    - name: Deploy Notification
+      run: |
+        echo "## 🇺🇸 USA Instance Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: https://usa-app.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: https://usa-api.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Keycloak: https://usa-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   deploy-fra:
     name: Deploy - FRA
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight, approval, deploy-usa]
-    if: ${{ always() && needs.preflight.outputs.deploy_fra == 'true' && needs.approval.result == 'success' }}
+    if: ${{ always() && needs.preflight.outputs.deploy_fra == 'true' && needs.approval.result == 'success' && inputs.dry_run != true }}
     environment: production-fra
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Setup Terraform
-        if: ${{ inputs.skip_terraform != true }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Download Plan
-        if: ${{ inputs.skip_terraform != true }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-fra
-          path: terraform/instances/
-
-      - name: Terraform Apply
-        if: ${{ inputs.skip_terraform != true }}
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select fra
-          terraform apply -auto-approve fra.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_FRA }}
-
-      - name: Deploy Notification
-        run: |
-          echo "## 🇫🇷 FRA Instance Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: https://fra-app.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: https://fra-api.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Keycloak: https://fra-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Setup Terraform
+      if: ${{ inputs.skip_terraform != true }}
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Download Plan
+      if: ${{ inputs.skip_terraform != true }}
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: tfplan-fra
+        path: terraform/instances/
+    - name: Terraform Apply
+      if: ${{ inputs.skip_terraform != true }}
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select fra
+        terraform apply -auto-approve fra.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_FRA }}
+    - name: Deploy Notification
+      run: |
+        echo "## 🇫🇷 FRA Instance Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: https://fra-app.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: https://fra-api.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Keycloak: https://fra-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   deploy-gbr:
     name: Deploy - GBR
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight, approval, deploy-fra]
-    if: ${{ always() && needs.preflight.outputs.deploy_gbr == 'true' && needs.approval.result == 'success' }}
+    if: ${{ always() && needs.preflight.outputs.deploy_gbr == 'true' && needs.approval.result == 'success' && inputs.dry_run != true }}
     environment: production-gbr
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Setup Terraform
-        if: ${{ inputs.skip_terraform != true }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Download Plan
-        if: ${{ inputs.skip_terraform != true }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-gbr
-          path: terraform/instances/
-
-      - name: Terraform Apply
-        if: ${{ inputs.skip_terraform != true }}
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select gbr
-          terraform apply -auto-approve gbr.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_GBR }}
-
-      - name: Deploy Notification
-        run: |
-          echo "## 🇬🇧 GBR Instance Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: https://gbr-app.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: https://gbr-api.dive25.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Keycloak: https://gbr-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Setup Terraform
+      if: ${{ inputs.skip_terraform != true }}
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Download Plan
+      if: ${{ inputs.skip_terraform != true }}
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: tfplan-gbr
+        path: terraform/instances/
+    - name: Terraform Apply
+      if: ${{ inputs.skip_terraform != true }}
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select gbr
+        terraform apply -auto-approve gbr.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_GBR }}
+    - name: Deploy Notification
+      run: |
+        echo "## 🇬🇧 GBR Instance Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: https://gbr-app.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: https://gbr-api.dive25.com" >> $GITHUB_STEP_SUMMARY
+        echo "- Keycloak: https://gbr-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   deploy-deu:
     name: Deploy - DEU (Remote)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: [preflight, approval, deploy-gbr]
-    if: ${{ always() && needs.preflight.outputs.deploy_deu == 'true' && needs.approval.result == 'success' }}
+    if: ${{ always() && needs.preflight.outputs.deploy_deu == 'true' && needs.approval.result == 'success' && inputs.dry_run != true }}
     environment: production-deu
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Setup Terraform
-        if: ${{ inputs.skip_terraform != true }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Download Plan
-        if: ${{ inputs.skip_terraform != true }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-deu
-          path: terraform/instances/
-
-      - name: Terraform Apply
-        if: ${{ inputs.skip_terraform != true }}
-        run: |
-          cd terraform/instances
-          terraform init
-          terraform workspace select deu
-          terraform apply -auto-approve deu.tfplan
-        env:
-          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_DEU }}
-
-      - name: Deploy Notification
-        run: |
-          echo "## 🇩🇪 DEU Instance Deployed (Remote)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: https://deu-app.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: https://deu-api.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
-          echo "- Keycloak: https://deu-idp.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
-
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Setup Terraform
+      if: ${{ inputs.skip_terraform != true }}
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    - name: Download Plan
+      if: ${{ inputs.skip_terraform != true }}
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: tfplan-deu
+        path: terraform/instances/
+    - name: Terraform Apply
+      if: ${{ inputs.skip_terraform != true }}
+      run: |
+        cd terraform/instances
+        terraform init
+        terraform workspace select deu
+        terraform apply -auto-approve deu.tfplan
+      env:
+        TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD_DEU }}
+    - name: Deploy Notification
+      run: |
+        echo "## 🇩🇪 DEU Instance Deployed (Remote)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: https://deu-app.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: https://deu-api.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
+        echo "- Keycloak: https://deu-idp.prosecurity.biz" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 30
   # ==============================================================================
   # HEALTH VERIFICATION
   # ==============================================================================
@@ -594,71 +591,90 @@ jobs:
     runs-on: ubuntu-latest
     needs: [deploy-usa, deploy-fra, deploy-gbr, deploy-deu]
     if: always()
-
     steps:
-      - name: Check USA Health
-        if: ${{ needs.deploy-usa.result == 'success' }}
-        run: |
-          for i in {1..5}; do
-            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://usa-app.dive25.com --max-time 10 || echo "000")
-            if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
-              echo "✅ USA Frontend healthy (HTTP $STATUS)"
-              break
-            fi
-            echo "Attempt $i/5: USA Frontend status $STATUS, retrying..."
-            sleep 10
-          done
-
-      - name: Check FRA Health
-        if: ${{ needs.deploy-fra.result == 'success' }}
-        run: |
-          for i in {1..5}; do
-            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://fra-app.dive25.com --max-time 10 || echo "000")
-            if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
-              echo "✅ FRA Frontend healthy (HTTP $STATUS)"
-              break
-            fi
-            echo "Attempt $i/5: FRA Frontend status $STATUS, retrying..."
-            sleep 10
-          done
-
-      - name: Check GBR Health
-        if: ${{ needs.deploy-gbr.result == 'success' }}
-        run: |
-          for i in {1..5}; do
-            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://gbr-app.dive25.com --max-time 10 || echo "000")
-            if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
-              echo "✅ GBR Frontend healthy (HTTP $STATUS)"
-              break
-            fi
-            echo "Attempt $i/5: GBR Frontend status $STATUS, retrying..."
-            sleep 10
-          done
-
-      - name: Check DEU Health
-        if: ${{ needs.deploy-deu.result == 'success' }}
-        run: |
-          for i in {1..5}; do
-            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://deu-app.prosecurity.biz --max-time 10 || echo "000")
-            if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
-              echo "✅ DEU Frontend healthy (HTTP $STATUS)"
-              break
-            fi
-            echo "Attempt $i/5: DEU Frontend status $STATUS, retrying..."
-            sleep 10
-          done
-
-      - name: Generate Health Summary
-        run: |
-          echo "## 🏥 Health Check Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Instance | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| USA | ${{ needs.deploy-usa.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| FRA | ${{ needs.deploy-fra.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| GBR | ${{ needs.deploy-gbr.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| DEU | ${{ needs.deploy-deu.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
-
+    - name: Check USA Health
+      if: ${{ needs.deploy-usa.result == 'success' }}
+      run: |
+        for i in {1..5}; do
+          set +e
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://usa-app.dive25.com --max-time 10)
+          CURL_STATUS=$?
+          set -e
+          if [ "$CURL_STATUS" -ne 0 ] || [ -z "$STATUS" ]; then
+            STATUS="000"
+          fi
+          if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ USA Frontend healthy (HTTP $STATUS)"
+            break
+          fi
+          echo "Attempt $i/5: USA Frontend status $STATUS, retrying..."
+          sleep 10
+        done
+    - name: Check FRA Health
+      if: ${{ needs.deploy-fra.result == 'success' }}
+      run: |
+        for i in {1..5}; do
+          set +e
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://fra-app.dive25.com --max-time 10)
+          CURL_STATUS=$?
+          set -e
+          if [ "$CURL_STATUS" -ne 0 ] || [ -z "$STATUS" ]; then
+            STATUS="000"
+          fi
+          if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ FRA Frontend healthy (HTTP $STATUS)"
+            break
+          fi
+          echo "Attempt $i/5: FRA Frontend status $STATUS, retrying..."
+          sleep 10
+        done
+    - name: Check GBR Health
+      if: ${{ needs.deploy-gbr.result == 'success' }}
+      run: |
+        for i in {1..5}; do
+          set +e
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://gbr-app.dive25.com --max-time 10)
+          CURL_STATUS=$?
+          set -e
+          if [ "$CURL_STATUS" -ne 0 ] || [ -z "$STATUS" ]; then
+            STATUS="000"
+          fi
+          if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ GBR Frontend healthy (HTTP $STATUS)"
+            break
+          fi
+          echo "Attempt $i/5: GBR Frontend status $STATUS, retrying..."
+          sleep 10
+        done
+    - name: Check DEU Health
+      if: ${{ needs.deploy-deu.result == 'success' }}
+      run: |
+        for i in {1..5}; do
+          set +e
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://deu-app.prosecurity.biz --max-time 10)
+          CURL_STATUS=$?
+          set -e
+          if [ "$CURL_STATUS" -ne 0 ] || [ -z "$STATUS" ]; then
+            STATUS="000"
+          fi
+          if [[ "$STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ DEU Frontend healthy (HTTP $STATUS)"
+            break
+          fi
+          echo "Attempt $i/5: DEU Frontend status $STATUS, retrying..."
+          sleep 10
+        done
+    - name: Generate Health Summary
+      run: |
+        echo "## 🏥 Health Check Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Instance | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| USA | ${{ needs.deploy-usa.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| FRA | ${{ needs.deploy-fra.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| GBR | ${{ needs.deploy-gbr.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| DEU | ${{ needs.deploy-deu.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 15
   # ==============================================================================
   # DEPLOYMENT SUMMARY
   # ==============================================================================
@@ -667,36 +683,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: [health-check]
     if: always()
-
     steps:
-      - name: Generate Final Summary
-        run: |
-          echo "# 🚀 DIVE V3 Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 🌐 Endpoints" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Instance | Frontend | Backend | Keycloak |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|----------|---------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| USA | [usa-app.dive25.com](https://usa-app.dive25.com) | [usa-api.dive25.com](https://usa-api.dive25.com) | [usa-idp.dive25.com](https://usa-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
-          echo "| FRA | [fra-app.dive25.com](https://fra-app.dive25.com) | [fra-api.dive25.com](https://fra-api.dive25.com) | [fra-idp.dive25.com](https://fra-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
-          echo "| GBR | [gbr-app.dive25.com](https://gbr-app.dive25.com) | [gbr-api.dive25.com](https://gbr-api.dive25.com) | [gbr-idp.dive25.com](https://gbr-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
-          echo "| DEU | [deu-app.prosecurity.biz](https://deu-app.prosecurity.biz) | [deu-api.prosecurity.biz](https://deu-api.prosecurity.biz) | [deu-idp.prosecurity.biz](https://deu-idp.prosecurity.biz) |" >> $GITHUB_STEP_SUMMARY
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    - name: Generate Final Summary
+      run: |
+        echo "# 🚀 DIVE V3 Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Actor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🌐 Endpoints" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Instance | Frontend | Backend | Keycloak |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|----------|---------|----------|" >> $GITHUB_STEP_SUMMARY
+        echo "| USA | [usa-app.dive25.com](https://usa-app.dive25.com) | [usa-api.dive25.com](https://usa-api.dive25.com) | [usa-idp.dive25.com](https://usa-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
+        echo "| FRA | [fra-app.dive25.com](https://fra-app.dive25.com) | [fra-api.dive25.com](https://fra-api.dive25.com) | [fra-idp.dive25.com](https://fra-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
+        echo "| GBR | [gbr-app.dive25.com](https://gbr-app.dive25.com) | [gbr-api.dive25.com](https://gbr-api.dive25.com) | [gbr-idp.dive25.com](https://gbr-idp.dive25.com) |" >> $GITHUB_STEP_SUMMARY
+        echo "| DEU | [deu-app.prosecurity.biz](https://deu-app.prosecurity.biz) | [deu-api.prosecurity.biz](https://deu-api.prosecurity.biz) | [deu-idp.prosecurity.biz](https://deu-idp.prosecurity.biz) |" >> $GITHUB_STEP_SUMMARY
+    timeout-minutes: 10
