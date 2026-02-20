@@ -135,6 +135,7 @@ spoke_deploy() {
     export DIVE_SKIP_PHASES=""
     export DIVE_ONLY_PHASE=""
     export DIVE_FROM_PHASE=""
+    export DIVE_DRY_RUN="false"
     local spoke_resume_mode=false
 
     # Parse options (handle both --key value and positional args)
@@ -154,6 +155,9 @@ spoke_deploy() {
                 ;;
             --resume)
                 spoke_resume_mode=true
+                ;;
+            --dry-run)
+                DIVE_DRY_RUN="true"
                 ;;
             --skip-phase)
                 local next=$((i + 1))
@@ -226,6 +230,9 @@ spoke_deploy() {
     fi
 
     # Log phase control flags
+    if [ "$DIVE_DRY_RUN" = "true" ]; then
+        log_info "DRY-RUN MODE: simulating spoke deployment (no changes will be made)"
+    fi
     if [ -n "$DIVE_SKIP_PHASES" ]; then
         log_info "Skipping phases: $DIVE_SKIP_PHASES"
     fi
@@ -253,6 +260,7 @@ spoke_deploy() {
         echo "  --auth-code <UUID>     Pre-authorized federation code (from Hub: ./dive spoke authorize)"
         echo "  --force                Clean and redeploy"
         echo "  --resume               Resume from last checkpoint"
+        echo "  --dry-run              Simulate deployment without making changes"
         echo "  --from-phase <PHASE>   Start from specified phase (skip earlier phases)"
         echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
         echo "  --only-phase <PHASE>   Run only the specified phase"
