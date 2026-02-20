@@ -293,6 +293,30 @@ module_spoke() {
             fi
             ;;
 
+        # === State Audit (Phase 6: State Machine Hardening) ===
+        state)
+            local _state_code="${1:?Instance code required}"
+            shift
+            local _state_repair=""
+            if [ "${1:-}" = "--repair" ]; then
+                _state_repair="repair"
+            fi
+            if ! type -t pipeline_state_show &>/dev/null; then
+                local _pc_mod="${DEPLOYMENT_DIR}/pipeline-common.sh"
+                [ -f "$_pc_mod" ] && source "$_pc_mod"
+            fi
+            if type -t pipeline_state_show &>/dev/null; then
+                if [ -n "$_state_repair" ]; then
+                    pipeline_state_audit "spoke" "$_state_code" "repair"
+                else
+                    pipeline_state_show "spoke" "$_state_code"
+                fi
+            else
+                log_error "State module not available"
+                return 1
+            fi
+            ;;
+
         # === Deployment History (Phase 5: Observability) ===
         history)
             local _hist_code="${1:-}"
@@ -437,6 +461,7 @@ Commands:
   up <CODE>                   Start spoke services (local)
   down <CODE>                 Stop spoke services
   phases <CODE> [--timing]     Show pipeline phase status (optional timing)
+  state <CODE> [--repair]     Show deployment state (--repair to fix inconsistencies)
   diagnose <CODE>             Run diagnostic checks (containers, certs, ports, disk)
   history [CODE]              Show recent deployment history
   status [CODE]               Show spoke status

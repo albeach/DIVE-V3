@@ -82,6 +82,13 @@ hub_pipeline_execute() {
     if pipeline_is_dry_run 2>/dev/null; then
         log_verbose "Dry-run mode: skipping deployment lock acquisition"
     else
+        # Check for stuck deployments before acquiring lock
+        if type pipeline_check_stuck_before_lock &>/dev/null; then
+            if ! pipeline_check_stuck_before_lock "$instance_code" "hub"; then
+                return 1
+            fi
+        fi
+
         # Acquire deployment lock
         if type deployment_acquire_lock &>/dev/null; then
             if ! deployment_acquire_lock "$instance_code"; then
@@ -90,6 +97,11 @@ hub_pipeline_execute() {
                 return 1
             fi
             lock_acquired=true
+        fi
+
+        # Initialize heartbeat tracking
+        if type pipeline_heartbeat_init &>/dev/null; then
+            pipeline_heartbeat_init "$instance_code" "hub"
         fi
     fi
 
@@ -105,6 +117,11 @@ hub_pipeline_execute() {
     # Uninstall SIGINT handler (skip in dry-run)
     if ! pipeline_is_dry_run 2>/dev/null && type pipeline_uninstall_sigint_handler &>/dev/null; then
         pipeline_uninstall_sigint_handler
+    fi
+
+    # Stop heartbeat tracking
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_heartbeat_stop &>/dev/null; then
+        pipeline_heartbeat_stop
     fi
 
     # Always release lock
@@ -644,6 +661,11 @@ _hub_execute_registered_phases() {
         # State transition before phase (if specified in registry)
         if [ -n "$_state" ] && type deployment_set_state &>/dev/null; then
             deployment_set_state "$instance_code" "$_state" "" "{\"phase\":\"$_name\"}"
+        fi
+
+        # Update heartbeat with current phase
+        if type pipeline_heartbeat_update &>/dev/null; then
+            pipeline_heartbeat_update "$instance_code" "${_state:-$_name}"
         fi
 
         # === Phase execution ===
