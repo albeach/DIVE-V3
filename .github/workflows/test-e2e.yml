@@ -1,22 +1,43 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - '.github/workflows/test-e2e.yml'
       - '.github/actions/e2e-setup/**'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/actions/e2e-setup/**'
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: 'Test scope to run'
+        required: true
+        type: choice
+        default: core
+        options:
+          - core
+          - full
+      reason:
+        description: 'Execution reason'
+        required: false
+        type: string
+        default: 'Manual E2E validation'
+
+permissions:
+  contents: read
 
 concurrency:
   group: test-e2e-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Common env vars shared by all test runner steps
 env:
   NEXTAUTH_URL: https://localhost:3000
   DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
@@ -24,23 +45,21 @@ env:
   KEYCLOAK_REALM: dive-v3-broker-usa
   KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
   KEYCLOAK_CLIENT_SECRET: test-client-secret
-  KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+  KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
   MONGODB_URL: mongodb://localhost:27017/dive-v3-test
   BASE_URL: https://localhost:3000
 
 jobs:
   e2e-core-smoke:
-    name: E2E - Core Smoke (Gating)
+    name: E2E - Core Smoke (Required Slice)
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-
+    timeout-minutes: 20
     services:
       mongodb:
         image: mongo:7.0
         ports: ['27017:27017']
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
       postgres:
         image: postgres:15
         ports: ['5432:5432']
@@ -49,36 +68,36 @@ jobs:
           POSTGRES_PASSWORD: password
           POSTGRES_DB: dive_v3_app
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
         uses: ./.github/actions/e2e-setup
         with:
-          nextauth-secret: test-secret-for-e2e-core-smoke-2025
+          nextauth-secret: test-secret-for-e2e-core-smoke-2026
+          start-opa: 'true'
           keycloak-users: >-
             [
               {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
             ]
-
-      - name: Run Core Smoke E2E Tests
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/dynamic/hub/basic.spec.ts
-          --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured"
+      - name: Run core smoke tests
+        run: |
+          cd frontend
+          npx playwright test \
+            src/__tests__/e2e/dynamic/hub/basic.spec.ts \
+            --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured"
         env:
           NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-core-smoke-2025
+          NEXTAUTH_SECRET: test-secret-for-e2e-core-smoke-2026
+          OPA_URL: https://localhost:8181
           CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
+      - name: Upload core smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e2e-core-smoke-results
           path: |
@@ -86,19 +105,17 @@ jobs:
             frontend/test-results/
           retention-days: 7
 
-  e2e-authentication:
-    name: E2E - Authentication Flows (Non-Gating)
+  e2e-federation-smoke:
+    name: E2E - Federation Attribute Sync (Nightly/Manual)
     runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
     services:
       mongodb:
         image: mongo:7.0
         ports: ['27017:27017']
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
       postgres:
         image: postgres:15
         ports: ['5432:5432']
@@ -107,16 +124,69 @@ jobs:
           POSTGRES_PASSWORD: password
           POSTGRES_DB: dive_v3_app
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
         uses: ./.github/actions/e2e-setup
         with:
-          nextauth-secret: test-secret-for-e2e-authentication-flows-2025
+          nextauth-secret: test-secret-for-e2e-federation-2026
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-gbr-1","password":"TestUser2025!Pilot","clearance":"SECRET","coi":["NATO"],"countryOfAffiliation":"GBR"}
+            ]
+      - name: Run federation attribute sync tests
+        run: |
+          cd frontend
+          npx playwright test src/__tests__/e2e/federated-attribute-sync.spec.ts
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-federation-2026
+          CI: true
+      - name: Upload federation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-federation-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-full-regression:
+    name: E2E - Full Regression (Nightly/Manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-full-2026
+          start-opa: 'true'
           keycloak-users: >-
             [
               {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
@@ -124,386 +194,37 @@ jobs:
               {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
               {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
             ]
-
-      - name: Run Authentication E2E Tests
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/mfa-complete-flow.spec.ts
-          src/__tests__/e2e/mfa-conditional.spec.ts
-          src/__tests__/e2e/external-idp-federation-flow.spec.ts
-          src/__tests__/e2e/session-lifecycle.spec.ts
-          src/__tests__/e2e/webauthn-aal3-flow.spec.ts
-          src/__tests__/e2e/comprehensive-frontend.spec.ts
-          || true
+      - name: Run full E2E regression suite
+        run: |
+          cd frontend
+          npx playwright test \
+            src/__tests__/e2e/mfa-complete-flow.spec.ts \
+            src/__tests__/e2e/mfa-conditional.spec.ts \
+            src/__tests__/e2e/external-idp-federation-flow.spec.ts \
+            src/__tests__/e2e/identity-drawer.spec.ts \
+            src/__tests__/e2e/federated-attribute-sync.spec.ts \
+            src/__tests__/e2e/session-lifecycle.spec.ts \
+            src/__tests__/e2e/webauthn-aal3-flow.spec.ts \
+            src/__tests__/e2e/classification-equivalency.spec.ts \
+            src/__tests__/e2e/integration-federation-vs-object.spec.ts \
+            src/__tests__/e2e/admin/ \
+            src/__tests__/e2e/journeys/ \
+            src/__tests__/e2e/cross-cutting/ \
+            src/__tests__/e2e/policies-lab.spec.ts \
+            src/__tests__/e2e/nato-expansion.spec.ts \
+            src/__tests__/e2e/idp-management-revamp.spec.ts \
+            src/__tests__/e2e/kas-integration-flow.spec.ts \
+            src/__tests__/e2e/upload-flow-modern.spec.ts
         env:
           NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-authentication-flows-2025
-          CI: true
-          GITHUB_ACTIONS: ""
-          BACKEND_API_URL: http://localhost:4000
-          ENABLE_MFA_TESTS: "false"
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-authentication-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-authorization:
-    name: E2E - Authorization Checks (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-authorization-2025
-          start-opa: 'true'
-          keycloak-users: >-
-            [
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
-              {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
-            ]
-
-      - name: Run Authorization E2E Tests (Deterministic Gating Slice)
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/identity-drawer.spec.ts
-          --grep "UNCLASSIFIED user"
-          || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-authorization-2025
+          NEXTAUTH_SECRET: test-secret-for-e2e-full-2026
           OPA_URL: https://localhost:8181
           CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
+      - name: Upload full suite artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e2e-authorization-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-classification-equivalency:
-    name: E2E - Classification Equivalency (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-classification-2025
-          keycloak-users: >-
-            [
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
-              {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
-            ]
-
-      - name: Run Classification Equivalency E2E Tests
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/classification-equivalency.spec.ts
-          src/__tests__/e2e/integration-federation-vs-object.spec.ts
-          || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-classification-2025
-          CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-classification-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-resource-management:
-    name: E2E - Resource Management (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-resource-2025
-          start-opa: 'true'
-          keycloak-users: >-
-            [
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
-              {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
-            ]
-
-      - name: Run Resource Management E2E Tests
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/policies-lab.spec.ts
-          src/__tests__/e2e/nato-expansion.spec.ts
-          src/__tests__/e2e/idp-management-revamp.spec.ts
-          src/__tests__/e2e/kas-integration-flow.spec.ts
-          src/__tests__/e2e/upload-flow-modern.spec.ts
-          || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-resource-2025
-          OPA_URL: https://localhost:8181
-          CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-resource-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-admin:
-    name: E2E - Admin Pages (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 20
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-admin-2025
-          keycloak-users: >-
-            [
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]},
-              {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}
-            ]
-
-      - name: Run Admin E2E Tests
-        run: cd frontend && npx playwright test src/__tests__/e2e/admin/ || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-admin-2025
-          CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-admin-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-user-journeys:
-    name: E2E - User Journeys (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-journeys-2025
-          keycloak-users: >-
-            [
-              {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[]},
-              {"username":"testuser-usa-3","password":"TestUser2025!Pilot","clearance":"SECRET","coi":[]},
-              {"username":"testuser-usa-4","password":"TestUser2025!Pilot","clearance":"TOP_SECRET","coi":[]},
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]}
-            ]
-
-      - name: Run User Journey E2E Tests
-        run: cd frontend && npx playwright test src/__tests__/e2e/journeys/ || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-journeys-2025
-          CI: true
-          GITHUB_ACTIONS: ""
-          ENABLE_MFA_TESTS: "false"
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-journey-results
-          path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 7
-
-  e2e-quality:
-    name: E2E - Quality & Accessibility (Non-Gating)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 15
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports: ['27017:27017']
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      postgres:
-        image: postgres:15
-        ports: ['5432:5432']
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E Setup
-        uses: ./.github/actions/e2e-setup
-        with:
-          nextauth-secret: test-secret-for-e2e-quality-2025
-          keycloak-users: >-
-            [
-              {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
-              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]}
-            ]
-
-      - name: Run Quality & Accessibility E2E Tests
-        run: >-
-          cd frontend && npx playwright test
-          src/__tests__/e2e/cross-cutting/
-          src/__tests__/e2e/dynamic/hub/basic.spec.ts
-          || true
-        env:
-          NODE_ENV: test
-          NEXTAUTH_SECRET: test-secret-for-e2e-quality-2025
-          CI: true
-          GITHUB_ACTIONS: ""
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-quality-results
+          name: e2e-full-results
           path: |
             frontend/playwright-report/
             frontend/test-results/
@@ -512,24 +233,28 @@ jobs:
   e2e-summary:
     name: E2E Test Summary
     runs-on: ubuntu-latest
-    needs: [e2e-core-smoke, e2e-authentication, e2e-authorization, e2e-classification-equivalency, e2e-resource-management, e2e-admin, e2e-user-journeys, e2e-quality]
+    timeout-minutes: 5
+    needs: [e2e-core-smoke, e2e-federation-smoke, e2e-full-regression]
     if: always()
-
     steps:
-      - name: Generate Summary
+      - name: Generate summary
         run: |
-          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Core Smoke (Gating) | ${{ needs.e2e-core-smoke.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Authentication (Non-Gating) | ${{ needs.e2e-authentication.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Authorization (Non-Gating) | ${{ needs.e2e-authorization.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Classification Equivalency (Non-Gating) | ${{ needs.e2e-classification-equivalency.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Resource Management (Non-Gating) | ${{ needs.e2e-resource-management.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Admin Pages (Non-Gating) | ${{ needs.e2e-admin.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| User Journeys (Non-Gating) | ${{ needs.e2e-user-journeys.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Quality & Accessibility (Non-Gating) | ${{ needs.e2e-quality.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Non-gating suites are informational only while auth/MFA/federation stabilization continues." >> $GITHUB_STEP_SUMMARY
-          echo "Test artifacts available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "## E2E Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Core Smoke | ${{ needs.e2e-core-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Federation Sync | ${{ needs.e2e-federation-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Full Regression | ${{ needs.e2e-full-regression.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ needs.e2e-core-smoke.result }}" != "success" ]]; then
+            echo "Required E2E slice failed (core smoke)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ needs.e2e-federation-smoke.result }}" != "success" ]]; then
+              echo "Federation smoke failed in scheduled/manual run." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
