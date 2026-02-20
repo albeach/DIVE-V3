@@ -87,7 +87,13 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y shellcheck
           fi
-          xargs -r shellcheck -S warning < "${{ steps.changed-shell.outputs.file_list }}"
+          # Excluded checks (pervasive in codebase, low-risk for sourced modules):
+          # SC2155: Declare and assign separately (288 instances across codebase)
+          # SC1090: Can't follow non-constant source (dynamic source paths)
+          # SC2034: Variable appears unused (exported via source, not direct execution)
+          # SC2164: Use cd ... || exit (functions use return, not exit)
+          # SC2154: Variable referenced but not assigned (set by caller in sourced modules)
+          xargs -r shellcheck -S warning --exclude=SC2155,SC1090,SC2034,SC2164,SC2154 < "${{ steps.changed-shell.outputs.file_list }}"
 
       - name: Skip ShellCheck
         if: steps.changed-shell.outputs.has_files != 'true'

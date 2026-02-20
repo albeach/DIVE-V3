@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090  # Dynamic source paths are intentional in test harness
 # =============================================================================
 # DIVE V3 - CLI Modules Unit Tests
 # =============================================================================
@@ -64,19 +65,24 @@ test_cli_core_module() {
 }
 
 ##
-# Test federation.sh module
+# Test federation/setup.sh module
 #
 test_cli_federation_module() {
-    log_verbose "Testing federation.sh module..."
+    log_verbose "Testing federation/setup.sh module..."
+
+    # Check syntax first
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
+        log_error "Syntax error in federation/setup.sh"
+        return 1
+    fi
 
     # Source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation.sh"; then
-        log_error "Failed to source federation.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
+        log_error "Failed to source federation/setup.sh"
         return 1
     fi
 
     # Test federation functions exist
-    # Functions available via federation/setup.sh (sourced by federation.sh shim)
     local required_functions=(
         "federation_status"
         "get_hub_admin_token"
@@ -178,11 +184,11 @@ test_cli_db_module() {
 # Test env-sync.sh module
 #
 test_cli_env_sync_module() {
-    log_verbose "Testing env-sync.sh module..."
+    log_verbose "Testing configuration/env-sync.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" 2>/dev/null; then
-        log_error "Syntax error in env-sync.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" 2>/dev/null; then
+        log_error "Syntax error in configuration/env-sync.sh"
         return 1
     fi
 
@@ -216,14 +222,14 @@ test_cli_orchestration_state_db_module() {
 }
 
 ##
-# Test federation-state-db.sh module
+# Test federation/health.sh module (formerly federation-state-db.sh)
 #
 test_cli_federation_state_db_module() {
-    log_verbose "Testing federation-state-db.sh module..."
+    log_verbose "Testing federation/health.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" 2>/dev/null; then
-        log_error "Syntax error in federation-state-db.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" 2>/dev/null; then
+        log_error "Syntax error in federation/health.sh"
         return 1
     fi
 
@@ -232,6 +238,20 @@ test_cli_federation_state_db_module() {
         log_error "Failed to source federation/health.sh"
         return 1
     fi
+
+    # Verify key functions exist
+    local required_functions=(
+        "fed_db_upsert_link"
+        "fed_db_list_links"
+        "federation_health_dashboard"
+    )
+
+    for func in "${required_functions[@]}"; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Required function missing: $func"
+            return 1
+        fi
+    done
 
     return 0
 }
@@ -696,6 +716,89 @@ test_cli_config_manager() {
 }
 
 ##
+# Test deployment profiles (Phase 8)
+#
+test_cli_profiles() {
+    log_verbose "Testing deployment profiles module..."
+
+    local profiles="${DIVE_ROOT}/scripts/dive-modules/configuration/profiles.sh"
+    if [ ! -f "$profiles" ]; then
+        log_error "profiles.sh not found"
+        return 1
+    fi
+
+    source "$profiles"
+
+    # Verify functions exist
+    for func in module_profile profile_save profile_load profile_list profile_delete profile_show; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Function $func not found"
+            return 1
+        fi
+    done
+
+    # Use temp dir for test profiles
+    local orig_dir="$_PROFILE_DIR"
+    _PROFILE_DIR=$(mktemp -d)
+
+    # Test profile_save
+    export ENVIRONMENT="test-env"
+    export DIVE_DEFAULT_DOMAIN="test.example.com"
+    profile_save "test-profile" >/dev/null 2>&1
+    if [ ! -f "${_PROFILE_DIR}/test-profile.env" ]; then
+        log_error "profile_save did not create profile file"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Verify profile content
+    if ! grep -q "ENVIRONMENT=test-env" "${_PROFILE_DIR}/test-profile.env"; then
+        log_error "Profile missing ENVIRONMENT"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_list
+    local output
+    output=$(profile_list 2>&1)
+    if ! echo "$output" | grep -q "test-profile"; then
+        log_error "profile_list doesn't show test-profile"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_load
+    unset DIVE_DEFAULT_DOMAIN
+    profile_load "test-profile" >/dev/null 2>&1
+    if [ "${DIVE_DEFAULT_DOMAIN:-}" != "test.example.com" ]; then
+        log_error "profile_load did not restore DIVE_DEFAULT_DOMAIN"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_delete (non-interactive)
+    DIVE_NON_INTERACTIVE=true profile_delete "test-profile" >/dev/null 2>&1
+    if [ -f "${_PROFILE_DIR}/test-profile.env" ]; then
+        log_error "profile_delete did not remove file"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Cleanup
+    rm -rf "$_PROFILE_DIR"
+    _PROFILE_DIR="$orig_dir"
+    export DIVE_DEFAULT_DOMAIN="dive25.com"
+    unset ENVIRONMENT
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -711,6 +814,7 @@ test_run_cli_module_tests() {
         "test_cli_setup_wizard"
         "test_cli_error_recovery"
         "test_cli_config_manager"
+        "test_cli_profiles"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
@@ -750,6 +854,13 @@ test_run_cli_module_tests() {
 # =============================================================================
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-    # Script is being run directly
+    # Script is being run directly — bootstrap DIVE_ROOT and common.sh
+    if [ -z "${DIVE_ROOT:-}" ]; then
+        DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        export DIVE_ROOT
+    fi
+    if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
+    fi
     test_run_cli_module_tests
 fi

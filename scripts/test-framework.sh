@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090,SC2034  # Dynamic sources intentional; exported vars used by test suites
 # =============================================================================
 # DIVE V3 - Comprehensive Testing Framework
 # =============================================================================
@@ -221,13 +222,13 @@ test_run_cli_unit_tests() {
     # Test each CLI module
     local cli_modules=(
         "core.sh"
-        "federation.sh"
-        "hub.sh"
-        "spoke.sh"
+        "federation/setup.sh"
+        "deployment/hub.sh"
+        "deployment/spoke.sh"
         "db.sh"
-        "env-sync.sh"
+        "configuration/env-sync.sh"
         "orchestration/state.sh"
-        "federation-state-db.sh"
+        "federation/health.sh"
     )
 
     for module in "${cli_modules[@]}"; do
@@ -251,13 +252,9 @@ test_cli_module() {
     local module="$1"
     local module_path
 
-    # Find module path
+    # Find module path — supports both flat names and subdirectory paths
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/${module}" ]; then
         module_path="${DIVE_ROOT}/scripts/dive-modules/${module}"
-    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/hub/${module}" ]; then
-        module_path="${DIVE_ROOT}/scripts/dive-modules/hub/${module}"
-    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/${module}" ]; then
-        module_path="${DIVE_ROOT}/scripts/dive-modules/spoke/${module}"
     else
         log_warn "CLI module not found: $module"
         return 1
@@ -755,7 +752,8 @@ test_rate_limiting() {
 test_generate_report() {
     log_step "Generating Test Report"
 
-    local report_file="${TEST_REPORTS}/test-summary-$(date +%Y%m%d-%H%M%S).md"
+    local report_file
+    report_file="${TEST_REPORTS}/test-summary-$(date +%Y%m%d-%H%M%S).md"
 
     cat > "$report_file" << EOF
 # DIVE V3 Test Execution Report
