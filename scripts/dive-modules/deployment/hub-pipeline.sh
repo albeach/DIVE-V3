@@ -162,6 +162,19 @@ _hub_pipeline_execute_internal() {
             orch_init_metrics "$instance_code"
         fi
 
+        # Resolve stale errors from previous deployments (prevents threshold accumulation)
+        if type orch_db_exec &>/dev/null && type orch_db_check_connection &>/dev/null; then
+            if orch_db_check_connection 2>/dev/null; then
+                local _code_lower
+                _code_lower=$(lower "$instance_code")
+                orch_db_exec "
+                    UPDATE orchestration_errors SET resolved = TRUE
+                    WHERE instance_code = '$_code_lower' AND resolved = FALSE
+                " >/dev/null 2>&1 || true
+                log_verbose "Resolved stale orchestration errors from previous deployments"
+            fi
+        fi
+
         # Initialize progress tracking (13 phases: 1-13)
         if type progress_init &>/dev/null; then
             progress_init "hub" "USA" 13
@@ -460,6 +473,17 @@ _hub_run_phase_with_circuit_breaker() {
             orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution failed"
         fi
 
+        # Capture diagnostic snapshot for post-mortem analysis
+        local diag_dir="${DIVE_ROOT}/logs/diagnostics/hub-$(date +%Y%m%d-%H%M%S)-${phase_name}"
+        if mkdir -p "$diag_dir" 2>/dev/null; then
+            log_info "Capturing diagnostic snapshot → $diag_dir"
+            ${DOCKER_CMD:-docker} ps -a --filter "name=dive-hub" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" > "$diag_dir/containers.txt" 2>/dev/null || true
+            ${DOCKER_CMD:-docker} stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" > "$diag_dir/stats.txt" 2>/dev/null || true
+            for _ctr in $(${DOCKER_CMD:-docker} ps -a --filter "name=dive-hub" --format '{{.Names}}' 2>/dev/null); do
+                ${DOCKER_CMD:-docker} logs "$_ctr" --tail 50 > "$diag_dir/${_ctr##*/}.log" 2>&1 || true
+            done
+        fi
+
         # Guided error recovery
         if type error_recovery_suggest &>/dev/null; then
             error_recovery_suggest "$phase_name" "hub" "$instance_code"
@@ -587,15 +611,17 @@ _hub_execute_registered_phases() {
     # Reset --from-phase tracking state
     export _DIVE_FROM_PHASE_REACHED=false
 
-    local i
-    for (( i = 0; i < _phase_count; i++ )); do
-        local _num="${_PIPELINE_REG_NUMS[$i]}"
-        local _name="${_PIPELINE_REG_NAMES[$i]}"
-        local _label="${_PIPELINE_REG_LABELS[$i]}"
-        local _func="${_PIPELINE_REG_FUNCS[$i]}"
-        local _mode="${_PIPELINE_REG_MODES[$i]}"
-        local _state="${_PIPELINE_REG_STATES[$i]}"
-        local _warn="${_PIPELINE_REG_WARN_MSGS[$i]}"
+    # Use _phase_idx (not i) to prevent bash dynamic scoping corruption.
+    # Called functions that use 'i' without 'local' would overwrite a parent 'i'.
+    local _phase_idx
+    for (( _phase_idx = 0; _phase_idx < _phase_count; _phase_idx++ )); do
+        local _num="${_PIPELINE_REG_NUMS[$_phase_idx]}"
+        local _name="${_PIPELINE_REG_NAMES[$_phase_idx]}"
+        local _label="${_PIPELINE_REG_LABELS[$_phase_idx]}"
+        local _func="${_PIPELINE_REG_FUNCS[$_phase_idx]}"
+        local _mode="${_PIPELINE_REG_MODES[$_phase_idx]}"
+        local _state="${_PIPELINE_REG_STATES[$_phase_idx]}"
+        local _warn="${_PIPELINE_REG_WARN_MSGS[$_phase_idx]}"
 
         # Gate: skip remaining phases if a previous fatal phase failed
         local _current_result
@@ -647,8 +673,15 @@ _hub_execute_registered_phases() {
         # After DATABASE_INIT (Phase 2): set initial state + install CA trust
         if [ "$_name" = "PREFLIGHT" ] && [ "$_current_result" -eq 0 ]; then
             if type deployment_set_state &>/dev/null; then
-                deployment_set_state "$instance_code" "INITIALIZING" "" \
-                    "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode,\"phase\":\"POST_DATABASE_INIT\"}"
+                # Only set INITIALIZING if not already past that point (idempotent for re-deployments)
+                local _cur_state=""
+                if type get_deployment_state &>/dev/null; then
+                    _cur_state=$(get_deployment_state "$instance_code" 2>/dev/null)
+                fi
+                if [ -z "$_cur_state" ] || [ "$_cur_state" = "UNKNOWN" ] || [ "$_cur_state" = "FAILED" ]; then
+                    deployment_set_state "$instance_code" "INITIALIZING" "" \
+                        "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode,\"phase\":\"POST_DATABASE_INIT\"}"
+                fi
             fi
             _hub_install_ca_trust || true
         fi
@@ -659,8 +692,9 @@ _hub_execute_registered_phases() {
         fi
 
         # State transition before phase (if specified in registry)
+        # Tolerate invalid transitions during re-deployment (state may already be ahead)
         if [ -n "$_state" ] && type deployment_set_state &>/dev/null; then
-            deployment_set_state "$instance_code" "$_state" "" "{\"phase\":\"$_name\"}"
+            deployment_set_state "$instance_code" "$_state" "" "{\"phase\":\"$_name\"}" || true
         fi
 
         # Update heartbeat with current phase
@@ -719,7 +753,13 @@ _hub_execute_registered_phases() {
 
         local _phase_end
         _phase_end=$(date +%s)
-        eval "${_times_var}+=(\"Phase $_num ($_label): $((_phase_end - _phase_start))s\")"
+        local _phase_elapsed=$((_phase_end - _phase_start))
+        eval "${_times_var}+=(\"Phase $_num ($_label): ${_phase_elapsed}s\")"
+
+        # Warn if phase took longer than 5 minutes (potential bottleneck)
+        if [ $_phase_elapsed -gt 300 ]; then
+            log_warn "Phase $_name took ${_phase_elapsed}s (>5min) — consider investigating"
+        fi
 
         # For fatal modes (standard + direct), update result and check threshold
         if [ "$_mode" = "standard" ] || [ "$_mode" = "direct" ]; then
@@ -934,11 +974,11 @@ hub_phases() {
         echo "  ─────────────────────────────────────────────────────────────────────────────"
     fi
 
-    local i
-    for (( i = 0; i < total; i++ )); do
-        local name="${phase_names[$i]}"
-        local label="${phase_labels[$i]}"
-        local num=$((i + 1))
+    local _pidx
+    for (( _pidx = 0; _pidx < total; _pidx++ )); do
+        local name="${phase_names[$_pidx]}"
+        local label="${phase_labels[$_pidx]}"
+        local num=$((_pidx + 1))
 
         local status="pending"
         local timestamp=""

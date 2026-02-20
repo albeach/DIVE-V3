@@ -114,7 +114,7 @@ _config_check_compose_file() {
     local instance_code="${2:-}"
 
     if [ "$type" = "hub" ]; then
-        local compose_file="${DIVE_ROOT}/docker/docker-compose.hub.yml"
+        local compose_file="${DIVE_ROOT}/docker-compose.hub.yml"
         if [ ! -f "$compose_file" ]; then
             _cv_error "Hub compose: $compose_file not found"
         fi

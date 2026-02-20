@@ -211,7 +211,6 @@ EOF
 # Start hub services with parallel startup optimization (Phase 3 Sprint 1)
 ##
 hub_up() {
-    echo "DEBUG [hub_up]: ENTRY" >&2
     log_info "Starting hub services..."
 
     cd "$DIVE_ROOT" || return 1
@@ -224,7 +223,6 @@ hub_up() {
     # CRITICAL: Ensure dive-shared network exists (required by docker-compose.hub.yml)
     # This is normally done in hub_preflight(), but hub_up() can be called standalone
     # docker-compose.hub.yml declares dive-shared as "external: true" which is validated at parse time
-    echo "DEBUG [hub_up]: Checking dive-shared network..." >&2
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
         log_verbose "Creating dive-shared network (required for hub services)..."
         if ! ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null; then
@@ -234,26 +232,21 @@ hub_up() {
         fi
         log_verbose "dive-shared network created"
     fi
-    echo "DEBUG [hub_up]: dive-shared network OK" >&2
 
     # CRITICAL: Load secrets from GCP or local before starting containers
     # This ensures all environment variables are available for docker-compose interpolation
-    echo "DEBUG [hub_up]: Loading secrets..." >&2
     if ! load_secrets; then
         log_error "Failed to load secrets - cannot start hub"
         return 1
     fi
-    echo "DEBUG [hub_up]: Secrets loaded" >&2
 
     # CRITICAL: Pre-build all Docker images before parallel startup
     # This prevents build delays during service health checks (frontend, backend, etc.)
-    echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
     local build_log
     build_log="/tmp/hub-docker-build-$(date +%s).log"
     if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build --parallel > "$build_log" 2>&1; then
         log_success "Docker images built successfully"
-        echo "DEBUG [hub_up]: Docker images built" >&2
     else
         log_error "Failed to build Docker images"
         log_error "Build log: $build_log"
@@ -407,7 +400,8 @@ calculate_service_level() {
     esac
 
     # Get dependencies for this service
-    local deps="${service_deps[$service]}"
+    # _service_deps is declared by the caller (hub_parallel_startup in hub-services.sh)
+    local deps="${_service_deps[$service]:-}"
 
     # No dependencies = level 0
     if [ "$deps" = "none" ] || [ -z "$deps" ]; then
@@ -419,7 +413,7 @@ calculate_service_level() {
     local max_dep_level=0
     for dep in $deps; do
         # Skip if dependency doesn't exist in our service list
-        if [ -z "${service_deps[$dep]+x}" ]; then
+        if [ -z "${_service_deps[$dep]+x}" ]; then
             continue
         fi
 

@@ -49,6 +49,7 @@ spoke_verify_federation() {
 
     # Progress indicator (better UX than silent wait)
     local progress_interval=5
+    local i
     for ((i=progress_interval; i<=stabilization_time; i+=progress_interval)); do
         log_verbose "   ${i}/${stabilization_time}s elapsed..."
         sleep $progress_interval

@@ -108,6 +108,7 @@ _vault_check_unsealed() {
     local delay=2
     local cacert_fallback=false
 
+    local i
     for ((i=1; i<=retries; i++)); do
         if _vault_run_with_timeout 5 vault status 2>/dev/null | grep -q "Sealed.*false"; then
             return 0

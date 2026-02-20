@@ -136,7 +136,9 @@ hub_parallel_startup() {
 
     for svc in $all_services; do
         local level
-        level=$(calculate_service_level "$svc")
+        level=$(calculate_service_level "$svc") || level=0
+        # Guard against empty level (defensive)
+        [ -z "$level" ] && level=0
         _service_levels["$svc"]=$level
 
         # Add to level_services map
@@ -492,6 +494,7 @@ hub_configure_keycloak() {
 
     # Check if Keycloak is ready
     local kc_ready=false
+    local i
     for i in {1..30}; do
         # Keycloak health endpoint is on management port 9000 (HTTPS)
         if ${DOCKER_CMD:-docker} exec dive-hub-keycloak curl -sfk https://localhost:9000/health/ready >/dev/null 2>&1; then
@@ -635,7 +638,7 @@ _hub_ensure_amr_mapper_exists() {
 
     # Get admin token
     local admin_token
-    admin_token=$(curl -sk "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+    admin_token=$(curl -sk --max-time 10 "${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
         -d "password=${admin_pass}" \
@@ -648,7 +651,7 @@ _hub_ensure_amr_mapper_exists() {
 
     # Get broker client UUID
     local client_uuid
-    client_uuid=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients?clientId=${client_id}" \
+    client_uuid=$(curl -sk --max-time 10 "${keycloak_url}/admin/realms/${realm}/clients?clientId=${client_id}" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null | jq -r '.[0].id // empty')
 
     if [ -z "$client_uuid" ]; then
@@ -658,7 +661,7 @@ _hub_ensure_amr_mapper_exists() {
 
     # Check if oidc-amr-mapper exists
     local amr_mapper_exists
-    amr_mapper_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+    amr_mapper_exists=$(curl -sk --max-time 10 "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null | \
         jq -r '[.[] | select(.protocolMapper == "oidc-amr-mapper")] | length')
 
@@ -674,7 +677,7 @@ _hub_ensure_amr_mapper_exists() {
     local mapper_json='{"name":"amr (native session)","protocol":"openid-connect","protocolMapper":"oidc-amr-mapper","config":{"id.token.claim":"true","access.token.claim":"true","introspection.token.claim":"true","userinfo.token.claim":"true","claim.name":"amr"}}'
 
     local http_code
-    http_code=$(curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+    http_code=$(curl -sk --max-time 10 -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $admin_token" \
         -H "Content-Type: application/json" \
         -d "$mapper_json" \
@@ -688,14 +691,14 @@ _hub_ensure_amr_mapper_exists() {
 
     # Also ensure amr (user attribute fallback) exists for federated users
     local amr_fallback_exists
-    amr_fallback_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+    amr_fallback_exists=$(curl -sk --max-time 10 "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null | \
         jq -r '[.[] | select(.config["claim.name"] == "user_amr")] | length')
 
     if [ "${amr_fallback_exists:-0}" -eq 0 ]; then
         log_warn "user_amr fallback mapper missing — creating"
         local fallback_json='{"name":"amr (user attribute fallback)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"introspection.token.claim":"true","userinfo.token.claim":"true","multivalued":"true","user.attribute":"amr","id.token.claim":"true","access.token.claim":"true","claim.name":"user_amr","jsonType.label":"String"}}'
-        curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        curl -sk --max-time 10 -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
             -H "Authorization: Bearer $admin_token" \
             -H "Content-Type: application/json" \
             -d "$fallback_json" \
@@ -704,14 +707,14 @@ _hub_ensure_amr_mapper_exists() {
 
     # Also ensure acr (user attribute fallback) exists
     local acr_fallback_exists
-    acr_fallback_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+    acr_fallback_exists=$(curl -sk --max-time 10 "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null | \
         jq -r '[.[] | select(.config["claim.name"] == "user_acr")] | length')
 
     if [ "${acr_fallback_exists:-0}" -eq 0 ]; then
         log_warn "user_acr fallback mapper missing — creating"
         local acr_fallback_json='{"name":"acr (user attribute fallback)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"introspection.token.claim":"true","userinfo.token.claim":"true","multivalued":"false","user.attribute":"acr","id.token.claim":"true","access.token.claim":"true","claim.name":"user_acr","jsonType.label":"String"}}'
-        curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        curl -sk --max-time 10 -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
             -H "Authorization: Bearer $admin_token" \
             -H "Content-Type: application/json" \
             -d "$acr_fallback_json" \
@@ -732,6 +735,7 @@ hub_verify_realm() {
 
     log_verbose "Verifying realm '$realm' exists..."
 
+    local i
     for i in $(seq 1 $max_retries); do
         # Check if realm exists
         local realm_response

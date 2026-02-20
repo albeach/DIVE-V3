@@ -377,10 +377,12 @@ orch_db_set_state() {
             log_error "Valid transitions from $prev_state: $valid_targets"
 
             # Record invalid transition attempt (using sanitized inputs)
+            # Severity 3 (MEDIUM): state transition conflicts are expected during re-deployment
+            # and should not abort the pipeline (HIGH threshold = 1 would abort immediately)
             local safe_prev="${prev_state//\'/\'\'}"
             orch_db_exec "
 INSERT INTO orchestration_errors (instance_code, error_code, severity, component, message, remediation)
-VALUES ('$safe_code_lower', 'INVALID_STATE_TRANSITION', 2, 'state-machine',
+VALUES ('$safe_code_lower', 'INVALID_STATE_TRANSITION', 3, 'state-machine',
         'Invalid transition: $safe_prev → $safe_new_state',
         'Use one of: ${valid_targets//\'/\'\'}');" >/dev/null 2>&1 || true
 

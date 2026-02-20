@@ -357,3 +357,4 @@ opal-data-source/federation_matrix.json
 
 !policies/data/minimal-base-data.json
 !policies/**/*.rego
+backend/src/__tests__/__fixtures__/policy-signing/test-signing.crt

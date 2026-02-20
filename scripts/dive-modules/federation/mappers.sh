@@ -121,6 +121,7 @@ _ensure_federation_client_mappers() {
         if [ -n "$mapping_line" ]; then
             # Parse pipe-delimited fields: CODE|src:claim|src:claim|...
             IFS='|' read -ra fields <<< "$mapping_line"
+            local i
             for ((i=1; i<${#fields[@]}; i++)); do
                 [ -n "${fields[$i]}" ] && localized_attrs+=("${fields[$i]}")
             done

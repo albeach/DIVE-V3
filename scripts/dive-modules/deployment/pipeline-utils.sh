@@ -453,10 +453,11 @@ pipeline_ensure_secrets_loaded() {
             continue
         fi
 
-        # Check for placeholder values
+        # Check for placeholder values (including bootstrap template values)
         if [[ "$value" == *"PLACEHOLDER"* ]] || \
            [[ "$value" == *"changeme"* ]] || \
            [[ "$value" == *"__PLACEHOLDER__"* ]] || \
+           [[ "$value" == *"bootstrap-will-be-replaced"* ]] || \
            [[ "$value" == "TODO"* ]]; then
             log_error "Secret contains placeholder value: $var_name"
             placeholders=$((placeholders + 1))

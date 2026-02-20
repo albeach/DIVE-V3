@@ -33,6 +33,7 @@ json_array_unique() {
         uniq+=("$item")
     done
     local json="["
+    local i
     for i in "${!uniq[@]}"; do
         local v="${uniq[$i]}"
         v=${v//\"/\\\"}

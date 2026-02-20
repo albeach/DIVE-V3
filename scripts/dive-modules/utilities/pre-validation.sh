@@ -61,6 +61,16 @@ pre_validate_check_docker() {
         mem_gb=$(echo "$mem" | awk '{printf "%.0f", $1/1073741824}' 2>/dev/null || echo "?")
     fi
 
+    # Warn if Docker resources are below recommended thresholds for hub deployment
+    if [ "$cpu" != "?" ] && [ "$cpu" -lt 4 ] 2>/dev/null; then
+        echo "WARN|Docker ${version}, ${cpu} CPU, ${mem_gb}GB RAM (recommended: 4+ CPUs for hub)"
+        return 0
+    fi
+    if [ "$mem_gb" != "?" ] && [ "$mem_gb" -lt 8 ] 2>/dev/null; then
+        echo "WARN|Docker ${version}, ${cpu} CPU, ${mem_gb}GB RAM (recommended: 8+GB for hub)"
+        return 0
+    fi
+
     echo "OK|Docker ${version}, ${cpu} CPU, ${mem_gb}GB RAM"
     return 0
 }
@@ -103,6 +113,11 @@ pre_validate_check_ports() {
             local process_name=""
             if command -v lsof &>/dev/null; then
                 process_name=$(lsof -i :"$port" -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $1"/"$2}')
+            fi
+            # Skip DIVE's own Docker containers (expected during redeployment)
+            # Note: lsof truncates process names, so com.docker becomes com.docke
+            if echo "$process_name" | grep -qiE 'docker|com\.docke'; then
+                continue
             fi
             conflicts="${conflicts:+$conflicts, }port $port (${process_name:-in use})"
         fi
@@ -172,12 +187,19 @@ pre_validate_check_tools() {
         fi
     done
 
+    # Docker Compose v2 (plugin, not standalone binary)
+    if command -v docker &>/dev/null; then
+        if ! docker compose version &>/dev/null; then
+            missing="${missing:+$missing, }docker-compose-v2"
+        fi
+    fi
+
     if [ -n "$missing" ]; then
         echo "FAIL|Missing required tools: $missing"
         return 1
     fi
 
-    echo "OK|All required tools installed (docker, jq, curl, openssl)"
+    echo "OK|All required tools installed (docker, compose-v2, jq, curl, openssl)"
     return 0
 }
 
@@ -207,6 +229,52 @@ pre_validate_check_docker_disk() {
     return 0
 }
 
+##
+# Check network connectivity for image pulls and policy repo
+#
+# Returns:
+#   0 - Network reachable
+#   1 - Network unreachable (warning only)
+##
+pre_validate_check_network() {
+    # Check Docker Hub reachability (needed for base image pulls)
+    if ! curl -sf --max-time 5 "https://registry-1.docker.io/v2/" >/dev/null 2>&1; then
+        echo "WARN|Docker Hub unreachable (image pulls may fail if not cached)"
+        return 0
+    fi
+
+    echo "OK|Network connectivity verified"
+    return 0
+}
+
+##
+# Check Vault CLI availability and version
+#
+# Returns:
+#   0 - Vault CLI found
+#   1 - Vault CLI missing (warning only)
+##
+pre_validate_check_vault_cli() {
+    if ! command -v vault &>/dev/null; then
+        # Check common install locations
+        for _vp in /usr/local/bin /opt/homebrew/bin; do
+            if [ -x "${_vp}/vault" ]; then
+                local v
+                v=$("${_vp}/vault" version 2>/dev/null | head -1 | sed 's/Vault v//' | cut -d' ' -f1)
+                echo "OK|Vault CLI v${v:-unknown} (${_vp}/vault)"
+                return 0
+            fi
+        done
+        echo "WARN|Vault CLI not found. Install: brew install hashicorp/tap/vault"
+        return 0
+    fi
+
+    local vault_version
+    vault_version=$(vault version 2>/dev/null | head -1 | sed 's/Vault v//' | cut -d' ' -f1)
+    echo "OK|Vault CLI v${vault_version:-unknown}"
+    return 0
+}
+
 # =============================================================================
 # COMPOSITE VALIDATION
 # =============================================================================
@@ -227,64 +295,31 @@ pre_validate_hub() {
     echo "  Pre-deployment Validation"
     echo "==============================================================================="
 
-    # Check Docker
-    local result
-    result=$(pre_validate_check_docker)
-    local status="${result%%|*}"
-    local message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Docker:     $message"
-        has_failure=true
-    elif [ "$status" = "WARN" ]; then
-        echo "  [WARN] Docker:     $message"
-        has_warning=true
-    else
-        echo "  [ OK ] Docker:     $message"
-    fi
+    # Helper to display check result
+    _pv_show() {
+        local label="$1" result="$2"
+        local status="${result%%|*}"
+        local message="${result#*|}"
+        if [ "$status" = "FAIL" ]; then
+            printf "  [FAIL] %-12s %s\n" "$label" "$message"
+            has_failure=true
+        elif [ "$status" = "WARN" ]; then
+            printf "  [WARN] %-12s %s\n" "$label" "$message"
+            has_warning=true
+        elif [ "$status" = "SKIP" ]; then
+            : # silent skip
+        else
+            printf "  [ OK ] %-12s %s\n" "$label" "$message"
+        fi
+    }
 
-    # Check tools
-    result=$(pre_validate_check_tools)
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Tools:      $message"
-        has_failure=true
-    else
-        echo "  [ OK ] Tools:      $message"
-    fi
-
-    # Check disk space
-    result=$(pre_validate_check_disk)
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Disk:       $message"
-        has_failure=true
-    elif [ "$status" = "WARN" ]; then
-        echo "  [WARN] Disk:       $message"
-        has_warning=true
-    else
-        echo "  [ OK ] Disk:       $message"
-    fi
-
-    # Check ports (non-fatal — Docker containers may already be running)
-    result=$(pre_validate_check_ports "hub")
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" = "WARN" ]; then
-        echo "  [WARN] Ports:      $message"
-        has_warning=true
-    else
-        echo "  [ OK ] Ports:      $message"
-    fi
-
-    # Check Docker disk
-    result=$(pre_validate_check_docker_disk)
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" != "SKIP" ]; then
-        echo "  [ OK ] Docker Disk: $message"
-    fi
+    _pv_show "Docker:"      "$(pre_validate_check_docker)"
+    _pv_show "Tools:"       "$(pre_validate_check_tools)"
+    _pv_show "Disk:"        "$(pre_validate_check_disk)"
+    _pv_show "Ports:"       "$(pre_validate_check_ports "hub")"
+    _pv_show "Docker Disk:" "$(pre_validate_check_docker_disk)"
+    _pv_show "Network:"     "$(pre_validate_check_network)"
+    _pv_show "Vault CLI:"   "$(pre_validate_check_vault_cli)"
 
     # Show build cache status if available
     if type build_cache_status &>/dev/null; then
@@ -329,42 +364,26 @@ pre_validate_spoke() {
     echo "  Pre-deployment Validation (Spoke: $instance_code)"
     echo "==============================================================================="
 
-    # Check Docker
-    local result
-    result=$(pre_validate_check_docker)
-    local status="${result%%|*}"
-    local message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Docker:     $message"
-        has_failure=true
-    else
-        echo "  [ OK ] Docker:     $message"
-    fi
+    _pv_show() {
+        local label="$1" result="$2"
+        local status="${result%%|*}"
+        local message="${result#*|}"
+        if [ "$status" = "FAIL" ]; then
+            printf "  [FAIL] %-12s %s\n" "$label" "$message"
+            has_failure=true
+        elif [ "$status" = "WARN" ]; then
+            printf "  [WARN] %-12s %s\n" "$label" "$message"
+            has_warning=true
+        elif [ "$status" = "SKIP" ]; then
+            :
+        else
+            printf "  [ OK ] %-12s %s\n" "$label" "$message"
+        fi
+    }
 
-    # Check tools
-    result=$(pre_validate_check_tools)
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Tools:      $message"
-        has_failure=true
-    else
-        echo "  [ OK ] Tools:      $message"
-    fi
-
-    # Check disk
-    result=$(pre_validate_check_disk)
-    status="${result%%|*}"
-    message="${result#*|}"
-    if [ "$status" = "FAIL" ]; then
-        echo "  [FAIL] Disk:       $message"
-        has_failure=true
-    elif [ "$status" = "WARN" ]; then
-        echo "  [WARN] Disk:       $message"
-        has_warning=true
-    else
-        echo "  [ OK ] Disk:       $message"
-    fi
+    _pv_show "Docker:" "$(pre_validate_check_docker)"
+    _pv_show "Tools:"  "$(pre_validate_check_tools)"
+    _pv_show "Disk:"   "$(pre_validate_check_disk)"
 
     echo "==============================================================================="
 
@@ -389,3 +408,5 @@ export -f pre_validate_check_ports
 export -f pre_validate_check_disk
 export -f pre_validate_check_tools
 export -f pre_validate_check_docker_disk
+export -f pre_validate_check_network
+export -f pre_validate_check_vault_cli
