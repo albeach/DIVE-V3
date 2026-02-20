@@ -500,9 +500,27 @@ function validateFile(fileBuffer: Buffer, mimeType: string): IFileValidation {
 }
 
 /**
- * Create multiple Key Access Objects for Multi-KAS support (ACP-240 Section 5.3)
+ * Resolve KAS URL for a given identifier (nation code or COI name).
+ * Queries MongoDB kas_registry, falls back to default KAS_URL.
  */
-function createMultipleKAOs(params: {
+async function resolveKasUrl(kasId: string, fallbackUrl: string): Promise<string> {
+    try {
+        const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+        const kas = await mongoKasRegistryStore.findById(kasId);
+        if (kas && kas.status === 'active' && kas.enabled) {
+            return (kas.internalKasUrl || kas.kasUrl).replace(/\/$/, '');
+        }
+    } catch {
+        // Registry unavailable — use fallback
+    }
+    return fallbackUrl;
+}
+
+/**
+ * Create multiple Key Access Objects for Multi-KAS support (ACP-240 Section 5.3)
+ * Resolves per-KAO KAS URLs from MongoDB registry (distinct endpoint per nation/COI).
+ */
+async function createMultipleKAOs(params: {
     uploadId: string;
     releasabilityTo: string[];
     coiTags: string[];
@@ -510,17 +528,19 @@ function createMultipleKAOs(params: {
     wrappedKey: string;
     currentTimestamp: string;
     selectedCOI: string;
-}): IKeyAccessObject[] {
+}): Promise<IKeyAccessObject[]> {
     const kaos: IKeyAccessObject[] = [];
-    const kasBaseUrl = process.env.KAS_URL || 'https://localhost:8080';
+    const defaultKasUrl = process.env.KAS_URL || 'https://localhost:8080';
 
     // Strategy 1: COI-based KAOs
     if (params.coiTags && params.coiTags.length > 0) {
         for (const coi of params.coiTags) {
+            const kasId = `${coi.toLowerCase()}-kas`;
+            const kasUrl = await resolveKasUrl(kasId, defaultKasUrl);
             kaos.push({
                 kaoId: `kao-${coi.toLowerCase()}-${params.uploadId}`,
-                kasUrl: `${kasBaseUrl}/request-key`,
-                kasId: `${coi.toLowerCase()}-kas`,
+                kasUrl: `${kasUrl}/request-key`,
+                kasId,
                 wrappedKey: params.wrappedKey,
                 wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
                 policyBinding: {
@@ -546,10 +566,12 @@ function createMultipleKAOs(params: {
         );
 
         if (!alreadyCovered) {
+            const kasId = `${nation.toLowerCase()}-kas`;
+            const kasUrl = await resolveKasUrl(kasId, defaultKasUrl);
             kaos.push({
                 kaoId: `kao-${nation.toLowerCase()}-${params.uploadId}`,
-                kasUrl: `${kasBaseUrl}/request-key`,
-                kasId: `${nation.toLowerCase()}-kas`,
+                kasUrl: `${kasUrl}/request-key`,
+                kasId,
                 wrappedKey: params.wrappedKey,
                 wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
                 policyBinding: {
@@ -566,7 +588,7 @@ function createMultipleKAOs(params: {
     if (kaos.length === 0) {
         kaos.push({
             kaoId: `kao-default-${params.uploadId}`,
-            kasUrl: `${kasBaseUrl}/request-key`,
+            kasUrl: `${defaultKasUrl}/request-key`,
             kasId: 'dive-v3-kas',
             wrappedKey: params.wrappedKey,
             wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
@@ -684,7 +706,7 @@ async function convertToZTDF(
 
     // 5. Create Multiple Key Access Objects (Multi-KAS Support - ACP-240 Section 5.3)
     // Each KAO represents a different KAS endpoint (per nation/COI)
-    const kaos = createMultipleKAOs({
+    const kaos = await createMultipleKAOs({
         uploadId,
         releasabilityTo: metadata.releasabilityTo,
         coiTags: metadata.COI || [],
