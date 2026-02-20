@@ -278,6 +278,36 @@ module_spoke() {
             fi
             ;;
 
+        # === Diagnostics (Phase 5: Observability) ===
+        diagnose)
+            local _diag_code="${1:?Instance code required}"
+            if ! type -t diag_full_report &>/dev/null; then
+                local _diag_mod="${DEPLOYMENT_DIR}/diagnostics.sh"
+                [ -f "$_diag_mod" ] && source "$_diag_mod"
+            fi
+            if type -t diag_full_report &>/dev/null; then
+                diag_full_report "spoke" "$_diag_code"
+            else
+                log_error "Diagnostics module not available"
+                return 1
+            fi
+            ;;
+
+        # === Deployment History (Phase 5: Observability) ===
+        history)
+            local _hist_code="${1:-}"
+            if ! type -t pipeline_show_history &>/dev/null; then
+                local _pc_mod="${DEPLOYMENT_DIR}/pipeline-common.sh"
+                [ -f "$_pc_mod" ] && source "$_pc_mod"
+            fi
+            if type -t pipeline_show_history &>/dev/null; then
+                pipeline_show_history "spoke" "$_hist_code" "${2:-10}"
+            else
+                log_error "History module not available"
+                return 1
+            fi
+            ;;
+
         # === Status & Verification (delegate to operations.sh/status.sh) ===
         status)
             if type -t spoke_status &>/dev/null; then
@@ -406,7 +436,9 @@ Commands:
   setup-wizard                Interactive spoke setup wizard
   up <CODE>                   Start spoke services (local)
   down <CODE>                 Stop spoke services
-  phases <CODE>               Show pipeline phase status
+  phases <CODE> [--timing]     Show pipeline phase status (optional timing)
+  diagnose <CODE>             Run diagnostic checks (containers, certs, ports, disk)
+  history [CODE]              Show recent deployment history
   status [CODE]               Show spoke status
   verify <CODE>               Verify spoke deployment
   verify-all                  Verify all provisioned spokes

@@ -870,6 +870,14 @@ hub_deploy() {
 # completion timestamp, duration, and which phase would resume next.
 ##
 hub_phases() {
+    local show_timing=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timing) show_timing=true; shift ;;
+            *) shift ;;
+        esac
+    done
+
     echo ""
     echo "==============================================================================="
     echo "  Hub Pipeline Phases"
@@ -896,6 +904,13 @@ hub_phases() {
     local total=${#phase_names[@]}
     local completed=0
     local failed=0
+    local total_duration=0
+
+    # Timing header
+    if [ "$show_timing" = "true" ]; then
+        printf "  %-4s %-18s %-10s %10s %s\n" "#" "Phase" "Status" "Duration" ""
+        echo "  ─────────────────────────────────────────────────────────────────────────────"
+    fi
 
     local i
     for (( i = 0; i < total; i++ )); do
@@ -931,6 +946,11 @@ hub_phases() {
             fi
         fi
 
+        # Accumulate total duration
+        if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "0" ]; then
+            total_duration=$((total_duration + duration))
+        fi
+
         # Format output
         local icon=" "
         local color="${NC:-}"
@@ -955,15 +975,26 @@ hub_phases() {
             resume_marker=" <-- resume point"
         fi
 
-        printf "  %s[%s]%s Phase %2d: %-18s %-10s" \
-            "$color" "$icon" "${NC:-}" "$num" "$label" "($status)"
+        if [ "$show_timing" = "true" ]; then
+            # Timing-focused format
+            local dur_str="-"
+            if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "0" ]; then
+                dur_str="${duration}s"
+            fi
+            printf "  %s[%s]%s %2d %-18s %-10s %10s" \
+                "$color" "$icon" "${NC:-}" "$num" "$label" "($status)" "$dur_str"
+        else
+            # Standard format
+            printf "  %s[%s]%s Phase %2d: %-18s %-10s" \
+                "$color" "$icon" "${NC:-}" "$num" "$label" "($status)"
 
-        if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "0" ]; then
-            printf " %ss" "$duration"
-        fi
+            if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "0" ]; then
+                printf " %ss" "$duration"
+            fi
 
-        if [ -n "$timestamp" ] && [ "$timestamp" != "null" ]; then
-            printf " @ %s" "$timestamp"
+            if [ -n "$timestamp" ] && [ "$timestamp" != "null" ]; then
+                printf " @ %s" "$timestamp"
+            fi
         fi
 
         if [ -n "$resume_marker" ]; then
@@ -976,6 +1007,10 @@ hub_phases() {
     echo ""
     echo "  ─────────────────────────────────────────────────────────────────────────────"
     echo "  Summary: $completed/$total complete, $failed failed"
+
+    if [ "$show_timing" = "true" ] && [ "$total_duration" -gt 0 ]; then
+        echo "  Total duration: ${total_duration}s"
+    fi
 
     if [ -n "$next_phase" ]; then
         echo "  Resume:  ./dive hub deploy --resume  (starts at $next_phase)"
