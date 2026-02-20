@@ -21,6 +21,11 @@ if type spoke_phase_verification &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load shared pipeline utilities (health checks, service SSOT, secret loading)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/deployment/pipeline-utils.sh"
+fi
+
 # Load validation functions for idempotent deployments
 if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
@@ -111,67 +116,28 @@ spoke_phase_verification() {
     local verification_passed=true
 
     # CRITICAL FIX (2026-02-11): Add retry logic with exponential backoff for transient failures
-    # Previous issue: Single verification failures caused deployment to fail even for transient issues
+    # Refactored (Phase 2): Uses shared pipeline_retry_with_backoff from pipeline-utils.sh
 
     # Step 1: Service health checks (with retry)
     log_step "Verifying service health (with retry for transient failures)..."
-    local health_attempts=0
-    local health_max_attempts=3
-    local health_delay=5
-    while [ $health_attempts -lt $health_max_attempts ]; do
-        if spoke_verify_service_health "$instance_code"; then
-            break
-        fi
-        health_attempts=$((health_attempts + 1))
-        if [ $health_attempts -lt $health_max_attempts ]; then
-            log_warn "Service health check failed (attempt $health_attempts/$health_max_attempts), retrying in ${health_delay}s..."
-            sleep $health_delay
-            health_delay=$((health_delay * 2))  # Exponential backoff
-        else
-            log_error "Service health check failed after $health_max_attempts attempts"
-            verification_passed=false
-        fi
-    done
+    if ! pipeline_retry_with_backoff 3 5 spoke_verify_service_health "$instance_code"; then
+        log_error "Service health check failed after 3 attempts"
+        verification_passed=false
+    fi
 
     # Step 2: Database connectivity (with retry)
     log_step "Verifying database connectivity (with retry for transient failures)..."
-    local db_attempts=0
-    local db_max_attempts=3
-    local db_delay=3
-    while [ $db_attempts -lt $db_max_attempts ]; do
-        if spoke_verify_database_connectivity "$instance_code"; then
-            break
-        fi
-        db_attempts=$((db_attempts + 1))
-        if [ $db_attempts -lt $db_max_attempts ]; then
-            log_warn "Database connectivity check failed (attempt $db_attempts/$db_max_attempts), retrying in ${db_delay}s..."
-            sleep $db_delay
-            db_delay=$((db_delay * 2))  # Exponential backoff
-        else
-            log_warn "Database connectivity issues persist after $db_max_attempts attempts"
-            # Non-blocking - databases might be slow to start
-        fi
-    done
+    if ! pipeline_retry_with_backoff 3 3 spoke_verify_database_connectivity "$instance_code"; then
+        log_warn "Database connectivity issues persist after 3 attempts"
+        # Non-blocking - databases might be slow to start
+    fi
 
     # Step 3: Keycloak health (with retry)
     log_step "Verifying Keycloak health (with retry for transient failures)..."
-    local kc_attempts=0
-    local kc_max_attempts=3
-    local kc_delay=3
-    while [ $kc_attempts -lt $kc_max_attempts ]; do
-        if spoke_verify_keycloak_health "$instance_code"; then
-            break
-        fi
-        kc_attempts=$((kc_attempts + 1))
-        if [ $kc_attempts -lt $kc_max_attempts ]; then
-            log_warn "Keycloak health check failed (attempt $kc_attempts/$kc_max_attempts), retrying in ${kc_delay}s..."
-            sleep $kc_delay
-            kc_delay=$((kc_delay * 2))  # Exponential backoff
-        else
-            log_warn "Keycloak health issues persist after $kc_max_attempts attempts"
-            # Non-blocking - Keycloak might be slow to start
-        fi
-    done
+    if ! pipeline_retry_with_backoff 3 3 spoke_verify_keycloak_health "$instance_code"; then
+        log_warn "Keycloak health issues persist after 3 attempts"
+        # Non-blocking - Keycloak might be slow to start
+    fi
 
     # Step 4: Federation verification (deploy mode) - BLOCKING (2026-02-06 FIX)
     # BEST PRACTICE: Wait for realistic stabilization time, then verify
@@ -297,15 +263,16 @@ spoke_verify_service_health() {
     if type compose_get_spoke_services &>/dev/null; then
         read -r -a services <<<"$(compose_get_spoke_services "$instance_code")"
     else
-        log_warn "compose_get_spoke_services not available, using fallback service list"
-        services=("frontend" "backend" "redis" "keycloak" "postgres" "mongodb" "opa" "opal-client")
+        log_warn "compose_get_spoke_services not available, using SSOT service list"
+        read -r -a services <<< "$PIPELINE_SPOKE_ALL_SERVICES"
     fi
 
     for service in "${services[@]}"; do
-        local container="dive-spoke-${code_lower}-${service}"
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
         total_count=$((total_count + 1))
 
-        if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+        if ! pipeline_container_running "$container"; then
             echo "  ❌ $service: not running"
             unhealthy_count=$((unhealthy_count + 1))
             continue
@@ -313,17 +280,17 @@ spoke_verify_service_health() {
 
         # Check health status
         local health
-        health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
+        health=$(pipeline_get_container_health "$container")
 
         case "$health" in
             healthy)
                 echo "  ✅ $service: healthy"
                 ;;
-            no-healthcheck)
-                # Check if running
-                local running
-                running=$(docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null)
-                if [ "$running" = "true" ]; then
+            not_found|none)
+                # No health check or not found — running is OK
+                local state
+                state=$(pipeline_get_container_state "$container")
+                if [ "$state" = "running" ]; then
                     echo "  ✅ $service: running"
                 else
                     echo "  ❌ $service: not running"
@@ -670,16 +637,10 @@ spoke_verify_quick_health() {
     local critical_services=("keycloak" "backend" "postgres")
 
     for service in "${critical_services[@]}"; do
-        local container="dive-spoke-${code_lower}-${service}"
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
 
-        if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            return 1
-        fi
-
-        local running
-        running=$(docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null)
-
-        if [ "$running" != "true" ]; then
+        if ! pipeline_container_running "$container"; then
             return 1
         fi
     done
