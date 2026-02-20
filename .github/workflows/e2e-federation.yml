@@ -1,152 +1,22 @@
-name: E2E Federation Tests
+name: E2E Federation Tests (Deprecated)
 
 on:
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'keycloak/**'
-      - 'scripts/hub-init/**'
-      - 'scripts/spoke-init/**'
-      - 'docker-compose*.yml'
-  push:
-    branches: [main, develop]
   workflow_dispatch:
-    inputs:
-      hub_url:
-        description: 'Hub URL'
-        required: false
-        default: 'https://localhost:3000'
-      test_password:
-        description: 'Test user password'
-        required: false
-        default: 'TestUser2025!Pilot'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-federation-deprecated-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  federation-attribute-sync:
-    name: Test Federated Attribute Sync
-    if: github.event_name == 'workflow_dispatch'
+  deprecated:
+    name: Deprecated Workflow Notice
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    # Run only if previous build steps pass
-    # In a real CI pipeline, this would depend on build/deploy jobs
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Start DIVE infrastructure (Docker Compose)
+      - name: Notice
         run: |
-          # This would be replaced with your actual deployment commands
-          # For now, we assume infrastructure is already running or use docker-compose
-          echo "Starting DIVE Hub and GBR Spoke..."
-          # docker-compose -f docker-compose.hub.yml up -d
-          # docker-compose -f instances/gbr/docker-compose.yml up -d
-
-      - name: Wait for services to be ready
-        run: |
-          echo "Waiting for Hub to be ready..."
-          timeout 120 bash -c 'until curl -k -s https://localhost:3000/api/health > /dev/null; do sleep 2; done'
-          echo "Hub is ready!"
-
-          echo "Waiting for Keycloak to be ready..."
-          timeout 120 bash -c 'until curl -k -s https://localhost:8443/health > /dev/null; do sleep 2; done'
-          echo "Keycloak is ready!"
-
-      - name: Seed Hub users
-        run: |
-          echo "Seeding Hub users..."
-          ./scripts/hub-init/seed-hub-users.sh
-
-      - name: Seed GBR Spoke users
-        run: |
-          echo "Seeding GBR Spoke users..."
-          ./scripts/spoke-init/seed-spoke-users.sh GBR
-
-      - name: Run federated attribute sync tests
-        working-directory: frontend
-        env:
-          HUB_URL: ${{ github.event.inputs.hub_url || 'https://localhost:3000' }}
-          TEST_USER_PASSWORD: ${{ github.event.inputs.test_password || 'TestUser2025!Pilot' }}
-          KEYCLOAK_URL: https://localhost:8443
-        run: |
-          npx playwright test src/__tests__/e2e/federated-attribute-sync.spec.ts \
-            --reporter=html,github \
-            --retries=2
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-federation
-          path: frontend/playwright-report/
-          retention-days: 30
-
-      - name: Upload test screenshots
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-screenshots-federation
-          path: frontend/test-results/
-          retention-days: 7
-
-      - name: Comment on PR with test results
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## ❌ Federated Attribute Sync Tests Failed
-
-              The E2E tests for federated identity attribute sync have failed.
-
-              **Test Scope:**
-              - Federation from GBR spoke → USA Hub
-              - Federation from FRA spoke → USA Hub
-              - DIVE attribute validation (clearance, countryOfAffiliation, acpCOI)
-
-              **Common Causes:**
-              1. **User Profile Permissions**: Keycloak User Profile missing \`"view": ["admin", "user"]\`
-              2. **Protocol Mappers**: Spoke client missing DIVE attribute mappers
-              3. **IdP Mappers**: Hub IdP missing import mappers or wrong sync mode
-              4. **User Seeding**: Test users not created or missing attributes
-
-              **How to Debug:**
-              1. Review the test logs and screenshots in the artifacts
-              2. Check Keycloak User Profile: \`curl .../users/profile\`
-              3. Verify test users exist: \`curl .../users?username=testuser-gbr-1\`
-              4. Run locally: \`npx playwright test federated-attribute-sync.spec.ts --debug\`
-
-              **Documentation:**
-              - [Federation Attribute Sync Fix](docs/FEDERATION-ATTRIBUTE-SYNC-FIX.md)
-              - [User Seeding SSOT](docs/USER-SEEDING-SSOT.md)
-              - [Test Results Artifact](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-              `
-            })
-
-      - name: Cleanup (stop containers)
-        if: always()
-        run: |
-          echo "Stopping DIVE infrastructure..."
-          # docker-compose -f docker-compose.hub.yml down
-          # docker-compose -f instances/gbr/docker-compose.yml down
+          echo "Federation E2E coverage has been consolidated into test-e2e.yml." >> "$GITHUB_STEP_SUMMARY"
+          echo "Use the 'E2E Tests' workflow for canonical federation and E2E validation." >> "$GITHUB_STEP_SUMMARY"

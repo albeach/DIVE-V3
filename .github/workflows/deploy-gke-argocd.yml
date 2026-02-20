@@ -1,191 +1,162 @@
-# =============================================================================
-# DIVE V3 - GKE Deployment via ArgoCD
-# =============================================================================
-# GitOps deployment workflow that:
-# 1. Builds and pushes images to Artifact Registry
-# 2. Updates Kubernetes manifests with new image tags
-# 3. Commits changes to Git (triggers ArgoCD sync)
-# 4. Optionally triggers ArgoCD sync via API
-#
-# Triggers:
-#   - Push to main branch (after image build)
-#   - Manual workflow dispatch
-#   - After successful image build workflow
-# =============================================================================
-
 name: Deploy to GKE via ArgoCD
 
 on:
-  workflow_run:
-    workflows: ["Build and Push Container Images"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
+      target_env:
+        description: 'Deployment target environment'
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
+          - staging
       image_tag:
-        description: 'Image tag to deploy (default: latest commit SHA)'
+        description: 'Image tag to deploy (default: current commit SHA)'
         required: false
         type: string
+      dry_run:
+        description: 'Preview manifest changes without commit/push'
+        required: false
+        type: boolean
+        default: false
       sync_argocd:
-        description: 'Trigger ArgoCD sync immediately'
+        description: 'Trigger ArgoCD refresh after manifest update'
         required: false
         type: boolean
         default: true
+      reason:
+        description: 'Deployment reason'
+        required: false
+        type: string
+        default: 'Manual GitOps deployment'
 
 permissions:
-  contents: write  # Required to commit manifest updates
-  id-token: write  # Required for GCP authentication
+  contents: read
+
+concurrency:
+  group: deploy-gke-argocd-${{ inputs.target_env || 'production' }}
+  cancel-in-progress: false
 
 env:
   GCP_PROJECT_ID: dive25
-  GCP_REGION: us-east4
   GKE_CLUSTER: dive-v3-cluster
   GKE_LOCATION: us-east4
   ARGOCD_NAMESPACE: argocd
   ARGOCD_APP_NAME: dive-v3
+  REGISTRY: us-east4-docker.pkg.dev/dive25/dive-v3-repo
 
 jobs:
   update-manifests:
     name: Update Kubernetes Manifests
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-
+    timeout-minutes: 15
+    environment: ${{ format('gke-{0}', inputs.target_env || 'production') }}
+    permissions:
+      contents: write
+    outputs:
+      image_tag: ${{ steps.image-tag.outputs.tag }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
 
-      - name: Determine Image Tag
+      - name: Determine image tag
         id: image-tag
         run: |
           if [ -n "${{ inputs.image_tag }}" ]; then
             IMAGE_TAG="${{ inputs.image_tag }}"
-          elif [ -n "${{ github.event.workflow_run.head_sha }}" ]; then
-            IMAGE_TAG="${{ github.event.workflow_run.head_sha }}"
           else
             IMAGE_TAG="${{ github.sha }}"
           fi
-          echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "Using image tag: $IMAGE_TAG"
 
-      - name: Update Backend Deployment
+          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Using image tag: ${IMAGE_TAG}"
+
+      - name: Update backend deployment image
         run: |
-          IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
-          REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-
-          # Update backend deployment image
           sed -i.bak \
-            "s|image:.*dive-v3-backend.*|image: ${REGISTRY}/dive-v3-backend:${IMAGE_TAG}|g" \
+            "s|image:.*dive-v3-backend.*|image: ${{ env.REGISTRY }}/dive-v3-backend:${{ steps.image-tag.outputs.tag }}|" \
             k8s/base/backend/deployment.yaml
 
-          echo "Updated backend image to: ${REGISTRY}/dive-v3-backend:${IMAGE_TAG}"
-
-      - name: Update Frontend Deployment
+      - name: Update frontend deployment image
         run: |
-          IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
-          REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-
-          # Update frontend deployment image
           sed -i.bak \
-            "s|image:.*dive-v3-frontend.*|image: ${REGISTRY}/dive-v3-frontend:${IMAGE_TAG}|g" \
+            "s|image:.*dive-v3-frontend.*|image: ${{ env.REGISTRY }}/dive-v3-frontend:${{ steps.image-tag.outputs.tag }}|" \
             k8s/base/frontend/deployment.yaml
 
-          echo "Updated frontend image to: ${REGISTRY}/dive-v3-frontend:${IMAGE_TAG}"
-
-      - name: Update Keycloak Deployment
+      - name: Update keycloak deployment image
         run: |
-          IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
-          REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-
-          # Update keycloak deployment image
           sed -i.bak \
-            "s|image:.*dive-v3-keycloak.*|image: ${REGISTRY}/dive-v3-keycloak:${IMAGE_TAG}|g" \
+            "s|image:.*dive-v3-keycloak.*|image: ${{ env.REGISTRY }}/dive-v3-keycloak:${{ steps.image-tag.outputs.tag }}|" \
             k8s/base/keycloak/deployment.yaml
 
-          echo "Updated keycloak image to: ${REGISTRY}/dive-v3-keycloak:${IMAGE_TAG}"
+      - name: Show manifest diff
+        run: git --no-pager diff -- k8s/base/backend/deployment.yaml k8s/base/frontend/deployment.yaml k8s/base/keycloak/deployment.yaml
 
-      - name: Commit Manifest Updates
+      - name: Commit and push manifest updates
+        if: ${{ inputs.dry_run != true }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add k8s/base/*/deployment.yaml
+          git add k8s/base/backend/deployment.yaml k8s/base/frontend/deployment.yaml k8s/base/keycloak/deployment.yaml
 
           if git diff --staged --quiet; then
             echo "No manifest changes to commit"
-          else
-            git commit -m "chore(deploy): update image tags to ${{ steps.image-tag.outputs.tag }} [skip ci]"
-            git push
-            echo "✅ Manifest updates committed and pushed"
+            exit 0
           fi
 
-      - name: Deployment Summary
+          git commit -m "chore(deploy): update GKE image tags to ${{ steps.image-tag.outputs.tag }} [skip ci]"
+          git push
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == true }}
         run: |
-          echo "## 🚀 Deployment Initiated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image Tag:** \`${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** \`us-east4-docker.pkg.dev/dive25/dive-v3-repo\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Updated Services" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Backend" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Frontend" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Keycloak" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "ArgoCD will automatically sync these changes." >> $GITHUB_STEP_SUMMARY
+          echo "## Dry Run Completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Target env: ${{ inputs.target_env }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image tag: ${{ steps.image-tag.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reason: ${{ inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
 
   trigger-argocd-sync:
-    name: Trigger ArgoCD Sync
+    name: Trigger ArgoCD Refresh
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [update-manifests]
-    if: ${{ inputs.sync_argocd != false }}
-
+    if: ${{ inputs.sync_argocd == true && inputs.dry_run != true }}
+    environment: ${{ format('gke-{0}', inputs.target_env || 'production') }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
       - name: Configure kubectl
         run: |
-          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
-            --region ${{ env.GKE_LOCATION }} \
-            --project ${{ env.GCP_PROJECT_ID }}
+          gcloud container clusters get-credentials "${{ env.GKE_CLUSTER }}" \
+            --region "${{ env.GKE_LOCATION }}" \
+            --project "${{ env.GCP_PROJECT_ID }}"
 
-      - name: Get ArgoCD Admin Password
-        id: argocd-password
+      - name: Trigger ArgoCD application refresh
         run: |
-          PASSWORD=$(kubectl -n ${{ env.ARGOCD_NAMESPACE }} get secret argocd-initial-admin-secret \
-            -o jsonpath="{.data.password}" | base64 -d)
-          echo "password=$PASSWORD" >> $GITHUB_OUTPUT
+          kubectl -n "${{ env.ARGOCD_NAMESPACE }}" annotate application "${{ env.ARGOCD_APP_NAME }}" argocd.argoproj.io/refresh=hard --overwrite
+          echo "Requested ArgoCD hard refresh for application '${{ env.ARGOCD_APP_NAME }}'."
 
-      - name: Port Forward ArgoCD Server
+      - name: Deployment summary
         run: |
-          kubectl port-forward -n ${{ env.ARGOCD_NAMESPACE }} svc/argocd-server 8080:443 &
-          sleep 5
-        continue-on-error: true
-
-      - name: Trigger ArgoCD Sync
-        run: |
-          # Use ArgoCD CLI or API to trigger sync
-          # For now, ArgoCD will auto-sync based on Git changes
-          echo "✅ ArgoCD will automatically sync when Git changes are detected"
-          echo "To manually trigger: kubectl patch application ${{ env.ARGOCD_APP_NAME }} -n ${{ env.ARGOCD_NAMESPACE }} --type merge -p '{\"operation\":{\"initiatedBy\":{\"username\":\"github-actions\"},\"sync\":{\"revision\":\"main\"}}}'"
-        continue-on-error: true
-
-
-
-
-
-
-
-
-
-
-
-
-
+          echo "## GKE Deployment Requested" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Target env: ${{ inputs.target_env }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image tag: ${{ needs.update-manifests.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "ArgoCD refresh: triggered" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reason: ${{ inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,87 @@
+name: Workflow Lint
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'docs/ci/workflow-hardening-policy.md'
+permissions:
+  contents: read
+concurrency:
+  group: actionlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Run actionlint
+        uses: rhysd/actionlint@393031adb9afb225ee52ae2ccd7a5af5525e03e8
+        with:
+          args: >-
+            -config-file .github/actionlint.yaml
+            -shellcheck=
+      - name: Enforce workflow hardening policy
+        run: |
+          python3 - <<'PY'
+          import glob
+          import re
+          import sys
+          import yaml
+
+          active_workflows = sorted(glob.glob('.github/workflows/*.yml'))
+          workflow_and_action_files = active_workflows + sorted(glob.glob('.github/actions/**/*.yml', recursive=True))
+
+          fail_open_pattern = re.compile(r'continue-on-error:\s*true')
+          shell_shortcut_pattern = re.compile(r'\|\|\s*true')
+          dynamic_ref_pattern = re.compile(r'@(master|main|latest)\b')
+          sha_pattern = re.compile(r'^[0-9a-f]{40}$')
+
+          errors = []
+
+          for path in active_workflows:
+            content = open(path, encoding='utf-8').read()
+            if fail_open_pattern.search(content):
+              errors.append(f'{path}: fail-open continue-on-error detected')
+            if shell_shortcut_pattern.search(content):
+              errors.append(f'{path}: fail-open shell shortcut detected')
+
+          for path in workflow_and_action_files:
+            content = open(path, encoding='utf-8').read()
+            if dynamic_ref_pattern.search(content):
+              errors.append(f'{path}: dynamic action ref detected')
+
+          for path in workflow_and_action_files:
+            data = yaml.safe_load(open(path, encoding='utf-8'))
+
+            def walk(node):
+              if isinstance(node, dict):
+                for key, value in node.items():
+                  if key == 'uses' and isinstance(value, str):
+                    if value.startswith('./'):
+                      pass
+                    elif '@' in value:
+                      ref = value.rsplit('@', 1)[1]
+                      if not sha_pattern.fullmatch(ref):
+                        errors.append(f'{path}: unpinned action ref {value}')
+                  walk(value)
+              elif isinstance(node, list):
+                for item in node:
+                  walk(item)
+
+            walk(data)
+
+          if errors:
+            print('Workflow hardening policy violations detected:')
+            for error in errors:
+              print(f'- {error}')
+            sys.exit(1)
+
+          print('Workflow hardening policy checks passed.')
+          PY

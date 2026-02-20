@@ -14,221 +14,208 @@
 # =============================================================================
 
 name: Build and Push Container Images
-
 on:
   push:
     branches: [main]
     paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'keycloak/**'
-      - 'kas/**'
-      - '.github/workflows/build-images.yml'
+    - 'frontend/**'
+    - 'backend/**'
+    - 'keycloak/**'
+    - 'kas/**'
+    - '.github/workflows/build-images.yml'
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to build (leave empty for all)'
+        description: 'Service to build'
         required: false
+        default: all
         type: choice
         options:
-          - ''
-          - frontend
-          - backend
-          - keycloak
-          - kas
-
+        - all
+        - frontend
+        - backend
+        - keycloak
+        - kas
 env:
   GCP_PROJECT_ID: dive25
   GCP_REGION: us-east4
   REGISTRY: us-east4-docker.pkg.dev/dive25/dive-v3-repo
   IMAGE_PREFIX: dive-v3
-
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   auth-preflight:
     name: GCP Auth Preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       ready: ${{ steps.check.outputs.ready }}
-
     steps:
-      - name: Check GCP auth secrets availability
-        id: check
-        run: |
-          if [ -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] && [ -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "✅ GCP auth secrets are configured" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ Skipping image build/push because GCP auth secrets are unavailable for this run (common on forks/Dependabot)." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
+    - name: Check GCP auth secrets availability
+      id: check
+      run: |
+        if [ -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] && [ -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" ]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "✅ GCP auth secrets are configured" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "⚠️ Skipping image build/push because GCP auth secrets are unavailable for this run (common on forks/Dependabot)." >> "$GITHUB_STEP_SUMMARY"
+        fi
   build-images:
     name: Build and Push Images
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [auth-preflight]
     if: needs.auth-preflight.outputs.ready == 'true'
-
     permissions:
       contents: read
-      id-token: write  # Required for Workload Identity Federation
-
+      id-token: write # Required for Workload Identity Federation
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-          platforms: linux/amd64,linux/arm64
-
-      - name: Extract Metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend
-            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend
-            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak
-            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas
-          tags: |
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and Push Frontend
-        if: ${{ inputs.service == '' || inputs.service == 'frontend' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.prod
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_API_URL=https://api.dive25.com
-            NEXT_PUBLIC_BACKEND_URL=https://api.dive25.com
-            NEXT_PUBLIC_BASE_URL=https://app.dive25.com
-            NEXT_PUBLIC_KEYCLOAK_URL=https://auth.dive25.com
-            NEXT_PUBLIC_KEYCLOAK_REALM=dive-v3-broker-usa
-            NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=dive-v3-broker-usa
-            NEXT_PUBLIC_APP_NAME=DIVE V3
-            NEXT_PUBLIC_INSTANCE=USA
-            NEXT_PUBLIC_INSTANCE_NAME=United States
-            NEXT_PUBLIC_LOCALE=en-US
-
-      - name: Build and Push Backend
-        if: ${{ inputs.service == '' || inputs.service == 'backend' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and Push Keycloak
-        if: ${{ inputs.service == '' || inputs.service == 'keycloak' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./keycloak
-          file: ./keycloak/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and Push KAS
-        if: ${{ inputs.service == '' || inputs.service == 'kas' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./kas
-          file: ./kas/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Security Scan with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-frontend-results.sarif'
-          trivyignores: '.trivyignore'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Security Scan Backend
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-backend-results.sarif'
-          trivyignores: '.trivyignore'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Security Scan Keycloak
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-keycloak-results.sarif'
-          trivyignores: '.trivyignore'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Security Scan KAS
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-kas-results.sarif'
-          trivyignores: '.trivyignore'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-frontend-results.sarif,trivy-backend-results.sarif,trivy-keycloak-results.sarif,trivy-kas-results.sarif'
-
-      - name: Image Summary
-        run: |
-          echo "## 🐳 Container Images Built & Scanned" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Image | Tag | Security Scan |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|-------|-----|---------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
-          echo "| Keycloak | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
-          echo "| KAS | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Platforms:** linux/amd64, linux/arm64 (multi-platform)" >> $GITHUB_STEP_SUMMARY
-          echo "**Security:** Trivy vulnerability scanning completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Images are ready for deployment to Kubernetes!" >> $GITHUB_STEP_SUMMARY
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      with:
+        driver-opts: |
+          image=moby/buildkit:v0.12.5
+        platforms: linux/amd64,linux/arm64
+    - name: Extract Metadata
+      id: meta
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+      with:
+        images: |
+          ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend
+          ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend
+          ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak
+          ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas
+        tags: |
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    - name: Build and Push Frontend
+      if: ${{ inputs.service == 'all' || inputs.service == 'frontend' }}
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile.prod
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          NEXT_PUBLIC_API_URL=https://api.dive25.com
+          NEXT_PUBLIC_BACKEND_URL=https://api.dive25.com
+          NEXT_PUBLIC_BASE_URL=https://app.dive25.com
+          NEXT_PUBLIC_KEYCLOAK_URL=https://auth.dive25.com
+          NEXT_PUBLIC_KEYCLOAK_REALM=dive-v3-broker-usa
+          NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=dive-v3-broker-usa
+          NEXT_PUBLIC_APP_NAME=DIVE V3
+          NEXT_PUBLIC_INSTANCE=USA
+          NEXT_PUBLIC_INSTANCE_NAME=United States
+          NEXT_PUBLIC_LOCALE=en-US
+    - name: Build and Push Backend
+      if: ${{ inputs.service == 'all' || inputs.service == 'backend' }}
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Build and Push Keycloak
+      if: ${{ inputs.service == 'all' || inputs.service == 'keycloak' }}
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./keycloak
+        file: ./keycloak/Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Build and Push KAS
+      if: ${{ inputs.service == 'all' || inputs.service == 'kas' }}
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./kas
+        file: ./kas/Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Security Scan with Trivy
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        scan-type: 'image'
+        scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-frontend-results.sarif'
+        trivyignores: '.trivyignore'
+        severity: 'HIGH,CRITICAL'
+    - name: Security Scan Backend
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        scan-type: 'image'
+        scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-backend-results.sarif'
+        trivyignores: '.trivyignore'
+        severity: 'HIGH,CRITICAL'
+    - name: Security Scan Keycloak
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        scan-type: 'image'
+        scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-keycloak-results.sarif'
+        trivyignores: '.trivyignore'
+        severity: 'HIGH,CRITICAL'
+    - name: Security Scan KAS
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+      with:
+        scan-type: 'image'
+        scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-kas-results.sarif'
+        trivyignores: '.trivyignore'
+        severity: 'HIGH,CRITICAL'
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@f5c2471be782132e47a6e6f9c725e56730d6e9a3
+      if: always()
+      with:
+        sarif_file: 'trivy-frontend-results.sarif,trivy-backend-results.sarif,trivy-keycloak-results.sarif,trivy-kas-results.sarif'
+    - name: Image Summary
+      run: |
+        echo "## 🐳 Container Images Built & Scanned" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Service | Image | Tag | Security Scan |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------|-------|-----|---------------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+        echo "| Keycloak | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+        echo "| KAS | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Platforms:** linux/amd64, linux/arm64 (multi-platform)" >> $GITHUB_STEP_SUMMARY
+        echo "**Security:** Trivy vulnerability scanning completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Images are ready for deployment to Kubernetes!" >> $GITHUB_STEP_SUMMARY
+permissions:
+  contents: read

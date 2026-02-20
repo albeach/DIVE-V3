@@ -1,496 +1,276 @@
 name: Policy Bundle Build & Validation
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'policies/**'
+      - '.github/workflows/policy-bundle.yml'
   push:
     branches: [main]
     paths:
       - 'policies/**'
       - '.github/workflows/policy-bundle.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'policies/**'
   workflow_dispatch:
     inputs:
       force_build:
-        description: 'Force bundle build even without policy changes'
+        description: 'Force bundle build'
         required: false
-        default: 'false'
+        default: false
         type: boolean
+      run_benchmark:
+        description: 'Run benchmark stage'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-bundle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   OPA_VERSION: '1.12.3'
   REGAL_VERSION: '0.24.0'
 
 jobs:
-  # ============================================
-  # Stage 1: Validate Policy Syntax & Style
-  # ============================================
   validate:
     name: Validate Rego Syntax & Style
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          fetch-depth: 0  # Full history for diff
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
         with:
           version: ${{ env.OPA_VERSION }}
 
-      - name: Validate Rego Syntax (Strict Mode)
+      - name: Validate Rego syntax (strict)
+        run: opa check policies/ --strict
+
+      - name: Run Regal linter
         run: |
-          echo "🔍 Checking Rego syntax in strict mode..."
-          opa check policies/ --strict
-          echo "✅ Syntax validation passed"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            ghcr.io/styrainc/regal:v${{ env.REGAL_VERSION }} \
+            lint /workspace/policies --format github
 
-      - name: Install Regal Linter
+      - name: Check for hardcoded secrets
         run: |
-          curl -L -o regal "https://github.com/StyraInc/regal/releases/download/v${{ env.REGAL_VERSION }}/regal_Linux_x86_64"
-          chmod +x regal
-          sudo mv regal /usr/local/bin/
-
-      - name: Run Regal Linter
-        run: |
-          echo "🔍 Running Regal linter..."
-          regal lint policies/ --format=github || true
-          # Note: Don't fail on lint warnings, just report
-
-      - name: Check for Hardcoded Values
-        run: |
-          echo "🔍 Scanning for hardcoded secrets/URLs..."
-
-          # Check for hardcoded localhost (except in test files)
-          if grep -r "localhost" policies/*.rego 2>/dev/null | grep -v "_test.rego"; then
-            echo "⚠️ Warning: Found hardcoded localhost in policies"
-          fi
-
-          # Check for hardcoded secrets
-          if grep -rE "(password|secret|key)\s*:=\s*\"" policies/*.rego 2>/dev/null; then
-            echo "❌ ERROR: Potential hardcoded secrets found!"
+          if grep -R -nE '(password|secret|key)\s*:=\s*"[^"$]+' policies/*.rego 2>/dev/null; then
+            echo 'Potential hardcoded secret detected in policy files.'
             exit 1
           fi
 
-          echo "✅ No hardcoded secrets detected"
-
-      - name: Verify Package Naming Convention
+      - name: Verify package naming convention
         run: |
-          echo "🔍 Verifying package naming convention..."
-
-          # All packages must start with 'dive.'
-          INVALID_PACKAGES=$(grep -rh "^package" policies/*.rego 2>/dev/null | grep -v "^package dive\." | grep -v "^package dive$" | grep -v "^package data\." || true)
-
-          if [ -n "$INVALID_PACKAGES" ]; then
-            echo "❌ ERROR: Invalid package names found:"
-            echo "$INVALID_PACKAGES"
-            echo ""
-            echo "All packages must start with 'dive.' namespace"
+          INVALID=$(awk '/^package / && $2 !~ /^dive\./ && $2 != "dive" && $2 !~ /^data\./ {print FILENAME ":" $0}' policies/*.rego 2>/dev/null)
+          if [ -n "$INVALID" ]; then
+            echo "$INVALID"
+            echo "All packages must start with dive. (or be dive/data.*)."
             exit 1
           fi
 
-          echo "✅ Package naming convention verified"
-
-  # ============================================
-  # Stage 2: Run Policy Tests
-  # ============================================
   test:
     name: Run Policy Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: validate
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
         with:
           version: ${{ env.OPA_VERSION }}
 
-      - name: Run All Policy Tests
-        run: |
-          echo "🧪 Running OPA policy tests..."
-          opa test policies/ -v --coverage --format=json > test-results.json
+      - name: Run policy tests with coverage
+        run: opa test policies/ -v --coverage --format=json > test-results.json
 
-          # Extract coverage percentage
-          COVERAGE=$(jq '.coverage // 0' test-results.json)
-          echo "📊 Test coverage: ${COVERAGE}%"
-
-          # Display test summary
-          PASSED=$(jq '[.[] | select(.pass == true)] | length' test-results.json || echo "0")
-          FAILED=$(jq '[.[] | select(.pass == false)] | length' test-results.json || echo "0")
-
-          echo "## OPA Policy Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Passed | ${PASSED} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Failed | ${FAILED} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Coverage | ${COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Check Coverage Threshold
+      - name: Enforce coverage threshold
         run: |
           COVERAGE=$(jq '.coverage // 0' test-results.json)
           THRESHOLD=70
+          awk -v c="$COVERAGE" -v t="$THRESHOLD" 'BEGIN { exit(c < t) }'
 
-          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% below ${THRESHOLD}% threshold"
-            exit 1
-          fi
-
-          echo "✅ Coverage ${COVERAGE}% meets ${THRESHOLD}% threshold"
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v4
+      - name: Upload policy test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: policy-test-results
           path: test-results.json
           retention-days: 30
 
-  # ============================================
-  # Stage 3: Policy Diff (PR only)
-  # ============================================
   diff:
     name: Policy Change Diff
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     needs: validate
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
-        with:
-          version: ${{ env.OPA_VERSION }}
-
-      - name: Generate Policy Diff
+      - name: Generate policy diff report
         run: |
-          echo "📝 Generating policy diff..."
-
-          # Get changed policy files
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'policies/*.rego' || true)
+          CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- 'policies/*.rego')
 
           if [ -z "$CHANGED_FILES" ]; then
-            echo "No policy files changed"
+            echo "No policy files changed" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          echo "Changed policy files:"
-          echo "$CHANGED_FILES"
+          echo "## Policy Changes" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Modified Files" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$CHANGED_FILES" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-          # Generate diff report
-          echo "## Policy Changes" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Modified Files" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$CHANGED_FILES" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-          # Show actual diffs for each file
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Detailed Changes" >> $GITHUB_STEP_SUMMARY
-
-          for file in $CHANGED_FILES; do
-            if [ -f "$file" ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "#### $file" >> $GITHUB_STEP_SUMMARY
-              echo '```diff' >> $GITHUB_STEP_SUMMARY
-              git diff origin/${{ github.base_ref }}...HEAD -- "$file" >> $GITHUB_STEP_SUMMARY || true
-              echo '```' >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-
-      - name: Impact Analysis
-        run: |
-          echo "🔍 Analyzing policy impact..."
-
-          # Check for changes to allow rules
-          ALLOW_CHANGES=$(git diff origin/${{ github.base_ref }}...HEAD -- 'policies/*.rego' | grep -E "^[+-].*allow" | head -20 || true)
-
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Allow Rule Deltas" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          ALLOW_CHANGES=$(git diff "origin/${{ github.base_ref }}...HEAD" -- 'policies/*.rego' | awk '/^[+-].*allow/')
           if [ -n "$ALLOW_CHANGES" ]; then
-            echo ""
-            echo "## ⚠️ Changes to Allow Rules Detected" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The following changes affect authorization allow rules:" >> $GITHUB_STEP_SUMMARY
-            echo '```diff' >> $GITHUB_STEP_SUMMARY
-            echo "$ALLOW_CHANGES" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Please ensure these changes are intentional and have been tested.**" >> $GITHUB_STEP_SUMMARY
+            echo "$ALLOW_CHANGES"
+            echo "$ALLOW_CHANGES" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No allow-rule changes detected."
+            echo "No allow-rule changes detected." >> "$GITHUB_STEP_SUMMARY"
           fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-  # ============================================
-  # Stage 4: Build Policy Bundles
-  # ============================================
-  build:
-    name: Build Policy Bundles
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' || github.event.inputs.force_build == 'true'
-
-    outputs:
-      bundle_version: ${{ steps.version.outputs.version }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
-        with:
-          version: ${{ env.OPA_VERSION }}
-
-      - name: Generate Bundle Version
-        id: version
-        run: |
-          VERSION="${{ github.sha }}"
-          SHORT_VERSION="${VERSION:0:8}"
-          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
-          FULL_VERSION="${SHORT_VERSION}-${TIMESTAMP}"
-
-          echo "version=${FULL_VERSION}" >> $GITHUB_OUTPUT
-          echo "📦 Bundle version: ${FULL_VERSION}"
-
-      - name: Create Bundle Directory
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          mkdir -p bundles/${VERSION}
-          echo "📁 Created bundle directory: bundles/${VERSION}"
-
-      - name: Build Base Bundle
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          echo "📦 Building base policy bundle..."
-          opa build \
-            -b policies/ \
-            -o bundles/${VERSION}/dive-base.tar.gz \
-            --revision ${VERSION}
-
-          echo "✅ Base bundle built: bundles/${VERSION}/dive-base.tar.gz"
-          ls -la bundles/${VERSION}/
-
-      - name: Build Tenant Bundles
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # Build per-tenant bundles (when tenant directories exist)
-          for tenant in usa fra gbr deu; do
-            TENANT_DIR="policies/tenant/${tenant}"
-
-            if [ -d "$TENANT_DIR" ]; then
-              echo "📦 Building ${tenant} tenant bundle..."
-              opa build \
-                -b policies/ \
-                -o bundles/${VERSION}/dive-${tenant}.tar.gz \
-                --revision ${VERSION}
-              echo "✅ Built: bundles/${VERSION}/dive-${tenant}.tar.gz"
-            else
-              echo "⏭️ Skipping ${tenant} - no tenant directory"
-              # Use base bundle as tenant bundle for now
-              cp bundles/${VERSION}/dive-base.tar.gz bundles/${VERSION}/dive-${tenant}.tar.gz
-            fi
-          done
-
-      - name: Generate Bundle Manifest
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          cat > bundles/${VERSION}/manifest.json << EOF
-          {
-            "version": "${VERSION}",
-            "built_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "commit": "${{ github.sha }}",
-            "branch": "${{ github.ref_name }}",
-            "opa_version": "${{ env.OPA_VERSION }}",
-            "bundles": [
-              "dive-base.tar.gz",
-              "dive-usa.tar.gz",
-              "dive-fra.tar.gz",
-              "dive-gbr.tar.gz",
-              "dive-deu.tar.gz"
-            ]
-          }
-          EOF
-
-          echo "📋 Generated manifest:"
-          cat bundles/${VERSION}/manifest.json
-
-      - name: Upload Bundle Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: policy-bundles-${{ steps.version.outputs.version }}
-          path: bundles/
-          retention-days: 90
-
-      - name: Bundle Summary
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          echo "## 📦 Policy Bundle Build" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${VERSION} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| OPA Version | ${{ env.OPA_VERSION }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Bundles Built" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          ls -la bundles/${VERSION}/ >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-  # ============================================
-  # Stage 5: Baseline Comparison
-  # ============================================
   baseline-check:
     name: Baseline Regression Check
     runs-on: ubuntu-latest
-    needs: test
+    timeout-minutes: 15
     if: github.event_name == 'pull_request'
-
+    needs: test
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          node-version: '20'
+          persist-credentials: false
 
       - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
         with:
           version: ${{ env.OPA_VERSION }}
 
-      - name: Start OPA Server
+      - name: Start OPA server
         run: |
           nohup opa run --server --addr=0.0.0.0:8181 --log-level=error > opa.log 2>&1 &
           for i in {1..30}; do
             if curl -sf http://localhost:8181/health >/dev/null; then
-              echo "OPA server ready"
               exit 0
             fi
             sleep 1
           done
-          echo "OPA server failed to start"
-          cat opa.log || true
+          cat opa.log
           exit 1
 
-      - name: Load Policies into OPA
+      - name: Load policies into OPA
         run: |
-          # Load all policies
           for file in policies/*.rego; do
-            if [ -f "$file" ]; then
-              POLICY_NAME=$(basename "$file" .rego)
-              echo "Loading policy: $POLICY_NAME"
-              curl -X PUT "http://localhost:8181/v1/policies/${POLICY_NAME}" \
-                -H "Content-Type: text/plain" \
-                --data-binary @"$file"
-            fi
+            [ -f "$file" ] || continue
+            POLICY_NAME=$(basename "$file" .rego)
+            curl -sSf -X PUT "http://localhost:8181/v1/policies/${POLICY_NAME}" \
+              -H 'Content-Type: text/plain' \
+              --data-binary @"$file" >/dev/null
           done
 
-          # Load test policies
-          for file in policies/tests/*.rego; do
-            if [ -f "$file" ]; then
-              POLICY_NAME=$(basename "$file" .rego)
-              echo "Loading test policy: $POLICY_NAME"
-              curl -X PUT "http://localhost:8181/v1/policies/tests_${POLICY_NAME}" \
-                -H "Content-Type: text/plain" \
-                --data-binary @"$file"
-            fi
-          done
-
-      - name: Check for Baseline File
-        id: baseline
+      - name: Run baseline comparison when baseline exists
         run: |
-          if [ -f "policies/baselines/decision-baseline.json" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "✅ Baseline file found"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "⚠️ No baseline file - skipping regression check"
+          if [ ! -f 'policies/baselines/decision-baseline.json' ]; then
+            echo "No baseline file present; skipping baseline comparison." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
-      - name: Run Baseline Comparison
-        if: steps.baseline.outputs.exists == 'true'
-        run: |
+          npm install --no-save ts-node typescript axios
           cd scripts/policy
-          npm install -g ts-node typescript
-          npm install axios
-
-          # Run comparison
           npx ts-node capture-baseline.ts compare
         env:
           OPA_URL: http://localhost:8181
 
-  # ============================================
-  # Stage 6: Performance Benchmark
-  # ============================================
-  benchmark:
-    name: Policy Performance Benchmark
+  build:
+    name: Build Policy Bundles
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: test
-
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.force_build == true)
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
         with:
           version: ${{ env.OPA_VERSION }}
 
-      - name: Run OPA Benchmark
+      - name: Build bundles
         run: |
-          echo "⏱️ Running OPA performance benchmark..."
+          VERSION="${GITHUB_SHA:0:8}-$(date -u +"%Y%m%d%H%M%S")"
+          mkdir -p "bundles/${VERSION}"
 
-          # Benchmark main authorization policy
-          if [ -f "policies/fuel_inventory_abac_policy.rego" ]; then
-            echo "Benchmarking fuel_inventory_abac_policy.rego..."
-            opa bench policies/fuel_inventory_abac_policy.rego --count 1000 2>&1 | tee benchmark-main.txt
-          fi
+          opa build -b policies/ -o "bundles/${VERSION}/dive-base.tar.gz" --revision "${VERSION}"
+          for tenant in usa fra gbr deu; do
+            cp "bundles/${VERSION}/dive-base.tar.gz" "bundles/${VERSION}/dive-${tenant}.tar.gz"
+          done
 
-          # Benchmark federation policy
-          if [ -f "policies/federation_abac_policy.rego" ]; then
-            echo "Benchmarking federation_abac_policy.rego..."
-            opa bench policies/federation_abac_policy.rego --count 1000 2>&1 | tee benchmark-federation.txt
-          fi
+          cat > "bundles/${VERSION}/manifest.json" <<MANIFEST
+          {
+            "version": "${VERSION}",
+            "commit": "${GITHUB_SHA}",
+            "built_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "opa_version": "${{ env.OPA_VERSION }}"
+          }
+          MANIFEST
 
-      - name: Generate Benchmark Report
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: policy-bundles-${{ github.run_number }}
+          path: bundles/
+          retention-days: 90
+
+  benchmark:
+    name: Policy Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    if: github.event_name == 'workflow_dispatch' && inputs.run_benchmark == true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Run benchmark
         run: |
-          echo "## ⏱️ Policy Performance Benchmark" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          opa bench policies/fuel_inventory_abac_policy.rego --count 1000 | tee benchmark-main.txt
 
-          if [ -f "benchmark-main.txt" ]; then
-            echo "### Main Authorization Policy" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat benchmark-main.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-
-          if [ -f "benchmark-federation.txt" ]; then
-            echo "### Federation Policy" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat benchmark-federation.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-
-
-
-
-
-
-
-
-
-
+      - name: Publish benchmark summary
+        run: |
+          echo "## Policy Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat benchmark-main.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

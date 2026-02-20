@@ -6,68 +6,22 @@ on:
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-ci.yml'
+      - '.github/workflows/reusable-terraform-validate.yml'
   push:
     branches: [main]
     paths:
       - 'terraform/**'
+      - '.github/workflows/reusable-terraform-validate.yml'
 
 permissions:
   contents: read
-  pull-requests: write
+
+concurrency:
+  group: terraform-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  terraform-validate:
-    name: Terraform Validation
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.4
-
-      - name: Terraform Format Check
-        id: fmt
-        run: terraform fmt -check -recursive terraform/
-        continue-on-error: true
-
-      - name: Terraform Init
-        id: init
-        run: |
-          cd terraform
-          terraform init -backend=false
-
-      - name: Terraform Validate
-        id: validate
-        run: |
-          cd terraform
-          terraform validate
-
-      - name: Comment PR (if applicable)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### Terraform Format and Style 🖌 \`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️ \`${{ steps.init.outcome }}\`
-            #### Terraform Validation 🤖 \`${{ steps.validate.outcome }}\`
-
-            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-      - name: Fail on Format Error
-        if: steps.fmt.outcome == 'failure'
-        run: |
-          echo "Terraform files are not properly formatted."
-          echo "Run 'terraform fmt -recursive terraform/' to fix formatting."
-          exit 1
-
+  validate:
+    uses: ./.github/workflows/reusable-terraform-validate.yml
+    with:
+      terraform_version: "1.13.4"
