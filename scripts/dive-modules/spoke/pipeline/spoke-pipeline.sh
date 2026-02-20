@@ -718,9 +718,9 @@ spoke_pipeline_run_phase() {
             # Keep CONFIGURING state during seeding
             ;;
         *)
-            # Custom phase - update state if valid
-            if type orch_db_set_state &>/dev/null; then
-                orch_db_set_state "$instance_code" "$phase_name" "" "{\"phase\":\"$phase_name\"}"
+            # Custom phase — record as metadata only (phase names are not valid states)
+            if type orch_db_update_phase_metadata &>/dev/null; then
+                orch_db_update_phase_metadata "$instance_code" "$phase_name" "started"
             fi
             ;;
     esac
