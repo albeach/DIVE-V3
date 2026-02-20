@@ -2,22 +2,110 @@ name: Security Scanning
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'kas/**'
+      - 'terraform/**'
+      - 'docker-compose*.yml'
+      - '**/Dockerfile'
+      - '.github/workflows/security.yml'
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'kas/**'
+      - 'terraform/**'
+      - 'docker-compose*.yml'
+      - '**/Dockerfile'
+      - '.github/workflows/security.yml'
   schedule:
     # Run daily at 2 AM UTC
-  - cron: '0 2 * * *'
+    - cron: '0 2 * * *'
 concurrency:
   group: security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  changes:
+    name: Detect Security-Relevant Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      backend_changed: ${{ steps.detect.outputs.backend_changed }}
+      frontend_changed: ${{ steps.detect.outputs.frontend_changed }}
+      kas_changed: ${{ steps.detect.outputs.kas_changed }}
+      app_changed: ${{ steps.detect.outputs.app_changed }}
+      terraform_changed: ${{ steps.detect.outputs.terraform_changed }}
+      docker_changed: ${{ steps.detect.outputs.docker_changed }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed paths
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          backend_changed=false
+          frontend_changed=false
+          kas_changed=false
+          terraform_changed=false
+          docker_changed=false
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+            while IFS= read -r file; do
+              case "$file" in
+                backend/*) backend_changed=true ;;
+                frontend/*) frontend_changed=true ;;
+                kas/*) kas_changed=true ;;
+                terraform/*) terraform_changed=true ;;
+                docker-compose*.yml|*/Dockerfile|Dockerfile) docker_changed=true ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          else
+            backend_changed=true
+            frontend_changed=true
+            kas_changed=true
+            terraform_changed=true
+            docker_changed=true
+          fi
+
+          app_changed=false
+          if [[ "$backend_changed" == "true" || "$frontend_changed" == "true" || "$kas_changed" == "true" ]]; then
+            app_changed=true
+            docker_changed=true
+          fi
+
+          echo "backend_changed=$backend_changed" >> "$GITHUB_OUTPUT"
+          echo "frontend_changed=$frontend_changed" >> "$GITHUB_OUTPUT"
+          echo "kas_changed=$kas_changed" >> "$GITHUB_OUTPUT"
+          echo "app_changed=$app_changed" >> "$GITHUB_OUTPUT"
+          echo "terraform_changed=$terraform_changed" >> "$GITHUB_OUTPUT"
+          echo "docker_changed=$docker_changed" >> "$GITHUB_OUTPUT"
+
   npm-audit:
     name: NPM Security Audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.app_changed == 'true'
     strategy:
       matrix:
-        workspace: [backend, frontend, kas]
+        include:
+          - workspace: backend
+            changed_output: backend_changed
+          - workspace: frontend
+            changed_output: frontend_changed
+          - workspace: kas
+            changed_output: kas_changed
     steps:
     - name: Checkout Code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -27,13 +115,18 @@ jobs:
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '20'
+    - name: Skip unchanged workspace
+      if: github.event_name == 'pull_request' && ((matrix.workspace == 'backend' && needs.changes.outputs.backend_changed != 'true') || (matrix.workspace == 'frontend' && needs.changes.outputs.frontend_changed != 'true') || (matrix.workspace == 'kas' && needs.changes.outputs.kas_changed != 'true'))
+      run: echo "No relevant changes for ${{ matrix.workspace }}; skipping npm audit."
     - name: Run npm audit
+      if: github.event_name != 'pull_request' || (matrix.workspace == 'backend' && needs.changes.outputs.backend_changed == 'true') || (matrix.workspace == 'frontend' && needs.changes.outputs.frontend_changed == 'true') || (matrix.workspace == 'kas' && needs.changes.outputs.kas_changed == 'true')
       working-directory: ./${{ matrix.workspace }}
       run: |
         set -euo pipefail
         npm ci --ignore-scripts
         npm audit --omit=dev --audit-level=high --json > audit-report.json
     - name: Upload audit report
+      if: github.event_name != 'pull_request' || (matrix.workspace == 'backend' && needs.changes.outputs.backend_changed == 'true') || (matrix.workspace == 'frontend' && needs.changes.outputs.frontend_changed == 'true') || (matrix.workspace == 'kas' && needs.changes.outputs.kas_changed == 'true')
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: ${{ matrix.workspace }}-audit-report
@@ -42,6 +135,8 @@ jobs:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.app_changed == 'true'
     steps:
     - name: Checkout Code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -112,6 +207,8 @@ jobs:
     name: Docker Image Scanning
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.docker_changed == 'true'
     permissions:
       security-events: write
       contents: read
@@ -156,6 +253,8 @@ jobs:
     name: Terraform Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.terraform_changed == 'true'
     permissions:
       security-events: write
       contents: read
@@ -212,6 +311,8 @@ jobs:
     name: Code Quality Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.app_changed == 'true'
     steps:
     - name: Checkout Code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -241,7 +342,7 @@ jobs:
     name: Security Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [npm-audit, dependency-check, secret-scan, docker-scan, terraform-security, code-quality]
+    needs: [changes, npm-audit, dependency-check, secret-scan, docker-scan, terraform-security, code-quality]
     if: always()
     steps:
     - name: Generate Summary

@@ -6,14 +6,12 @@ on:
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - '.github/workflows/test-e2e.yml'
       - '.github/actions/e2e-setup/**'
   push:
     branches: [main]
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - '.github/workflows/test-e2e.yml'
       - '.github/actions/e2e-setup/**'
   schedule:
     - cron: '0 5 * * *'
@@ -91,8 +89,7 @@ jobs:
           cd frontend
           npx playwright test \
             src/__tests__/e2e/dynamic/hub/basic.spec.ts \
-            src/__tests__/e2e/identity-drawer.spec.ts \
-            --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured|UNCLASSIFIED user"
+            --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured"
         env:
           NODE_ENV: test
           NEXTAUTH_SECRET: test-secret-for-e2e-core-smoke-2026
@@ -109,10 +106,10 @@ jobs:
           retention-days: 7
 
   e2e-federation-smoke:
-    name: E2E - Federation Attribute Sync
+    name: E2E - Federation Attribute Sync (Nightly/Manual)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'workflow_dispatch' || inputs.test_scope == 'core' || inputs.test_scope == 'full'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
     services:
       mongodb:
         image: mongo:7.0
@@ -204,6 +201,8 @@ jobs:
             src/__tests__/e2e/mfa-complete-flow.spec.ts \
             src/__tests__/e2e/mfa-conditional.spec.ts \
             src/__tests__/e2e/external-idp-federation-flow.spec.ts \
+            src/__tests__/e2e/identity-drawer.spec.ts \
+            src/__tests__/e2e/federated-attribute-sync.spec.ts \
             src/__tests__/e2e/session-lifecycle.spec.ts \
             src/__tests__/e2e/webauthn-aal3-flow.spec.ts \
             src/__tests__/e2e/classification-equivalency.spec.ts \
@@ -248,7 +247,14 @@ jobs:
           echo "| Federation Sync | ${{ needs.e2e-federation-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Full Regression | ${{ needs.e2e-full-regression.result }} |" >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "${{ needs.e2e-core-smoke.result }}" != "success" ]] || [[ "${{ needs.e2e-federation-smoke.result }}" != "success" ]]; then
-            echo "Required E2E slices failed." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ needs.e2e-core-smoke.result }}" != "success" ]]; then
+            echo "Required E2E slice failed (core smoke)." >> "$GITHUB_STEP_SUMMARY"
             exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ needs.e2e-federation-smoke.result }}" != "success" ]]; then
+              echo "Federation smoke failed in scheduled/manual run." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
           fi

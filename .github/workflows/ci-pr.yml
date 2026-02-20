@@ -359,20 +359,28 @@ jobs:
     steps:
       - name: Generate Summary
         run: |
+          status_icon() {
+            case "$1" in
+              success) echo "✅" ;;
+              skipped) echo "⏭️" ;;
+              *) echo "❌" ;;
+            esac
+          }
+
           echo "## Pull Request Test Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Secrets Lint | ${{ needs.secrets-lint.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ShellCheck | ${{ needs.lint-shell.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Compose Validate | ${{ needs.lint-compose.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Terraform Validate | ${{ needs.terraform-validate.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Quick Checks | ${{ needs.quick-checks.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Backend Tests | ${{ needs.backend-tests.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| OPA Tests | ${{ needs.opa-tests.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| K8s Validation | ${{ needs.k8s-validation.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Deploy Dry Run | ${{ needs.deploy-dry-run.result == 'success' && '✅' || '❌' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Secrets Lint | $(status_icon "${{ needs.secrets-lint.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ShellCheck | $(status_icon "${{ needs.lint-shell.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Compose Validate | $(status_icon "${{ needs.lint-compose.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Terraform Validate | $(status_icon "${{ needs.terraform-validate.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Quick Checks | $(status_icon "${{ needs.quick-checks.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend Tests | $(status_icon "${{ needs.backend-tests.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Frontend Tests | $(status_icon "${{ needs.frontend-tests.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| OPA Tests | $(status_icon "${{ needs.opa-tests.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| K8s Validation | $(status_icon "${{ needs.k8s-validation.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deploy Dry Run | $(status_icon "${{ needs.deploy-dry-run.result }}") |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "${{ needs.secrets-lint.result }}" == "success" && \
@@ -380,11 +388,11 @@ jobs:
                 "${{ needs.lint-compose.result }}" == "success" && \
                 "${{ needs.terraform-validate.result }}" == "success" && \
                 "${{ needs.quick-checks.result }}" == "success" && \
-                "${{ needs.backend-tests.result }}" == "success" && \
-                "${{ needs.frontend-tests.result }}" == "success" && \
-                "${{ needs.opa-tests.result }}" == "success" && \
-                "${{ needs.k8s-validation.result }}" == "success" && \
-                "${{ needs.deploy-dry-run.result }}" == "success" ]]; then
+                ("${{ needs.backend-tests.result }}" == "success" || "${{ needs.backend-tests.result }}" == "skipped") && \
+                ("${{ needs.frontend-tests.result }}" == "success" || "${{ needs.frontend-tests.result }}" == "skipped") && \
+                ("${{ needs.opa-tests.result }}" == "success" || "${{ needs.opa-tests.result }}" == "skipped") && \
+                ("${{ needs.k8s-validation.result }}" == "success" || "${{ needs.k8s-validation.result }}" == "skipped") && \
+                ("${{ needs.deploy-dry-run.result }}" == "success" || "${{ needs.deploy-dry-run.result }}" == "skipped") ]]; then
             echo "✅ **All critical tests passing** - Ready for review!" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ **Some tests failed** - Please review and fix issues" >> "$GITHUB_STEP_SUMMARY"
