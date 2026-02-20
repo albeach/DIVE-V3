@@ -625,6 +625,77 @@ test_cli_error_recovery() {
 }
 
 ##
+# Test config manager module (Phase 7)
+#
+test_cli_config_manager() {
+    log_verbose "Testing config manager module..."
+
+    local manager="${DIVE_ROOT}/scripts/dive-modules/configuration/config-manager.sh"
+    if [ ! -f "$manager" ]; then
+        log_error "config-manager.sh not found"
+        return 1
+    fi
+
+    source "$manager"
+
+    # Verify functions exist
+    for func in module_config config_show config_get config_set; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Function $func not found"
+            return 1
+        fi
+    done
+
+    # Test config_show doesn't crash
+    local output
+    output=$(config_show 2>&1)
+    if [ $? -ne 0 ]; then
+        log_error "config_show failed"
+        return 1
+    fi
+    if ! echo "$output" | grep -q "Effective Configuration"; then
+        log_error "config_show missing header"
+        return 1
+    fi
+
+    # Test config_get with known variable
+    output=$(config_get "DIVE_DEFAULT_DOMAIN" 2>&1)
+    if [ $? -ne 0 ]; then
+        log_error "config_get DIVE_DEFAULT_DOMAIN failed"
+        return 1
+    fi
+
+    # Test config_get with missing variable
+    unset _TEST_NONEXISTENT_VAR_12345 2>/dev/null
+    config_get "_TEST_NONEXISTENT_VAR_12345" >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        log_error "config_get should fail for missing var"
+        return 1
+    fi
+
+    # Test config_set writes to file
+    local test_file="${DIVE_ROOT}/config/dive-local.env.test"
+    _CONFIG_LOCAL="$test_file"
+    config_set "TEST_KEY_12345" "test_value" >/dev/null 2>&1
+    if [ ! -f "$test_file" ]; then
+        log_error "config_set did not create file"
+        _CONFIG_LOCAL="${DIVE_ROOT}/config/dive-local.env"
+        return 1
+    fi
+    if ! grep -q "TEST_KEY_12345=test_value" "$test_file"; then
+        log_error "config_set did not write correct value"
+        rm -f "$test_file"
+        _CONFIG_LOCAL="${DIVE_ROOT}/config/dive-local.env"
+        return 1
+    fi
+    rm -f "$test_file"
+    _CONFIG_LOCAL="${DIVE_ROOT}/config/dive-local.env"
+    unset TEST_KEY_12345
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -639,6 +710,7 @@ test_run_cli_module_tests() {
         "test_cli_deploy_summary"
         "test_cli_setup_wizard"
         "test_cli_error_recovery"
+        "test_cli_config_manager"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
