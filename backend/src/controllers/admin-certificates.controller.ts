@@ -190,8 +190,22 @@ export async function rotateCertificate(req: Request, res: Response): Promise<vo
             overlapPeriodDays
         );
 
-        // In production: Generate new signing certificate here
-        // For now, just track rotation status
+        // Generate new signing certificate during rotation
+        try {
+            await certificateManager.generatePolicySigningCertificate({
+                type: 'signing',
+                commonName: 'DIVE V3 Policy Signer (Rotated)',
+                organization: 'DIVE V3',
+                organizationalUnit: 'Policy Signing',
+                country: 'US',
+                validityDays: 730, // 2 years
+            });
+            logger.info('New signing certificate generated during rotation');
+        } catch (certError) {
+            logger.warn('Certificate generation deferred — complete manually or via Vault PKI', {
+                error: certError instanceof Error ? certError.message : 'Unknown error'
+            });
+        }
 
         res.json({
             success: true,
