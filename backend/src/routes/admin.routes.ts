@@ -103,6 +103,13 @@ import {
     getFederationStatisticsHandler,
     getFederationTrafficHandler
 } from '../controllers/federation-statistics.controller';
+import {
+    getPasswordPolicyHandler,
+    updatePasswordPolicyHandler
+} from '../controllers/admin-password-policy.controller';
+import {
+    getSecurityHeadersHandler
+} from '../controllers/admin-security-headers.controller';
 
 const router = Router();
 
@@ -2283,6 +2290,33 @@ router.post('/sessions/:id/revoke', requireSuperAdmin, revokeSessionHandler);
  *         description: All user sessions revoked
  */
 router.post('/sessions/revoke-all/:userId', requireSuperAdmin, revokeAllUserSessionsHandler);
+
+// ============================================
+// Security Routes (frontend path alignment)
+// ============================================
+
+// Session alias — frontend calls /api/admin/security/sessions
+router.get('/security/sessions', getSessionsListHandler);
+router.get('/security/sessions/analytics', getSessionAnalyticsHandler);
+router.delete('/security/sessions/:id', requireSuperAdmin, revokeSessionHandler);
+
+// Password policy — GET/PUT via Keycloak admin API
+router.get('/security/password-policy', getPasswordPolicyHandler);
+router.put('/security/password-policy', requireSuperAdmin, updatePasswordPolicyHandler);
+
+// Security headers — read-only introspection
+router.get('/security/headers', getSecurityHeadersHandler);
+
+// MFA config — wrapper for default realm (frontend expects non-IdP-scoped path)
+// The IdP-scoped handlers read req.params.alias, so we inject the default realm
+router.get('/security/mfa-config', (req, res) => {
+    (req.params as Record<string, string>).alias = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+    return getMFAConfigHandler(req, res);
+});
+router.put('/security/mfa-config', requireSuperAdmin, (req, res) => {
+    (req.params as Record<string, string>).alias = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+    return updateMFAConfigHandler(req, res);
+});
 
 // ============================================
 // Logs Retention Routes
