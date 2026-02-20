@@ -91,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             export SECRETS_PROVIDER="$2"
             shift 2
             ;;
+        --profile)
+            DIVE_PROFILE="$2"
+            shift 2
+            ;;
         -h|--help)
             source "${MODULES_DIR}/utilities/help.sh"
             cmd_help
@@ -104,7 +108,7 @@ done
 
 # Guard against misplaced global flags after the command
 for arg in "$@"; do
-    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--domain" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" ]]; then
+    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--domain" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" ]]; then
         log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
         exit 1
     fi
@@ -138,6 +142,21 @@ COMMAND="${1:-help}"
 shift || true
 
 cd "$DIVE_ROOT"
+
+# Load profile if --profile was specified
+if [ -n "${DIVE_PROFILE:-}" ]; then
+    _profile_file="${DIVE_ROOT}/config/profiles/${DIVE_PROFILE}.env"
+    if [ -f "$_profile_file" ]; then
+        if type _load_dive_config_file &>/dev/null; then
+            _load_dive_config_file "$_profile_file"
+        fi
+        log_verbose "Loaded profile: $DIVE_PROFILE"
+    else
+        log_error "Profile '$DIVE_PROFILE' not found at $_profile_file"
+        exit 1
+    fi
+    unset _profile_file
+fi
 
 case "$COMMAND" in
     # Core commands (core.sh)
@@ -261,6 +280,12 @@ case "$COMMAND" in
     federation|fed)
         source "${MODULES_DIR}/federation/setup.sh"
         module_federation "$@"
+        ;;
+
+    # Deployment profiles
+    profile|profiles)
+        source "${MODULES_DIR}/configuration/profiles.sh"
+        module_profile "$@"
         ;;
 
     # Setup wizard (first-time configuration)
