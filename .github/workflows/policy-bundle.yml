@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - 'policies/**'
-      - '.github/workflows/policy-bundle.yml'
   push:
     branches: [main]
     paths:
       - 'policies/**'
-      - '.github/workflows/policy-bundle.yml'
   workflow_dispatch:
     inputs:
       force_build:
