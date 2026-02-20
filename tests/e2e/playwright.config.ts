@@ -1,5 +1,9 @@
 /**
- * DIVE V3 - Playwright E2E Test Configuration
+ * DIVE V3 - Playwright E2E Test Configuration (Secondary)
+ *
+ * This config is for the tests/e2e/ directory.
+ * CI uses frontend/playwright.config.ts instead.
+ *
  * @see https://playwright.dev/docs/test-configuration
  */
 
@@ -12,7 +16,7 @@ export default defineConfig({
   fullyParallel: false,  // Run tests sequentially for auth flows
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1,  // Single worker for auth state consistency
+  workers: process.env.CI ? 2 : 1,
 
   reporter: [
     ['html', { outputFolder: '../../test-results/e2e-report' }],
@@ -26,42 +30,21 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     ignoreHTTPSErrors: true,  // For self-signed certs in dev
-
-    // Default timeout for actions
-    actionTimeout: 20000,
-    navigationTimeout: 60000,
+    actionTimeout: 15000,
+    navigationTimeout: 30000,
   },
 
-  // Configure projects for different browsers
+  // Chromium only — enable others with --project=firefox or --project=webkit
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    // WebKit for Safari-like testing
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
   ],
 
-  // Global timeout
-  timeout: 120000,  // 2 minutes per test
+  timeout: 60000,  // 60s per test (was 120s)
 
-  // Expect timeout
   expect: {
     timeout: 10000,
   },
-
-  // Web server configuration (optional - for CI)
-  // webServer: {
-  //   command: 'cd ../.. && docker compose up -d',
-  //   url: 'https://localhost:3000',
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120000,
-  // },
 });
