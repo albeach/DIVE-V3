@@ -63,7 +63,7 @@ spoke_verify() {
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         hub_url="https://localhost:4000"
     else
-        hub_url="${hub_url:-https://usa-api.dive25.com}"
+        hub_url="${hub_url:-${HUB_FALLBACK_URL:-https://usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com}}}"
     fi
 
     # Read spoke_id and spoke_token from .env (populated during deployment)

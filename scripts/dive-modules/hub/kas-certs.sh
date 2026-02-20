@@ -45,8 +45,8 @@ kas_certs_rotate() {
         -keyout "$kas_cert_dir/key.pem" \
         -out "$kas_cert_dir/certificate.pem" \
         -days 365 -nodes \
-        -subj "/CN=kas.dive25.com/O=DIVE V3/C=US/ST=Virginia/L=Arlington" \
-        -addext "subjectAltName=DNS:kas.dive25.com,DNS:localhost,DNS:kas,IP:127.0.0.1" \
+        -subj "/CN=kas.${DIVE_DEFAULT_DOMAIN:-dive25.com}/O=DIVE V3/C=US/ST=Virginia/L=Arlington" \
+        -addext "subjectAltName=DNS:kas.${DIVE_DEFAULT_DOMAIN:-dive25.com},DNS:localhost,DNS:kas,IP:127.0.0.1" \
         2>/dev/null
 
     if [ $? -eq 0 ]; then

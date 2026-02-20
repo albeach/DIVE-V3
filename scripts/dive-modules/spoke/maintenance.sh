@@ -214,16 +214,16 @@ spoke_reinit_client() {
     "https://localhost:${frontend_port}",
     "https://localhost:${frontend_port}/*",
     "https://localhost:${frontend_port}/api/auth/callback/keycloak",
-    "https://${code_lower}-app.dive25.com",
-    "https://${code_lower}-app.dive25.com/*",
-    "https://${code_lower}-app.dive25.com/api/auth/callback/keycloak",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}/*",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}/api/auth/callback/keycloak",
     "https://localhost:3000",
     "https://localhost:3000/*",
     "https://localhost:3000/api/auth/callback/keycloak",
     "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint",
     "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*",
-    "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint",
-    "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*",
+    "https://usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint",
+    "https://usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*",
     "*"
 ]
 EOF
@@ -233,12 +233,12 @@ EOF
 [
     "https://localhost:${frontend_port}",
     "https://localhost:${backend_port}",
-    "https://${code_lower}-app.dive25.com",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
     "https://localhost:3000",
     "https://localhost:4000",
     "https://localhost:8443",
-    "https://usa-idp.dive25.com",
-    "https://usa-app.dive25.com",
+    "https://usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
+    "https://usa-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
     "*"
 ]
 EOF

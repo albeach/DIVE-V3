@@ -508,7 +508,7 @@ spoke_config_register_in_hub_mongodb() {
 
     # Fallback for contact email
     if [ -z "$contact_email" ] || [ "$contact_email" = "null" ]; then
-        contact_email="admin@${code_lower}.dive25.com"
+        contact_email="admin@${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
     fi
 
     # Get Keycloak admin password (CRITICAL for bidirectional federation)

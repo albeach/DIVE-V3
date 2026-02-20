@@ -114,7 +114,7 @@ spoke_register() {
 
     # Override hub URL from environment
     hub_url="${HUB_API_URL:-$hub_url}"
-    hub_url="${hub_url:-https://hub.dive25.com}"
+    hub_url="${hub_url:-${HUB_FALLBACK_URL:-https://hub.${DIVE_DEFAULT_DOMAIN:-dive25.com}}}"
 
     echo "  Spoke ID:     $spoke_id"
     echo "  Instance:     $instance_code_config"
@@ -769,7 +769,7 @@ spoke_token_refresh() {
     # Get current token info
     local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
     hub_url="${HUB_API_URL:-$hub_url}"
-    hub_url="${hub_url:-https://hub.dive25.com}"
+    hub_url="${hub_url:-${HUB_FALLBACK_URL:-https://hub.${DIVE_DEFAULT_DOMAIN:-dive25.com}}}"
 
     local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
 
