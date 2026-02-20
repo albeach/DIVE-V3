@@ -328,7 +328,7 @@ router.get('/policy-data', requireOpalDataToken, async (req: Request, res: Respo
  * POST /api/opal/bundle/build
  * Build a new policy bundle
  */
-router.post('/bundle/build', async (req: Request, res: Response): Promise<void> => {
+router.post('/bundle/build', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { scopes, includeData, sign, compress } = req.body;
 
@@ -409,7 +409,7 @@ router.post('/bundle/build', async (req: Request, res: Response): Promise<void> 
  * POST /api/opal/bundle/publish
  * Publish current bundle to OPAL Server
  */
-router.post('/bundle/publish', async (_req: Request, res: Response): Promise<void> => {
+router.post('/bundle/publish', authenticateJWT, requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     logger.info('Publishing policy bundle to OPAL');
 
@@ -511,7 +511,7 @@ router.post('/bundle/publish', async (_req: Request, res: Response): Promise<voi
  * POST /api/opal/bundle/build-and-publish
  * Build and publish in one operation
  */
-router.post('/bundle/build-and-publish', async (req: Request, res: Response): Promise<void> => {
+router.post('/bundle/build-and-publish', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { scopes, includeData } = req.body;
 
@@ -829,7 +829,7 @@ router.get('/health', async (_req: Request, res: Response): Promise<void> => {
  * POST /api/opal/refresh
  * Trigger OPAL policy refresh
  */
-router.post('/refresh', async (_req: Request, res: Response): Promise<void> => {
+router.post('/refresh', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     logger.info('Triggering OPAL policy refresh');
 
@@ -912,7 +912,7 @@ router.post('/refresh', async (_req: Request, res: Response): Promise<void> => {
  * POST /api/opal/data/publish
  * Publish inline data to OPAL
  */
-router.post('/data/publish', async (req: Request, res: Response): Promise<void> => {
+router.post('/data/publish', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { path: dataPath, data, reason } = req.body;
 
