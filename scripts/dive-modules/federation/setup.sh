@@ -55,12 +55,19 @@ HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 #   Access token on stdout
 ##
 get_hub_admin_token() {
+    # Delegate to unified Keycloak API abstraction (keycloak-api.sh)
+    # which handles local docker exec and remote HTTPS paths, plus token caching
+    if type keycloak_get_admin_token &>/dev/null; then
+        keycloak_get_admin_token "USA"
+        return $?
+    fi
+
+    # Fallback: legacy inline path (if keycloak-api.sh not loaded)
     local max_retries=15
     local retry_delay=5
 
     local i
     for ((i=1; i<=max_retries; i++)); do
-        # Get admin password from GCP or environment
         local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
         if [ -z "$admin_pass" ] && type get_keycloak_admin_password &>/dev/null; then
@@ -68,7 +75,6 @@ get_hub_admin_token() {
         fi
 
         if [ -z "$admin_pass" ]; then
-            # Try to get from container environment
             admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || \
                         docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
         fi
@@ -109,25 +115,28 @@ get_hub_admin_token() {
 ##
 get_spoke_admin_token() {
     local instance_code="$1"
+
+    # Delegate to unified Keycloak API abstraction (keycloak-api.sh)
+    if type keycloak_get_admin_token &>/dev/null; then
+        keycloak_get_admin_token "$instance_code"
+        return $?
+    fi
+
+    # Fallback: legacy inline path (if keycloak-api.sh not loaded)
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
     local spoke_url
     spoke_url=$(resolve_spoke_public_url "$instance_code" "idp")
 
-    # Get admin password
     local admin_pass=""
-
     if type get_keycloak_admin_password &>/dev/null; then
         admin_pass=$(get_keycloak_admin_password "$instance_code" 2>/dev/null)
     fi
-
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
     fi
-
     if [ -z "$admin_pass" ]; then
         log_error "Cannot get Spoke admin password for $instance_code"
         return 1
