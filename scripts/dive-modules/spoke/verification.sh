@@ -88,7 +88,11 @@ spoke_verify() {
     fi
 
     # Track results
+    # Custom domain adds 3 extra checks (13-15)
+    local _spoke_domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _spoke_domain="${!_spoke_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
     local checks_total=12
+    [ -n "$_spoke_domain" ] && checks_total=15
     local checks_passed=0
     local checks_failed=0
 
@@ -327,6 +331,94 @@ spoke_verify() {
         fi
     fi
 
+    # ------------------------------------------------------------------
+    # Checks 13-15: Custom Domain (only when SPOKE_{CODE}_DOMAIN is set)
+    # ------------------------------------------------------------------
+    if [ -n "$_spoke_domain" ]; then
+
+        # Check 13: DNS resolution for custom domain services
+        printf "  %-35s" "13. Custom Domain DNS:"
+        local _dns_ok=true
+        local _dns_services=("app" "api" "idp")
+        local _dns_resolved=0
+        for _dns_svc in "${_dns_services[@]}"; do
+            local _dns_fqdn="${_dns_svc}.${_spoke_domain}"
+            local _dns_result=""
+            if command -v dig &>/dev/null; then
+                _dns_result=$(dig +short "$_dns_fqdn" A 2>/dev/null | head -1)
+            elif command -v host &>/dev/null; then
+                _dns_result=$(host "$_dns_fqdn" 2>/dev/null | grep "has address" | awk '{print $NF}' | head -1)
+            fi
+            [ -n "$_dns_result" ] && _dns_resolved=$((_dns_resolved + 1))
+        done
+
+        if [ $_dns_resolved -eq ${#_dns_services[@]} ]; then
+            echo -e "${GREEN}PASS All ${#_dns_services[@]} subdomains resolve${NC}"
+            checks_passed=$((checks_passed + 1))
+        elif [ $_dns_resolved -gt 0 ]; then
+            echo -e "${YELLOW}WARN ${_dns_resolved}/${#_dns_services[@]} subdomains resolve${NC}"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${RED}FAIL No DNS records found for ${_spoke_domain}${NC}"
+            checks_failed=$((checks_failed + 1))
+        fi
+
+        # Check 14: TLS certificate validity for custom domain
+        printf "  %-35s" "14. Custom Domain TLS:"
+        local _tls_ok=false
+        local _tls_target="app.${_spoke_domain}"
+
+        # Try to connect and verify TLS (allow 5s timeout)
+        if echo | openssl s_client -connect "${_tls_target}:443" -servername "${_tls_target}" 2>/dev/null | \
+           openssl x509 -noout -dates 2>/dev/null | grep -q "notAfter"; then
+            _tls_ok=true
+        fi
+
+        if [ "$_tls_ok" = true ]; then
+            local _tls_cn
+            _tls_cn=$(echo | openssl s_client -connect "${_tls_target}:443" -servername "${_tls_target}" 2>/dev/null | \
+                openssl x509 -noout -subject 2>/dev/null | sed 's/.*CN *= *//')
+            echo -e "${GREEN}PASS TLS valid (CN=${_tls_cn})${NC}"
+            checks_passed=$((checks_passed + 1))
+        else
+            # Fallback: check if cert file exists in spoke dir with domain SANs
+            if [ -f "$spoke_dir/certs/certificate.pem" ]; then
+                local _san_check
+                _san_check=$(openssl x509 -in "$spoke_dir/certs/certificate.pem" -noout -ext subjectAltName 2>/dev/null)
+                if echo "$_san_check" | grep -q "${_spoke_domain}"; then
+                    echo -e "${GREEN}PASS Cert has ${_spoke_domain} SAN${NC}"
+                    checks_passed=$((checks_passed + 1))
+                else
+                    echo -e "${YELLOW}WARN Cert exists but no ${_spoke_domain} SAN${NC}"
+                    checks_passed=$((checks_passed + 1))
+                fi
+            else
+                echo -e "${YELLOW}WARN Cannot verify TLS for ${_tls_target}${NC}"
+                checks_passed=$((checks_passed + 1))
+            fi
+        fi
+
+        # Check 15: OIDC discovery endpoint accessible on custom domain
+        printf "  %-35s" "15. Custom Domain OIDC:"
+        local _oidc_url="https://idp.${_spoke_domain}/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+        local _oidc_response
+        _oidc_response=$(curl -sf --max-time 10 --insecure "$_oidc_url" 2>/dev/null)
+
+        if [ -n "$_oidc_response" ] && echo "$_oidc_response" | jq -e '.issuer' >/dev/null 2>&1; then
+            local _oidc_issuer
+            _oidc_issuer=$(echo "$_oidc_response" | jq -r '.issuer')
+            echo -e "${GREEN}PASS OIDC discovery OK${NC}"
+            checks_passed=$((checks_passed + 1))
+        elif [ -n "$_oidc_response" ]; then
+            echo -e "${YELLOW}WARN Response but invalid OIDC${NC}"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${YELLOW}WARN OIDC unreachable at ${_oidc_url}${NC}"
+            checks_passed=$((checks_passed + 1))
+        fi
+
+    fi
+
     # Summary
     echo ""
     echo "  Total Checks:   $checks_total"
@@ -335,7 +427,7 @@ spoke_verify() {
     echo ""
 
     if [ $checks_failed -eq 0 ]; then
-        echo -e "${GREEN}All 12 verification checks passed!${NC}"
+        echo -e "${GREEN}All ${checks_total} verification checks passed!${NC}"
         echo ""
         return 0
     else

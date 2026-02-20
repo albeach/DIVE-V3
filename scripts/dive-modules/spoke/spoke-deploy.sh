@@ -214,15 +214,20 @@ spoke_deploy() {
                 shift
                 ;;
             --domain)
-                if [ -z "${2:-}" ]; then
-                    log_error "--domain requires a value"
-                    return 1
-                fi
-                export SPOKE_CUSTOM_DOMAIN="${2:-}"
-                if [ -n "$SPOKE_CUSTOM_DOMAIN" ]; then
+                if [ -z "${2:-}" ] || [[ "${2:-}" == --* ]]; then
+                    # No value: trigger interactive wizard (deferred until after CODE is parsed)
+                    export SPOKE_DOMAIN_WIZARD_REQUESTED=true
+                else
+                    export SPOKE_CUSTOM_DOMAIN="${2:-}"
+                    # Validate domain format
+                    if type spoke_domain_validate &>/dev/null && ! spoke_domain_validate "$SPOKE_CUSTOM_DOMAIN"; then
+                        log_error "Invalid domain format: $SPOKE_CUSTOM_DOMAIN"
+                        log_info "Expected format: gbr.mod.uk, fra.defense.gouv.fr"
+                        return 1
+                    fi
                     log_info "Custom domain: $SPOKE_CUSTOM_DOMAIN"
+                    shift
                 fi
-                shift
                 ;;
             --auth-code)
                 if [ -z "${2:-}" ]; then
@@ -324,7 +329,7 @@ spoke_deploy() {
         echo "  --skip-federation      Skip federation setup (standalone mode)"
         echo "  --seed                 Opt-in seeding during deploy (federated mode only)"
         echo "  --seed-count <N>       Number of resources to seed when --seed is enabled (default: 5000)"
-        echo "  --domain <base>        Custom domain (e.g. gbr.mod.uk)"
+        echo "  --domain [<base>]      Custom domain (e.g. gbr.mod.uk); omit value for interactive wizard"
         echo ""
         echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
         echo ""
@@ -347,6 +352,28 @@ spoke_deploy() {
         if ! spoke_validate_instance_code "$instance_code"; then
             return 1
         fi
+    fi
+
+    # =========================================================================
+    # INTERACTIVE DOMAIN WIZARD (triggered by --domain without value)
+    # =========================================================================
+    if [ "${SPOKE_DOMAIN_WIZARD_REQUESTED:-false}" = "true" ]; then
+        # Load domain wizard module
+        local _wizard_module="$(dirname "${BASH_SOURCE[0]}")/domain-wizard.sh"
+        if [ -f "$_wizard_module" ]; then
+            source "$_wizard_module"
+        fi
+
+        if type spoke_domain_wizard &>/dev/null && is_interactive; then
+            if ! spoke_domain_wizard "$instance_code"; then
+                return 1
+            fi
+        else
+            log_error "--domain requires a value in non-interactive mode"
+            log_info "Usage: --domain gbr.mod.uk"
+            return 1
+        fi
+        unset SPOKE_DOMAIN_WIZARD_REQUESTED
     fi
 
     # =========================================================================
