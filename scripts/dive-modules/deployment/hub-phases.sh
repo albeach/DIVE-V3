@@ -34,7 +34,7 @@ _hub_set_env() {
 }
 
 hub_phase_database_init() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
 
     log_info "Phase 2: PostgreSQL and Orchestration Database initialization"
@@ -64,12 +64,12 @@ hub_phase_database_init() {
                         -addext "subjectAltName=DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1${INSTANCE_PRIVATE_IP:+,IP:${INSTANCE_PRIVATE_IP}}${INSTANCE_PUBLIC_IP:+,IP:${INSTANCE_PUBLIC_IP}}" \
                         2>/dev/null
                 elif command -v mkcert >/dev/null 2>&1; then
-                    cd "$cert_dir"
+                    cd "$cert_dir" || return 1
                     mkcert -cert-file certificate.pem -key-file key.pem \
                         localhost "*.localhost" 127.0.0.1 \
                         backend keycloak opa mongodb postgres redis kas opal-server frontend \
                         >/dev/null 2>&1
-                    cd "$DIVE_ROOT"
+                    cd "$DIVE_ROOT" || return 1
                 fi
             fi
         elif is_cloud_environment 2>/dev/null; then
@@ -80,12 +80,12 @@ hub_phase_database_init() {
                 -addext "subjectAltName=DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1${INSTANCE_PRIVATE_IP:+,IP:${INSTANCE_PRIVATE_IP}}${INSTANCE_PUBLIC_IP:+,IP:${INSTANCE_PUBLIC_IP}}" \
                 2>/dev/null
         elif command -v mkcert >/dev/null 2>&1; then
-            cd "$cert_dir"
+            cd "$cert_dir" || return 1
             mkcert -cert-file certificate.pem -key-file key.pem \
                 localhost "*.localhost" 127.0.0.1 \
                 backend keycloak opa mongodb postgres redis kas opal-server frontend \
                 >/dev/null 2>&1
-            cd "$DIVE_ROOT"
+            cd "$DIVE_ROOT" || return 1
         fi
 
         # Fix permissions for Docker containers (non-root users need read access)
@@ -220,19 +220,19 @@ hub_phase_database_init() {
 }
 
 hub_phase_preflight() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     hub_preflight
 }
 
 hub_phase_initialization() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     hub_init
 }
 
 hub_phase_vault_bootstrap() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
 
     log_info "Vault bootstrap: ensuring Vault cluster is running and configured"
@@ -733,19 +733,19 @@ _hub_install_ca_trust() {
 }
 
 hub_phase_mongodb_init() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     _hub_init_mongodb_replica_set
 }
 
 hub_phase_build() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     local force_build="${DIVE_FORCE_BUILD:-false}"
 
     log_info "Building Docker images..."
 
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || return 1
 
     # Source build cache module
     if ! type build_cache_check_service &>/dev/null; then
@@ -975,7 +975,7 @@ _hub_ensure_opal_data_token() {
 }
 
 hub_phase_services() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
 
     # SERVICES phase now ONLY starts services (build happens in BUILD phase)
@@ -1171,19 +1171,19 @@ hub_phase_kas_register() {
 }
 
 hub_phase_seeding() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     hub_seed 5000
 }
 
 hub_phase_kas_init() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
     _hub_init_kas
 }
 
 hub_phase_vault_db_engine() {
-    local instance_code="$1"
+    local _instance_code="$1"
     local _pipeline_mode="$2"
 
     # Skip if Vault not bootstrapped or secrets provider isn't vault
