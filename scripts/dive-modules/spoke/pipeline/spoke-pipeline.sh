@@ -203,6 +203,13 @@ spoke_pipeline_execute() {
     if pipeline_is_dry_run 2>/dev/null; then
         log_verbose "Dry-run mode: skipping deployment lock acquisition"
     else
+        # Check for stuck deployments before acquiring lock
+        if type pipeline_check_stuck_before_lock &>/dev/null; then
+            if ! pipeline_check_stuck_before_lock "$code_upper" "spoke"; then
+                return 1
+            fi
+        fi
+
         # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
         if type orch_acquire_deployment_lock &>/dev/null; then
             if ! orch_acquire_deployment_lock "$code_upper"; then
@@ -211,6 +218,11 @@ spoke_pipeline_execute() {
                 return 1
             fi
             lock_acquired=true
+        fi
+
+        # Initialize heartbeat tracking
+        if type pipeline_heartbeat_init &>/dev/null; then
+            pipeline_heartbeat_init "$code_upper" "spoke"
         fi
     fi
 
@@ -227,6 +239,11 @@ spoke_pipeline_execute() {
     # Uninstall SIGINT handler (skip in dry-run)
     if ! pipeline_is_dry_run 2>/dev/null && type pipeline_uninstall_sigint_handler &>/dev/null; then
         pipeline_uninstall_sigint_handler
+    fi
+
+    # Stop heartbeat tracking
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_heartbeat_stop &>/dev/null; then
+        pipeline_heartbeat_stop
     fi
 
     # ALWAYS release lock (runs whether pipeline succeeded or failed)
@@ -707,6 +724,11 @@ spoke_pipeline_run_phase() {
             fi
             ;;
     esac
+
+    # Update heartbeat with current phase
+    if type pipeline_heartbeat_update &>/dev/null; then
+        pipeline_heartbeat_update "$instance_code" "$state_name"
+    fi
 
     # Create checkpoint before critical phases
     if [[ "$phase_name" =~ ^(DEPLOYMENT|CONFIGURATION)$ ]]; then

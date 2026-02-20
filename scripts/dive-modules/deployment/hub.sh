@@ -141,6 +141,23 @@ module_hub() {
                 return 1
             fi
             ;;
+        state)
+            local _state_repair=""
+            if [ "${1:-}" = "--repair" ]; then
+                _state_repair="repair"
+                shift
+            fi
+            if type pipeline_state_show &>/dev/null; then
+                if [ -n "$_state_repair" ]; then
+                    pipeline_state_audit "hub" "USA" "repair"
+                else
+                    pipeline_state_show "hub" "USA"
+                fi
+            else
+                log_error "State module not available"
+                return 1
+            fi
+            ;;
         verify)         hub_verify "$@" ;;
         logs)           hub_logs "$@" ;;
         seed)           hub_seed "$@" ;;
@@ -161,6 +178,7 @@ module_hub() {
             echo "  down      Stop hub services"
             echo "  status    Show hub status"
             echo "  phases    Show pipeline phase status"
+            echo "  state     Show deployment state (--repair to fix inconsistencies)"
             echo "  diagnose  Run diagnostic checks (containers, certs, ports, disk)"
             echo "  history   Show recent deployment history"
             echo "  verify    Run deployment validation tests"
@@ -194,6 +212,8 @@ module_hub() {
             echo "  ./dive hub phases --timing"
             echo "  ./dive hub diagnose"
             echo "  ./dive hub history"
+            echo "  ./dive hub state"
+            echo "  ./dive hub state --repair"
             ;;
     esac
 }

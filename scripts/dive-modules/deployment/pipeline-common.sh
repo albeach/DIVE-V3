@@ -1242,9 +1242,657 @@ pipeline_show_history() {
 }
 
 # =============================================================================
+# STATE MACHINE HARDENING (Phase 6)
+# =============================================================================
+# Validates state transitions, detects stuck deployments, and provides
+# state audit/repair capabilities.
+# =============================================================================
+
+# Valid deployment states
+readonly PIPELINE_STATE_UNKNOWN="UNKNOWN"
+readonly PIPELINE_STATE_INITIALIZING="INITIALIZING"
+readonly PIPELINE_STATE_DEPLOYING="DEPLOYING"
+readonly PIPELINE_STATE_CONFIGURING="CONFIGURING"
+readonly PIPELINE_STATE_VERIFYING="VERIFYING"
+readonly PIPELINE_STATE_COMPLETE="COMPLETE"
+readonly PIPELINE_STATE_FAILED="FAILED"
+readonly PIPELINE_STATE_INTERRUPTED="INTERRUPTED"
+
+# State transition matrix — each key maps to valid target states
+# Format: "FROM_STATE:TO_STATE1,TO_STATE2,..."
+_PIPELINE_VALID_TRANSITIONS=(
+    "UNKNOWN:INITIALIZING,FAILED"
+    "INITIALIZING:DEPLOYING,FAILED,INTERRUPTED"
+    "DEPLOYING:CONFIGURING,FAILED,INTERRUPTED"
+    "CONFIGURING:VERIFYING,FAILED,INTERRUPTED"
+    "VERIFYING:COMPLETE,FAILED,INTERRUPTED"
+    "COMPLETE:INITIALIZING,FAILED"
+    "FAILED:INITIALIZING,UNKNOWN"
+    "INTERRUPTED:INITIALIZING,FAILED,UNKNOWN"
+)
+
+# Active states (states that indicate a deployment is in progress)
+readonly PIPELINE_ACTIVE_STATES="INITIALIZING DEPLOYING CONFIGURING VERIFYING"
+
+# Default timeouts per active state (seconds)
+readonly PIPELINE_STUCK_TIMEOUT_INITIALIZING="${DIVE_STUCK_TIMEOUT_INITIALIZING:-1800}"  # 30min
+readonly PIPELINE_STUCK_TIMEOUT_DEPLOYING="${DIVE_STUCK_TIMEOUT_DEPLOYING:-1800}"        # 30min
+readonly PIPELINE_STUCK_TIMEOUT_CONFIGURING="${DIVE_STUCK_TIMEOUT_CONFIGURING:-1200}"    # 20min
+readonly PIPELINE_STUCK_TIMEOUT_VERIFYING="${DIVE_STUCK_TIMEOUT_VERIFYING:-600}"         # 10min
+
+# Heartbeat tracking
+export _PIPELINE_HEARTBEAT_FILE=""
+
+##
+# Validate a state transition
+#
+# Checks if transitioning from current_state to new_state is valid
+# according to the state transition matrix.
+#
+# Arguments:
+#   $1 - Current state
+#   $2 - Proposed new state
+#   $3 - Optional: "force" to allow invalid transitions with warning
+#
+# Returns:
+#   0 - Transition is valid (or forced)
+#   1 - Transition is invalid
+##
+pipeline_validate_state_transition() {
+    local current_state="${1:-UNKNOWN}"
+    local new_state="$2"
+    local force="${3:-}"
+
+    # Same state is always valid (no-op)
+    if [ "$current_state" = "$new_state" ]; then
+        return 0
+    fi
+
+    # Check transition matrix
+    local entry
+    for entry in "${_PIPELINE_VALID_TRANSITIONS[@]}"; do
+        local from_state="${entry%%:*}"
+        local valid_targets="${entry#*:}"
+
+        if [ "$from_state" = "$current_state" ]; then
+            # Check if new_state is in valid targets
+            local target
+            local IFS_OLD="$IFS"
+            IFS=","
+            for target in $valid_targets; do
+                if [ "$target" = "$new_state" ]; then
+                    IFS="$IFS_OLD"
+                    return 0
+                fi
+            done
+            IFS="$IFS_OLD"
+
+            # Not in valid targets
+            if [ "$force" = "force" ]; then
+                log_warn "Forcing invalid state transition: $current_state -> $new_state"
+                return 0
+            fi
+
+            log_warn "Invalid state transition: $current_state -> $new_state (allowed from $current_state: $valid_targets)"
+            return 1
+        fi
+    done
+
+    # Unknown source state — allow with warning
+    log_warn "Unknown source state '$current_state' — allowing transition to $new_state"
+    return 0
+}
+
+##
+# Update deployment state with transition validation
+#
+# Wraps deployment_set_state with validation. If the transition is invalid,
+# logs a warning but allows it with --force.
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - New state
+#   $3 - Optional reason
+#   $4 - Optional metadata JSON
+#   $5 - Optional: "force" to override validation
+#
+# Returns:
+#   0 - State updated
+#   1 - Invalid transition (not forced)
+##
+pipeline_validated_set_state() {
+    local instance_code="$1"
+    local new_state="$2"
+    local reason="${3:-}"
+    local metadata="${4:-}"
+    local force="${5:-}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    # Get current state
+    local current_state
+    current_state=$(deployment_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+
+    # Validate transition
+    if ! pipeline_validate_state_transition "$current_state" "$new_state" "$force"; then
+        log_error "State transition rejected: $current_state -> $new_state for $code_upper"
+        log_info "Use --force to override state validation"
+        return 1
+    fi
+
+    # Proceed with state update
+    deployment_set_state "$code_upper" "$new_state" "$reason" "$metadata"
+    return $?
+}
+
+# =============================================================================
+# HEARTBEAT & STUCK DEPLOYMENT DETECTION
+# =============================================================================
+
+##
+# Initialize heartbeat file for deployment tracking
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Deployment type (hub|spoke)
+##
+pipeline_heartbeat_init() {
+    local instance_code="$1"
+    local deploy_type="${2:-spoke}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    local heartbeat_dir="${DIVE_ROOT}/.dive-state/heartbeat"
+    mkdir -p "$heartbeat_dir" 2>/dev/null || true
+
+    export _PIPELINE_HEARTBEAT_FILE="${heartbeat_dir}/${deploy_type}-${code_upper}.heartbeat"
+
+    # Write initial heartbeat
+    pipeline_heartbeat_update "$code_upper" "INITIALIZING"
+}
+
+##
+# Update heartbeat with current state and timestamp
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Current state/phase
+##
+pipeline_heartbeat_update() {
+    local instance_code="$1"
+    local current_state="$2"
+
+    if [ -n "${_PIPELINE_HEARTBEAT_FILE:-}" ]; then
+        local ts
+        ts=$(date +%s)
+        printf '%s %s %s\n' "$ts" "$instance_code" "$current_state" > "$_PIPELINE_HEARTBEAT_FILE" 2>/dev/null || true
+    fi
+}
+
+##
+# Stop heartbeat (remove heartbeat file)
+##
+pipeline_heartbeat_stop() {
+    if [ -n "${_PIPELINE_HEARTBEAT_FILE:-}" ] && [ -f "${_PIPELINE_HEARTBEAT_FILE}" ]; then
+        rm -f "$_PIPELINE_HEARTBEAT_FILE" 2>/dev/null || true
+    fi
+    export _PIPELINE_HEARTBEAT_FILE=""
+}
+
+##
+# Detect stuck deployments for an instance
+#
+# Checks if there's a heartbeat file that hasn't been updated within
+# the timeout for its current state.
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Deployment type (hub|spoke)
+#
+# Returns:
+#   0 - Deployment appears stuck
+#   1 - No stuck deployment detected
+#
+# Outputs:
+#   If stuck: "STATE ELAPSED_SECONDS TIMEOUT_SECONDS" on stdout
+##
+pipeline_detect_stuck() {
+    local instance_code="$1"
+    local deploy_type="${2:-spoke}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    local heartbeat_file="${DIVE_ROOT}/.dive-state/heartbeat/${deploy_type}-${code_upper}.heartbeat"
+    if [ ! -f "$heartbeat_file" ]; then
+        return 1
+    fi
+
+    # Read heartbeat: timestamp instance_code state
+    local hb_timestamp _hb_instance hb_state
+    read -r hb_timestamp _hb_instance hb_state < "$heartbeat_file" 2>/dev/null || return 1
+
+    # Check if state is an active state
+    local is_active=false
+    local s
+    for s in $PIPELINE_ACTIVE_STATES; do
+        if [ "$s" = "$hb_state" ]; then
+            is_active=true
+            break
+        fi
+    done
+
+    if [ "$is_active" = "false" ]; then
+        return 1
+    fi
+
+    # Get timeout for this state
+    local timeout_var="PIPELINE_STUCK_TIMEOUT_${hb_state}"
+    local timeout="${!timeout_var:-1800}"
+
+    # Calculate elapsed time
+    local now
+    now=$(date +%s)
+    local elapsed=$((now - hb_timestamp))
+
+    if [ "$elapsed" -gt "$timeout" ]; then
+        echo "$hb_state $elapsed $timeout"
+        return 0
+    fi
+
+    return 1
+}
+
+##
+# Check for stuck deployment before acquiring lock
+#
+# If a deployment appears stuck, offers to force-unlock (interactive)
+# or automatically cleans up (non-interactive).
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Deployment type (hub|spoke)
+#
+# Returns:
+#   0 - No stuck deployment, or user chose to force-unlock
+#   1 - User chose not to force-unlock
+##
+pipeline_check_stuck_before_lock() {
+    local instance_code="$1"
+    local deploy_type="${2:-spoke}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    local stuck_info
+    stuck_info=$(pipeline_detect_stuck "$code_upper" "$deploy_type") || return 0
+
+    local stuck_state stuck_elapsed stuck_timeout
+    read -r stuck_state stuck_elapsed stuck_timeout <<< "$stuck_info"
+
+    log_warn "Possible stuck deployment detected for $code_upper:"
+    log_warn "  State: $stuck_state (stuck for ${stuck_elapsed}s, timeout: ${stuck_timeout}s)"
+
+    # Non-interactive: auto-cleanup
+    if ! is_interactive 2>/dev/null; then
+        log_warn "Non-interactive mode: auto-cleaning stuck deployment state"
+        pipeline_heartbeat_stop
+        deployment_set_state "$code_upper" "FAILED" "Auto-recovered from stuck $stuck_state state" \
+            "{\"stuck_state\":\"$stuck_state\",\"stuck_elapsed\":$stuck_elapsed,\"auto_recovered\":true}"
+        return 0
+    fi
+
+    # Interactive: ask user
+    echo ""
+    echo "  A previous deployment appears to be stuck in $stuck_state state."
+    echo "  It has been in this state for ${stuck_elapsed} seconds (timeout: ${stuck_timeout}s)."
+    echo ""
+    echo "  Options:"
+    echo "    [f] Force-unlock and continue with new deployment"
+    echo "    [c] Cancel (do not start new deployment)"
+    echo ""
+
+    local choice
+    read -r -p "  Choose [f/c]: " choice
+    case "$choice" in
+        [Ff])
+            log_info "Force-unlocking stuck deployment..."
+            # Clean heartbeat
+            local heartbeat_file="${DIVE_ROOT}/.dive-state/heartbeat/${deploy_type}-${code_upper}.heartbeat"
+            rm -f "$heartbeat_file" 2>/dev/null || true
+            # Mark as failed
+            deployment_set_state "$code_upper" "FAILED" "Force-unlocked from stuck $stuck_state state" \
+                "{\"stuck_state\":\"$stuck_state\",\"stuck_elapsed\":$stuck_elapsed,\"force_unlocked\":true}"
+            return 0
+            ;;
+        *)
+            log_info "Cancelled — not starting new deployment"
+            return 1
+            ;;
+    esac
+}
+
+# =============================================================================
+# STATE AUDIT & REPAIR
+# =============================================================================
+
+##
+# Show current deployment state with metadata
+#
+# Arguments:
+#   $1 - Deployment type (hub|spoke)
+#   $2 - Instance code
+##
+pipeline_state_show() {
+    local deploy_type="$1"
+    local instance_code="$2"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    echo ""
+    echo "==============================================================================="
+    echo "  Deployment State — ${deploy_type^^} ${code_upper}"
+    echo "==============================================================================="
+    echo ""
+
+    # Current state from DB
+    local current_state
+    current_state=$(deployment_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    echo "  Current State: $current_state"
+
+    # Heartbeat info
+    local heartbeat_file="${DIVE_ROOT}/.dive-state/heartbeat/${deploy_type}-${code_upper}.heartbeat"
+    if [ -f "$heartbeat_file" ]; then
+        local hb_ts hb_inst hb_state
+        read -r hb_ts hb_inst hb_state < "$heartbeat_file" 2>/dev/null
+        if [ -n "$hb_ts" ]; then
+            local now
+            now=$(date +%s)
+            local age=$((now - hb_ts))
+            echo "  Heartbeat:     $hb_state (${age}s ago)"
+        fi
+    else
+        echo "  Heartbeat:     none (no active deployment)"
+    fi
+
+    # Checkpoint status
+    echo ""
+    echo "  Checkpoint Status:"
+    if [ "$deploy_type" = "hub" ]; then
+        local ckpt_dir="${DIVE_ROOT}/.dive-state/hub/.phases"
+        if [ -d "$ckpt_dir" ]; then
+            local ckpt_count=0
+            local ckpt_file
+            for ckpt_file in "$ckpt_dir"/*.done; do
+                [ -f "$ckpt_file" ] || continue
+                local phase_name
+                phase_name=$(basename "$ckpt_file" .done)
+                ckpt_count=$((ckpt_count + 1))
+                echo "    [+] $phase_name"
+            done
+            [ $ckpt_count -eq 0 ] && echo "    (no checkpoints)"
+        else
+            echo "    (no checkpoint directory)"
+        fi
+    else
+        # Spoke checkpoints are DB-backed — check via function if available
+        if type spoke_checkpoint_is_complete &>/dev/null; then
+            local sp_phases=(PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION)
+            local sp
+            for sp in "${sp_phases[@]}"; do
+                if spoke_checkpoint_is_complete "$code_upper" "$sp" 2>/dev/null; then
+                    echo "    [+] $sp"
+                else
+                    echo "    [-] $sp"
+                fi
+            done
+        else
+            echo "    (checkpoint module not loaded)"
+        fi
+    fi
+
+    # Log files
+    echo ""
+    echo "  Recent Logs:"
+    local log_dir="${DIVE_ROOT}/.dive-state/logs"
+    if [ -d "$log_dir" ]; then
+        local log_pattern="deploy-${deploy_type}-${code_upper}-"
+        local log_count=0
+        local lf
+        while IFS= read -r lf; do
+            [ -z "$lf" ] && continue
+            [ ! -f "$lf" ] && continue
+            echo "    $(basename "$lf")"
+            log_count=$((log_count + 1))
+            [ "$log_count" -ge 5 ] && break
+        done < <(ls -1r "${log_dir}/${log_pattern}"*.jsonl 2>/dev/null)
+        [ "$log_count" -eq 0 ] && echo "    (no logs found)"
+    else
+        echo "    (no log directory)"
+    fi
+
+    echo ""
+    echo "==============================================================================="
+    echo ""
+}
+
+##
+# Audit and repair deployment state
+#
+# Compares state DB against checkpoint files and container reality.
+# Auto-fixes inconsistencies when --repair is specified.
+#
+# Arguments:
+#   $1 - Deployment type (hub|spoke)
+#   $2 - Instance code
+#   $3 - Optional: "repair" to auto-fix inconsistencies
+#
+# Returns:
+#   0 - State is consistent (or was repaired)
+#   1 - Inconsistencies found (not repaired)
+##
+pipeline_state_audit() {
+    local deploy_type="$1"
+    local instance_code="$2"
+    local repair_mode="${3:-}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    local issues=0
+    local fixed=0
+
+    echo ""
+    echo "==============================================================================="
+    echo "  State Audit — ${deploy_type^^} ${code_upper}"
+    echo "==============================================================================="
+    echo ""
+
+    # Get current state from DB
+    local current_state
+    current_state=$(deployment_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    echo "  DB State: $current_state"
+
+    # Check 1: State vs checkpoints
+    echo ""
+    echo "  Checking state consistency..."
+
+    if [ "$deploy_type" = "hub" ]; then
+        local ckpt_dir="${DIVE_ROOT}/.dive-state/hub/.phases"
+        local all_complete=true
+        local has_any=false
+
+        if [ -d "$ckpt_dir" ]; then
+            local hub_phases=(VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT)
+            local hp
+            for hp in "${hub_phases[@]}"; do
+                if [ -f "$ckpt_dir/${hp}.done" ]; then
+                    has_any=true
+                else
+                    all_complete=false
+                fi
+            done
+        fi
+
+        # Inconsistency: all checkpoints complete but state is not COMPLETE
+        if [ "$has_any" = "true" ] && [ "$all_complete" = "true" ] && [ "$current_state" != "COMPLETE" ]; then
+            issues=$((issues + 1))
+            echo "    [!] All checkpoints complete but state is $current_state (expected COMPLETE)"
+            if [ "$repair_mode" = "repair" ]; then
+                deployment_set_state "$code_upper" "COMPLETE" "Auto-repaired: all checkpoints complete" \
+                    "{\"repaired\":true,\"previous_state\":\"$current_state\"}"
+                echo "    [*] Repaired: state set to COMPLETE"
+                fixed=$((fixed + 1))
+            fi
+        fi
+
+        # Inconsistency: state is COMPLETE but not all checkpoints exist
+        if [ "$current_state" = "COMPLETE" ] && [ "$all_complete" = "false" ] && [ "$has_any" = "true" ]; then
+            issues=$((issues + 1))
+            echo "    [!] State is COMPLETE but not all checkpoints exist"
+            if [ "$repair_mode" = "repair" ]; then
+                echo "    [*] Note: Cannot downgrade from COMPLETE (checkpoints may have been pruned)"
+            fi
+        fi
+    fi
+
+    # Check 2: Active state with no heartbeat (potentially crashed)
+    local heartbeat_file="${DIVE_ROOT}/.dive-state/heartbeat/${deploy_type}-${code_upper}.heartbeat"
+    local is_active=false
+    for s in $PIPELINE_ACTIVE_STATES; do
+        if [ "$s" = "$current_state" ]; then
+            is_active=true
+            break
+        fi
+    done
+
+    if [ "$is_active" = "true" ] && [ ! -f "$heartbeat_file" ]; then
+        issues=$((issues + 1))
+        echo "    [!] State is $current_state (active) but no heartbeat file exists (deployment may have crashed)"
+        if [ "$repair_mode" = "repair" ]; then
+            deployment_set_state "$code_upper" "FAILED" "Auto-repaired: active state with no heartbeat" \
+                "{\"repaired\":true,\"previous_state\":\"$current_state\",\"reason\":\"no_heartbeat\"}"
+            echo "    [*] Repaired: state set to FAILED"
+            fixed=$((fixed + 1))
+        fi
+    fi
+
+    # Check 3: Stale heartbeat (stuck)
+    if [ -f "$heartbeat_file" ]; then
+        local stuck_info
+        stuck_info=$(pipeline_detect_stuck "$code_upper" "$deploy_type") && {
+            local stuck_state stuck_elapsed stuck_timeout
+            read -r stuck_state stuck_elapsed stuck_timeout <<< "$stuck_info"
+            issues=$((issues + 1))
+            echo "    [!] Heartbeat is stale: $stuck_state for ${stuck_elapsed}s (timeout: ${stuck_timeout}s)"
+            if [ "$repair_mode" = "repair" ]; then
+                rm -f "$heartbeat_file" 2>/dev/null || true
+                deployment_set_state "$code_upper" "FAILED" "Auto-repaired: stuck in $stuck_state" \
+                    "{\"repaired\":true,\"previous_state\":\"$stuck_state\",\"stuck_elapsed\":$stuck_elapsed}"
+                echo "    [*] Repaired: heartbeat removed, state set to FAILED"
+                fixed=$((fixed + 1))
+            fi
+        }
+    fi
+
+    # Summary
+    echo ""
+    if [ $issues -eq 0 ]; then
+        echo "  Result: No inconsistencies found"
+    elif [ "$repair_mode" = "repair" ]; then
+        echo "  Result: $issues issue(s) found, $fixed fixed"
+    else
+        echo "  Result: $issues issue(s) found"
+        echo "  Run with --repair to auto-fix: ./dive ${deploy_type} state --repair"
+    fi
+    echo ""
+    echo "==============================================================================="
+    echo ""
+
+    [ $issues -eq 0 ] || [ "$repair_mode" = "repair" -a $fixed -eq $issues ]
+}
+
+##
+# Clean all deployment state for an instance
+#
+# Used during nuke to ensure clean state.
+#
+# Arguments:
+#   $1 - Instance code (or "all" for all instances)
+#   $2 - Deployment type (hub|spoke|all)
+#   $3 - Optional: "preserve-logs" to keep log files
+##
+pipeline_state_cleanup() {
+    local instance_code="$1"
+    local deploy_type="${2:-all}"
+    local preserve_logs="${3:-}"
+
+    if [ "$instance_code" = "all" ]; then
+        log_verbose "Cleaning all deployment state..."
+
+        # Clear all heartbeat files
+        rm -rf "${DIVE_ROOT}/.dive-state/heartbeat" 2>/dev/null || true
+
+        # Clear hub checkpoints
+        rm -rf "${DIVE_ROOT}/.dive-state/hub/.phases" 2>/dev/null || true
+
+        # Clear timing data
+        rm -rf "${DIVE_ROOT}/.dive-state/timing" 2>/dev/null || true
+
+        # Clear logs (unless preserved)
+        if [ "$preserve_logs" != "preserve-logs" ]; then
+            rm -rf "${DIVE_ROOT}/.dive-state/logs" 2>/dev/null || true
+        else
+            log_verbose "  Preserving deployment logs"
+        fi
+
+        log_verbose "  All deployment state cleaned"
+    else
+        local code_upper
+        code_upper=$(upper "$instance_code")
+
+        # Clear instance-specific heartbeat
+        if [ "$deploy_type" = "hub" ] || [ "$deploy_type" = "all" ]; then
+            rm -f "${DIVE_ROOT}/.dive-state/heartbeat/hub-${code_upper}.heartbeat" 2>/dev/null || true
+        fi
+        if [ "$deploy_type" = "spoke" ] || [ "$deploy_type" = "all" ]; then
+            rm -f "${DIVE_ROOT}/.dive-state/heartbeat/spoke-${code_upper}.heartbeat" 2>/dev/null || true
+        fi
+
+        # Clear hub checkpoints (hub is always USA)
+        if [ "$deploy_type" = "hub" ] && [ "$code_upper" = "USA" ]; then
+            rm -rf "${DIVE_ROOT}/.dive-state/hub/.phases" 2>/dev/null || true
+        fi
+
+        # Clear instance logs (unless preserved)
+        if [ "$preserve_logs" != "preserve-logs" ]; then
+            local log_dir="${DIVE_ROOT}/.dive-state/logs"
+            if [ -d "$log_dir" ]; then
+                rm -f "${log_dir}/deploy-hub-${code_upper}-"*.jsonl 2>/dev/null || true
+                rm -f "${log_dir}/deploy-spoke-${code_upper}-"*.jsonl 2>/dev/null || true
+            fi
+        fi
+
+        # Reset DB state
+        if type orch_db_set_state &>/dev/null; then
+            orch_db_set_state "$code_upper" "UNKNOWN" "State cleaned" "{\"cleaned\":true}" 2>/dev/null || true
+        fi
+
+        log_verbose "  Deployment state cleaned for $code_upper"
+    fi
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
+export -f pipeline_validate_state_transition
+export -f pipeline_validated_set_state
+export -f pipeline_heartbeat_init
+export -f pipeline_heartbeat_update
+export -f pipeline_heartbeat_stop
+export -f pipeline_detect_stuck
+export -f pipeline_check_stuck_before_lock
+export -f pipeline_state_show
+export -f pipeline_state_audit
+export -f pipeline_state_cleanup
 export -f pipeline_log_init
 export -f pipeline_log_structured
 export -f pipeline_log_finalize
@@ -1288,3 +1936,7 @@ log_verbose "Pipeline common module loaded"
 # sc2034-anchor
 : "${PIPELINE_MODE_DEPLOY:-}" "${PIPELINE_MODE_REDEPLOY:-}" "${PIPELINE_MODE_UP:-}" "${PIPELINE_PHASE_COMPLETE:-}" "${PIPELINE_PHASE_CONFIGURATION:-}" "${PIPELINE_PHASE_DEPLOYMENT:-}"
 : "${PIPELINE_PHASE_INITIALIZATION:-}" "${PIPELINE_PHASE_PREFLIGHT:-}" "${PIPELINE_PHASE_VERIFICATION:-}" "${PIPELINE_DRY_RUN_VALIDATION_PHASES:-}"
+: "${PIPELINE_STATE_UNKNOWN:-}" "${PIPELINE_STATE_INITIALIZING:-}" "${PIPELINE_STATE_DEPLOYING:-}" "${PIPELINE_STATE_CONFIGURING:-}"
+: "${PIPELINE_STATE_VERIFYING:-}" "${PIPELINE_STATE_COMPLETE:-}" "${PIPELINE_STATE_FAILED:-}" "${PIPELINE_STATE_INTERRUPTED:-}"
+: "${PIPELINE_ACTIVE_STATES:-}" "${PIPELINE_STUCK_TIMEOUT_INITIALIZING:-}" "${PIPELINE_STUCK_TIMEOUT_DEPLOYING:-}"
+: "${PIPELINE_STUCK_TIMEOUT_CONFIGURING:-}" "${PIPELINE_STUCK_TIMEOUT_VERIFYING:-}"
