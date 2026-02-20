@@ -200,8 +200,23 @@ spoke_verify() {
             checks_passed=$((checks_passed + 1))
         fi
     else
-        echo -e "${YELLOW}WARN Not Started${NC}"
-        checks_passed=$((checks_passed + 1))
+        # External spoke: verify OPAL server URL connectivity if configured
+        local _hub_opal_url=""
+        if [ -f "$spoke_dir/.env" ]; then
+            _hub_opal_url=$(grep "^HUB_OPAL_URL=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+        fi
+        if [ -n "$_hub_opal_url" ]; then
+            if curl -skf --max-time 5 "$_hub_opal_url/healthz" >/dev/null 2>&1; then
+                echo -e "${GREEN}PASS Hub OPAL reachable${NC}"
+                checks_passed=$((checks_passed + 1))
+            else
+                echo -e "${YELLOW}WARN Hub OPAL unreachable (${_hub_opal_url})${NC}"
+                checks_passed=$((checks_passed + 1))
+            fi
+        else
+            echo -e "${YELLOW}WARN Not Started${NC}"
+            checks_passed=$((checks_passed + 1))
+        fi
     fi
 
     # ------------------------------------------------------------------
@@ -224,8 +239,13 @@ spoke_verify() {
     # Check 9: Policy Bundle (unique to spoke verify)
     # ------------------------------------------------------------------
     printf "  %-35s" "9. Policy Bundle:"
-    local policy_count
+    local policy_count=0
+    # Try local OPA first
     policy_count=$(curl -skf "https://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    # Fallback: try via custom domain if configured
+    if [ "$policy_count" -eq 0 ] && [ -n "$_spoke_domain" ]; then
+        policy_count=$(curl -skf "https://api.${_spoke_domain}/api/opa/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    fi
     if [ "$policy_count" -gt 0 ]; then
         echo -e "${GREEN}PASS Loaded ($policy_count policies)${NC}"
         checks_passed=$((checks_passed + 1))
