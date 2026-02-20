@@ -148,6 +148,7 @@ module_hub() {
             echo "  --resume               Resume from last checkpoint"
             echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
             echo "  --only-phase <PHASE>   Run only the specified phase"
+            echo "  --force-build          Force rebuild all Docker images (bypass cache)"
             echo ""
             echo "Phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION"
             echo "        MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG"
@@ -157,6 +158,7 @@ module_hub() {
             echo "  ./dive hub deploy --resume"
             echo "  ./dive hub deploy --skip-phase SEEDING --skip-phase KAS_INIT"
             echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG"
+            echo "  ./dive hub deploy --force-build"
             ;;
     esac
 }

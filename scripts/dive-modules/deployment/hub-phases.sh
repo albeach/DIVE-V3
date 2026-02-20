@@ -740,20 +740,73 @@ hub_phase_mongodb_init() {
 hub_phase_build() {
     local instance_code="$1"
     local pipeline_mode="$2"
+    local force_build="${DIVE_FORCE_BUILD:-false}"
 
     log_info "Building Docker images..."
 
     cd "$DIVE_ROOT"
 
+    # Source build cache module
+    if ! type build_cache_check_service &>/dev/null; then
+        local _cache="${DIVE_ROOT}/scripts/dive-modules/utilities/build-cache.sh"
+        [ -f "$_cache" ] && source "$_cache"
+    fi
+
     # Build images WITHOUT circuit breaker output capture
     # This is heavyweight I/O that must stream to stdout
     local build_log="${DIVE_ROOT}/logs/docker-builds/hub-build-$(date +%Y%m%d-%H%M%S).log"
     mkdir -p "$(dirname "$build_log")"
-
     log_info "Build output: $build_log"
 
-    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build 2>&1 | tee "$build_log"; then
+    # Check build cache (unless --force-build)
+    local services_to_build=""
+    if [ "$force_build" = "true" ]; then
+        log_info "Force build: rebuilding all services"
+        if type build_cache_invalidate &>/dev/null; then
+            build_cache_invalidate
+        fi
+    elif type build_cache_get_stale &>/dev/null; then
+        services_to_build=$(build_cache_get_stale)
+        if [ -z "$services_to_build" ]; then
+            log_success "All Docker images are cached (no source changes detected)"
+            log_info "Use --force-build to rebuild anyway"
+            return 0
+        fi
+
+        local total_services=7
+        local stale_count
+        stale_count=$(echo "$services_to_build" | wc -w | tr -d ' ')
+        local cached_count=$((total_services - stale_count))
+        log_info "Build cache: ${cached_count} cached, ${stale_count} to rebuild: ${services_to_build}"
+    fi
+
+    # Build (parallel when supported)
+    local build_result=0
+    if [ -n "$services_to_build" ]; then
+        # Selective rebuild: only stale services
+        if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build --parallel $services_to_build 2>&1 | tee "$build_log"; then
+            build_result=0
+        else
+            build_result=1
+        fi
+    else
+        # Full build (first run or force)
+        if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build --parallel 2>&1 | tee "$build_log"; then
+            build_result=0
+        else
+            build_result=1
+        fi
+    fi
+
+    if [ "$build_result" -eq 0 ]; then
         log_success "Docker images built successfully"
+
+        # Save build cache hashes for next run
+        if type build_cache_save_all &>/dev/null; then
+            build_cache_save_all
+            log_verbose "Build cache hashes saved"
+        fi
+
         return 0
     else
         log_error "Failed to build Docker images"
