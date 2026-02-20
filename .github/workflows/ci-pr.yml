@@ -45,6 +45,23 @@ jobs:
           else
             echo "❌ Secrets lint reported findings." >> $GITHUB_STEP_SUMMARY
           fi
+  # Dependency review: block high-severity vulnerabilities and restricted licenses
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.dependency_changed == 'true'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Dependency Review
+        uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-3.0, AGPL-3.0
   # Shell script linting on changed scripts
   lint-shell:
     name: ShellCheck
@@ -142,6 +159,7 @@ jobs:
       policies_changed: ${{ steps.detect.outputs.policies_changed }}
       k8s_changed: ${{ steps.detect.outputs.k8s_changed }}
       deploy_changed: ${{ steps.detect.outputs.deploy_changed }}
+      dependency_changed: ${{ steps.detect.outputs.dependency_changed }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -159,6 +177,7 @@ jobs:
           policies_changed=false
           k8s_changed=false
           deploy_changed=false
+          dependency_changed=false
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE_SHA="${{ github.event.pull_request.base.sha }}"
@@ -171,6 +190,7 @@ jobs:
                 policies/*) policies_changed=true ;;
                 k8s/*) k8s_changed=true ;;
                 terraform/*|scripts/*|instances/*|docker-compose*.yml) deploy_changed=true ;;
+                **/package.json|**/package-lock.json|**/npm-shrinkwrap.json|**/yarn.lock|**/pnpm-lock.yaml|**/go.mod|**/go.sum|**/Cargo.toml|**/Cargo.lock|**/pom.xml|**/build.gradle|**/build.gradle.kts|**/requirements.txt|**/poetry.lock|**/Pipfile|**/Pipfile.lock|**/composer.json|**/composer.lock|**/Gemfile|**/Gemfile.lock|**/*.csproj|**/*.fsproj|**/*.vbproj|**/packages.lock.json) dependency_changed=true ;;
               esac
             done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           else
@@ -179,6 +199,7 @@ jobs:
             policies_changed=true
             k8s_changed=true
             deploy_changed=true
+            dependency_changed=true
           fi
 
           echo "backend_changed=$backend_changed" >> "$GITHUB_OUTPUT"
@@ -186,6 +207,7 @@ jobs:
           echo "policies_changed=$policies_changed" >> "$GITHUB_OUTPUT"
           echo "k8s_changed=$k8s_changed" >> "$GITHUB_OUTPUT"
           echo "deploy_changed=$deploy_changed" >> "$GITHUB_OUTPUT"
+          echo "dependency_changed=$dependency_changed" >> "$GITHUB_OUTPUT"
   # Terraform validation
   terraform-validate:
     name: Terraform - Validation
@@ -438,7 +460,7 @@ jobs:
     name: PR Test Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes, secrets-lint, lint-shell, lint-compose, terraform-validate, quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation, deploy-dry-run]
+    needs: [changes, secrets-lint, dependency-review, lint-shell, lint-compose, terraform-validate, quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation, deploy-dry-run]
     if: always()
     steps:
       - name: Generate Summary
@@ -456,6 +478,7 @@ jobs:
           echo "| Check | Status | Notes |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Secrets Lint | $(status_icon "${{ needs.secrets-lint.result }}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dependency Review | $(status_icon "${{ needs.dependency-review.result }}") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| ShellCheck | $(status_icon "${{ needs.lint-shell.result }}") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Compose Validate | $(status_icon "${{ needs.lint-compose.result }}") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Terraform Validate | $(status_icon "${{ needs.terraform-validate.result }}") |" >> "$GITHUB_STEP_SUMMARY"
@@ -469,6 +492,7 @@ jobs:
 
           # Gate on all required checks, including frontend tests.
           if [[ "${{ needs.secrets-lint.result }}" == "success" && \
+                ("${{ needs.dependency-review.result }}" == "success" || "${{ needs.dependency-review.result }}" == "skipped") && \
                 "${{ needs.lint-shell.result }}" == "success" && \
                 "${{ needs.lint-compose.result }}" == "success" && \
                 "${{ needs.terraform-validate.result }}" == "success" && \
