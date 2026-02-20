@@ -40,6 +40,7 @@ if [ -z "${SECRETS_PROVIDER:-}" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ]
     while IFS= read -r _line; do
         case "$_line" in
             SECRETS_PROVIDER=*|VAULT_CLI_ADDR=*|VAULT_ADDR=*)
+                # shellcheck disable=SC2163 -- $_line is KEY=VALUE, export works correctly
                 export "$_line" ;;
         esac
     done < "${DIVE_ROOT}/.env.hub"
