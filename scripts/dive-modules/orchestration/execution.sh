@@ -9,7 +9,7 @@
 # =============================================================================
 
 if ! declare -p ORCH_CONTEXT &>/dev/null; then
-    declare -A ORCH_CONTEXT=()
+    declare -gA ORCH_CONTEXT=()
 fi
 : "${PHASE_PREFLIGHT:=PREFLIGHT}"
 
@@ -161,7 +161,7 @@ orch_generate_error_summary() {
 # =============================================================================
 
 # Service health URL registry
-declare -A SERVICE_HEALTH_URLS=(
+declare -gA SERVICE_HEALTH_URLS=(
     ["keycloak"]="/health"
     ["backend"]="/health"
     ["frontend"]="/"
@@ -172,7 +172,7 @@ declare -A SERVICE_HEALTH_URLS=(
 )
 
 # Service health port configuration
-declare -A SERVICE_HEALTH_PORTS=(
+declare -gA SERVICE_HEALTH_PORTS=(
     ["keycloak"]="8443"
     ["backend"]="4000"
     ["frontend"]="3000"
@@ -683,8 +683,8 @@ readonly ROLLBACK_CONTAINERS="CONTAINERS"    # Recreate containers
 readonly ROLLBACK_COMPLETE="COMPLETE"        # Full rollback
 
 # Checkpoint registry
-declare -A CHECKPOINT_REGISTRY=()
-declare -A CHECKPOINT_METADATA=()
+declare -gA CHECKPOINT_REGISTRY=()
+declare -gA CHECKPOINT_METADATA=()
 
 ##
 # Create comprehensive deployment checkpoint

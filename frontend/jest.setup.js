@@ -47,27 +47,27 @@ jest.mock('next-auth/react', () => ({
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
     writable: true,
-    value: jest.fn().mockImplementation(query => ({
+    value: query => ({
         matches: false,
         media: query,
         onchange: null,
-        addListener: jest.fn(), // Deprecated
-        removeListener: jest.fn(), // Deprecated
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
-        dispatchEvent: jest.fn(),
-    })),
+        addListener: () => { }, // Deprecated
+        removeListener: () => { }, // Deprecated
+        addEventListener: () => { },
+        removeEventListener: () => { },
+        dispatchEvent: () => false,
+    }),
 })
 
 // Mock window.scrollTo
 Object.defineProperty(window, 'scrollTo', {
     writable: true,
-    value: jest.fn(),
+    value: () => { },
 })
 
 // Mock window.requestAnimationFrame
-global.requestAnimationFrame = jest.fn(cb => setTimeout(cb, 16))
-global.cancelAnimationFrame = jest.fn(id => clearTimeout(id))
+global.requestAnimationFrame = cb => setTimeout(() => cb(Date.now()), 16)
+global.cancelAnimationFrame = id => clearTimeout(id)
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -90,16 +90,32 @@ global.IntersectionObserver = class IntersectionObserver {
     unobserve() { }
 }
 
-// Mock performance.mark and performance.measure
-Object.defineProperty(window, 'performance', {
-    writable: true,
-    value: {
-        ...window.performance,
-        mark: jest.fn(),
-        measure: jest.fn(),
-        getEntriesByName: jest.fn(() => []),
-        getEntriesByType: jest.fn(() => []),
-    },
+// Keep native performance object intact and patch missing methods only
+if (typeof window.performance.now !== 'function') {
+    Object.defineProperty(window.performance, 'now', {
+        configurable: true,
+        value: () => Date.now(),
+    })
+}
+
+Object.defineProperty(window.performance, 'mark', {
+    configurable: true,
+    value: jest.fn(),
+})
+
+Object.defineProperty(window.performance, 'measure', {
+    configurable: true,
+    value: jest.fn(),
+})
+
+Object.defineProperty(window.performance, 'getEntriesByName', {
+    configurable: true,
+    value: jest.fn(() => []),
+})
+
+Object.defineProperty(window.performance, 'getEntriesByType', {
+    configurable: true,
+    value: jest.fn(() => []),
 })
 
 // Suppress console errors/warnings in tests (optional)

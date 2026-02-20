@@ -394,6 +394,9 @@ router.post('/bundle/build', authenticateJWT, requireSuperAdmin, async (req: Req
  *                   type: string
  *                 version:
  *                   type: string
+ *                 hash:
+ *                   type: string
+ *                   description: SHA-256 bundle hash
  *                 publishedAt:
  *                   type: string
  *                   format: date-time
@@ -420,6 +423,8 @@ router.post('/bundle/publish', authenticateJWT, requireSuperAdmin, async (_req: 
         success: true,
         bundleId: result.bundleId,
         version: result.version,
+        hash: result.hash,
+        hashAlgorithm: 'sha256',
         publishedAt: result.publishedAt,
         opalTransactionId: result.opalTransactionId,
       });
@@ -497,6 +502,9 @@ router.post('/bundle/publish', authenticateJWT, requireSuperAdmin, async (_req: 
  *                   properties:
  *                     success:
  *                       type: boolean
+ *                     hash:
+ *                       type: string
+ *                       description: SHA-256 bundle hash
  *                     publishedAt:
  *                       type: string
  *                       format: date-time
@@ -537,6 +545,8 @@ router.post('/bundle/build-and-publish', authenticateJWT, requireSuperAdmin, asy
       publish: publishResult
         ? {
           success: publishResult.success,
+          hash: publishResult.hash,
+          hashAlgorithm: 'sha256',
           publishedAt: publishResult.publishedAt,
           opalTransactionId: publishResult.opalTransactionId,
           error: publishResult.error,

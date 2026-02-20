@@ -109,7 +109,7 @@ done
 
 # Guard against misplaced global flags after the command
 for arg in "$@"; do
-    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--domain" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" ]]; then
+    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" ]]; then
         log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
         exit 1
     fi
@@ -624,4 +624,3 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
-

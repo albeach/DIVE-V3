@@ -284,7 +284,7 @@ _orch_calc_level() {
 # Updated 2026-01-25: Migrated to config/deployment-timeouts.env (Phase 2)
 # Values can be overridden via environment variables before deployment
 # Rationale: Each timeout calculated as P99 startup time + safety margin
-declare -A SERVICE_TIMEOUTS=(
+declare -gA SERVICE_TIMEOUTS=(
     ["postgres"]="${TIMEOUT_POSTGRES:-60}"
     ["mongodb"]="${TIMEOUT_MONGODB:-90}"
     ["redis"]="${TIMEOUT_REDIS:-30}"
@@ -308,13 +308,13 @@ declare -A SERVICE_TIMEOUTS=(
 )
 
 # Timeout bounds for dynamic calculation (Phase 3 enhancement)
-declare -A SERVICE_MIN_TIMEOUTS=(
+declare -gA SERVICE_MIN_TIMEOUTS=(
     ["keycloak"]="${TIMEOUT_KEYCLOAK_MIN:-180}"
     ["backend"]="${TIMEOUT_BACKEND_MIN:-90}"
     ["frontend"]="${TIMEOUT_FRONTEND_MIN:-45}"
 )
 
-declare -A SERVICE_MAX_TIMEOUTS=(
+declare -gA SERVICE_MAX_TIMEOUTS=(
     ["keycloak"]="${TIMEOUT_KEYCLOAK_MAX:-300}"
     ["backend"]="${TIMEOUT_BACKEND_MAX:-180}"
     ["frontend"]="${TIMEOUT_FRONTEND_MAX:-90}"
@@ -325,7 +325,7 @@ declare -A SERVICE_MAX_TIMEOUTS=(
 # =============================================================================
 
 # Global orchestration context
-declare -A ORCH_CONTEXT=(
+declare -gA ORCH_CONTEXT=(
     [instance_code]=""
     [instance_name]=""
     [start_time]=""
@@ -341,7 +341,7 @@ declare -A ORCH_CONTEXT=(
 )
 
 # Error tracking
-declare -a ORCHESTRATION_ERRORS=()
+declare -ga ORCHESTRATION_ERRORS=()
 
 # =============================================================================
 # CONCURRENT DEPLOYMENT PROTECTION (GAP-001 Fix - PostgreSQL Only)

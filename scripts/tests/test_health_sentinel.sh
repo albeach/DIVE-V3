@@ -328,7 +328,6 @@ if type _sentinel_check_cycle &>/dev/null; then
     : > "$HEALTH_SENTINEL_ALERT_FILE"
     _sentinel_check_cycle "nonexistent-project-$$" "backend keycloak" || true
 
-    _alert_count
     _alert_count=$(health_sentinel_alert_count)
     if [ "$_alert_count" -gt 0 ]; then
         assert_eq "0" "0" "check cycle: missing containers → alerts recorded ($_alert_count)"
@@ -425,9 +424,7 @@ fi
 
 # Test 42: Spoke pipeline starts sentinel before Phase 4
 if [ -f "$spoke_pipeline_file" ]; then
-    _spoke_start_line
     _spoke_start_line=$(grep -n 'health_sentinel_start' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
-    _spoke_phase4_line
     _spoke_phase4_line=$(grep -n 'Phase 4.*Configuration' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
     if [ -n "$_spoke_start_line" ] && [ -n "$_spoke_phase4_line" ]; then
         if [ "$_spoke_start_line" -lt "$_spoke_phase4_line" ]; then
