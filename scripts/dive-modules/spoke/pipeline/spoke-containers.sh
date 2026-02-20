@@ -33,6 +33,11 @@ if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh" ]; then
     source "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh"
 fi
 
+# Load shared pipeline utilities (health checks, service SSOT)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/deployment/pipeline-utils.sh"
+fi
+
 ##
 # Get service order for a spoke instance (dynamically from compose file)
 #
@@ -49,8 +54,8 @@ spoke_get_service_order() {
     if type compose_get_spoke_services &>/dev/null; then
         compose_get_spoke_services "$instance_code"
     else
-        # Fallback to legacy hardcoded list (should not reach here)
-        echo "postgres mongodb redis keycloak opa backend frontend kas opal-client"
+        # Fallback to SSOT service list
+        echo "$PIPELINE_SPOKE_ALL_SERVICES"
     fi
 }
 
@@ -91,38 +96,10 @@ spoke_get_service_deps() {
     fi
 }
 
-# Service startup timeouts (seconds)
-# Note: Bash associative arrays don't export well, so we use a function
+# Service startup timeouts — delegates to shared SSOT
 spoke_get_service_timeout() {
-    local service="$1"
-    case "$service" in
-        postgres) echo 60 ;;
-        mongodb) echo 60 ;;
-        redis) echo 30 ;;
-        keycloak) echo 180 ;;
-        opa) echo 30 ;;
-        backend) echo 120 ;;
-        frontend) echo 120 ;;
-        kas) echo 60 ;;
-        opal-client) echo 30 ;;
-        *) echo 60 ;;
-    esac
+    pipeline_get_service_timeout "$1"
 }
-
-# For backward compatibility, also declare the associative array
-if declare -A SPOKE_SERVICE_TIMEOUTS 2>/dev/null; then
-    SPOKE_SERVICE_TIMEOUTS=(
-        ["postgres"]=60
-        ["mongodb"]=60
-        ["redis"]=30
-        ["keycloak"]=180
-        ["opa"]=30
-        ["backend"]=120
-        ["frontend"]=120
-        ["kas"]=60
-        ["opal-client"]=30
-    )
-fi
 
 # =============================================================================
 # MAIN CONTAINER ORCHESTRATION
@@ -369,24 +346,12 @@ spoke_containers_start() {
     # its first health check (30s start_period). By waiting here, we avoid docker compose
     # blocking or timing out.
     log_info "Stage 2: Waiting for OPA to be healthy before starting OPAL Client..."
-    local opa_healthy=false
-    local opa_wait=0
-    local opa_max_wait=90  # OPA start_period(30s) + retries(5) * interval(15s) = 105s; 90s is generous
-    while [ $opa_wait -lt $opa_max_wait ]; do
-        local opa_health
-        opa_health=$(docker inspect --format='{{.State.Health.Status}}' "dive-spoke-${code_lower}-opa" 2>/dev/null || echo "unknown")
-        if [ "$opa_health" = "healthy" ]; then
-            opa_healthy=true
-            log_info "OPA is healthy after ${opa_wait}s — starting OPAL Client"
-            break
-        fi
-        log_verbose "OPA health: ${opa_health}, waiting... (${opa_wait}/${opa_max_wait}s)"
-        sleep 3
-        opa_wait=$((opa_wait + 3))
-    done
-
-    if [ "$opa_healthy" != "true" ]; then
-        log_warn "OPA did not become healthy within ${opa_max_wait}s — starting OPAL Client anyway"
+    local opa_container
+    opa_container=$(pipeline_container_name "spoke" "opa" "$instance_code")
+    if pipeline_wait_for_healthy "$opa_container" 90 3; then
+        log_info "OPA is healthy — starting OPAL Client"
+    else
+        log_warn "OPA did not become healthy within 90s — starting OPAL Client anyway"
         log_warn "OPAL Client may fail to start if OPA dependency is not met"
     fi
 
@@ -745,49 +710,19 @@ spoke_containers_wait_for_service() {
     local container="$1"
     local timeout="$2"
 
-    local elapsed=0
-    local interval=3
-
     echo -n "  Waiting for $container... "
 
-    while [ $elapsed -lt $timeout ]; do
-        # Check if container exists
-        if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
-            # Container doesn't exist - might not be in this compose file
-            echo -e "${YELLOW}skipped (not found)${NC}"
-            return 0
-        fi
+    # Container not found = skip (not in this compose file)
+    if ! pipeline_container_exists "$container"; then
+        echo -e "${YELLOW}skipped (not found)${NC}"
+        return 0
+    fi
 
-        # Check health status
-        local status
-        status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
-
-        case "$status" in
-            healthy)
-                echo -e "${GREEN}✓${NC}"
-                return 0
-                ;;
-            no-healthcheck)
-                # No health check - check if running
-                local running
-                running=$(docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null || echo "false")
-                if [ "$running" = "true" ]; then
-                    echo -e "${GREEN}✓ (running)${NC}"
-                    return 0
-                fi
-                ;;
-            starting|unhealthy)
-                # Still starting or unhealthy, continue waiting
-                ;;
-            *)
-                # Unknown status
-                ;;
-        esac
-
-        sleep $interval
-        elapsed=$((elapsed + interval))
-        echo -n "."
-    done
+    # Use shared health check with running-is-ok fallback
+    if pipeline_wait_for_healthy_or_running "$container" "$timeout" 3 10; then
+        echo -e "${GREEN}✓${NC}"
+        return 0
+    fi
 
     echo -e "${RED}TIMEOUT${NC}"
     log_warn "Container $container did not become healthy within ${timeout}s"
@@ -862,20 +797,20 @@ spoke_containers_status() {
     read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
 
     for service in "${service_order[@]}"; do
-        local container="dive-spoke-${code_lower}-${service}"
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
 
-        if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+        if pipeline_container_exists "$container"; then
             total=$((total + 1))
 
             local status
-            status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
+            status=$(pipeline_get_container_state "$container")
 
             case "$status" in
                 running)
                     running=$((running + 1))
-                    # Check health if available
                     local health
-                    health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "")
+                    health=$(pipeline_get_container_health "$container")
                     if [ "$health" = "unhealthy" ]; then
                         unhealthy=$((unhealthy + 1))
                     fi
