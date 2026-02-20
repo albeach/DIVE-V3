@@ -91,6 +91,11 @@ _HUB_DIR="$(dirname "${BASH_SOURCE[0]}")"
 source "${_HUB_DIR}/hub-phases.sh"    # Phase functions (database, vault, keycloak, etc.)
 source "${_HUB_DIR}/hub-pipeline.sh"  # Pipeline engine, circuit breaker, hub operations
 source "${_HUB_DIR}/hub-services.sh"  # Parallel startup, health, Keycloak config, utilities
+
+# Load diagnostics module (Phase 5: Observability)
+if [ -f "${_HUB_DIR}/diagnostics.sh" ]; then
+    source "${_HUB_DIR}/diagnostics.sh"
+fi
 unset _HUB_DIR
 
 # =============================================================================
@@ -120,6 +125,22 @@ module_hub() {
         reset)          hub_reset "$@" ;;
         status)         hub_status "$@" ;;
         phases)         hub_phases "$@" ;;
+        diagnose)
+            if type diag_full_report &>/dev/null; then
+                diag_full_report "hub" "USA"
+            else
+                log_error "Diagnostics module not available"
+                return 1
+            fi
+            ;;
+        history)
+            if type pipeline_show_history &>/dev/null; then
+                pipeline_show_history "hub" "USA" "${1:-10}"
+            else
+                log_error "History module not available"
+                return 1
+            fi
+            ;;
         verify)         hub_verify "$@" ;;
         logs)           hub_logs "$@" ;;
         seed)           hub_seed "$@" ;;
@@ -140,6 +161,8 @@ module_hub() {
             echo "  down      Stop hub services"
             echo "  status    Show hub status"
             echo "  phases    Show pipeline phase status"
+            echo "  diagnose  Run diagnostic checks (containers, certs, ports, disk)"
+            echo "  history   Show recent deployment history"
             echo "  verify    Run deployment validation tests"
             echo "  reset     Reset hub to clean state"
             echo "  logs      View hub logs"
@@ -154,6 +177,9 @@ module_hub() {
             echo "  --only-phase <PHASE>   Run only the specified phase"
             echo "  --force-build          Force rebuild all Docker images (bypass cache)"
             echo ""
+            echo "Phase Options:"
+            echo "  ./dive hub phases --timing    Show phase durations"
+            echo ""
             echo "Phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION"
             echo "        MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG"
             echo "        REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
@@ -165,7 +191,9 @@ module_hub() {
             echo "  ./dive hub deploy --skip-phase SEEDING --skip-phase KAS_INIT"
             echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG"
             echo "  ./dive hub deploy --force-build"
-            echo "  ./dive hub phases"
+            echo "  ./dive hub phases --timing"
+            echo "  ./dive hub diagnose"
+            echo "  ./dive hub history"
             ;;
     esac
 }
