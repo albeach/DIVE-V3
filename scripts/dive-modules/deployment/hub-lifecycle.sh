@@ -249,7 +249,7 @@ hub_up() {
     echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
     local build_log="/tmp/hub-docker-build-$(date +%s).log"
-    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build > "$build_log" 2>&1; then
+    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build --parallel > "$build_log" 2>&1; then
         log_success "Docker images built successfully"
         echo "DEBUG [hub_up]: Docker images built" >&2
     else
