@@ -623,6 +623,107 @@ is_cloud_environment() {
 export -f is_cloud_environment
 
 # =============================================================================
+# URL RESOLUTION HELPERS (Federation Sovereignty)
+# =============================================================================
+
+##
+# Resolve spoke public URL (browser-facing).
+# Priority: 1) DIVE_DOMAIN_SUFFIX (Caddy FQDN)  2) HUB_EXTERNAL_ADDRESS:port  3) localhost:port (local only)
+#
+# Arguments:
+#   $1 - Instance code (e.g., GBR)
+#   $2 - Service: app|api|idp|kas (default: idp)
+#
+# Returns:
+#   Public URL on stdout
+##
+resolve_spoke_public_url() {
+    local instance_code="$1"
+    local service="${2:-idp}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    # Get port for the requested service
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local port
+    case "$service" in
+        app) port="${SPOKE_FRONTEND_PORT:-3000}" ;;
+        api) port="${SPOKE_BACKEND_PORT:-4000}" ;;
+        idp) port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
+        kas) port="${SPOKE_KAS_PORT:-9000}" ;;
+        *)   port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
+    esac
+
+    # Priority 1: FQDN via DIVE_DOMAIN_SUFFIX (Caddy reverse proxy)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        echo "https://${_env_prefix}-${code_lower}-${service}.${_base_domain}"
+        return 0
+    fi
+
+    # Priority 2: HUB_EXTERNAL_ADDRESS (IP mode, non-localhost)
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        echo "https://${HUB_EXTERNAL_ADDRESS}:${port}"
+        return 0
+    fi
+
+    # Priority 3: localhost (local dev only)
+    echo "https://localhost:${port}"
+}
+export -f resolve_spoke_public_url
+
+##
+# Resolve hub public URL for a given service.
+# Priority: 1) Explicit env var  2) DIVE_DOMAIN_SUFFIX  3) HUB_EXTERNAL_ADDRESS:port  4) localhost
+#
+# Arguments:
+#   $1 - Service: app|api|idp|opal|vault (default: idp)
+#
+# Returns:
+#   Public URL on stdout
+##
+resolve_hub_public_url() {
+    local service="${1:-idp}"
+
+    local port
+    case "$service" in
+        app)   port="${FRONTEND_PORT:-3000}" ;;
+        api)   port="${BACKEND_PORT:-4000}" ;;
+        idp)   port="${KEYCLOAK_HTTPS_PORT:-8443}" ;;
+        opal)  port="${OPAL_PORT:-7002}" ;;
+        vault) port="${VAULT_PORT:-8200}" ;;
+        *)     port="${KEYCLOAK_HTTPS_PORT:-8443}" ;;
+    esac
+
+    # Priority 1: Explicit env vars (set by Caddy or user)
+    case "$service" in
+        idp)  [ -n "${HUB_KC_URL:-}" ] && echo "$HUB_KC_URL" && return 0 ;;
+        api)  [ -n "${HUB_API_URL:-}" ] && echo "$HUB_API_URL" && return 0 ;;
+    esac
+
+    # Priority 2: FQDN via DIVE_DOMAIN_SUFFIX (Caddy reverse proxy)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        echo "https://${_env_prefix}-usa-${service}.${_base_domain}"
+        return 0
+    fi
+
+    # Priority 3: HUB_EXTERNAL_ADDRESS (IP mode)
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        echo "https://${HUB_EXTERNAL_ADDRESS}:${port}"
+        return 0
+    fi
+
+    # Priority 4: localhost (local dev)
+    echo "https://localhost:${port}"
+}
+export -f resolve_hub_public_url
+
+# =============================================================================
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)
 # =============================================================================
 
@@ -1225,15 +1326,15 @@ spoke_config_get() {
         endpoints.hubOpalUrl)
             echo "https://dive-hub-opal-server:7002" ;;
         endpoints.baseUrl|baseUrl)
-            echo "https://localhost:${SPOKE_FRONTEND_PORT:-3000}" ;;
+            resolve_spoke_public_url "$instance_code" "app" ;;
         endpoints.apiUrl|apiUrl)
-            echo "https://localhost:${SPOKE_BACKEND_PORT:-4000}" ;;
+            resolve_spoke_public_url "$instance_code" "api" ;;
         endpoints.idpUrl|idpUrl)
             echo "https://dive-spoke-${code_lower}-keycloak:8443" ;;
         endpoints.idpPublicUrl|idpPublicUrl)
-            echo "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
+            resolve_spoke_public_url "$instance_code" "idp" ;;
         endpoints.kasUrl|kasUrl)
-            echo "https://localhost:${SPOKE_KAS_PORT:-9000}" ;;
+            resolve_spoke_public_url "$instance_code" "kas" ;;
         federation.status)
             echo "${default:-unregistered}" ;;
         *)

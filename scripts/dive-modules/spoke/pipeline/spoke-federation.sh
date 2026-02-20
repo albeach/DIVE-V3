@@ -433,7 +433,8 @@ _spoke_federation_verify_oidc_endpoints() {
         local hub_oidc_ok=false
 
         # Test Spoke OIDC discovery endpoint
-        local spoke_discovery_url="https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration"
+        local spoke_discovery_url
+        spoke_discovery_url="$(resolve_spoke_public_url "$instance_code" "idp")/realms/${spoke_realm}/.well-known/openid-configuration"
         log_verbose "Testing Spoke OIDC endpoint (attempt $attempt/$max_oidc_retries): $spoke_discovery_url"
         
         local spoke_curl_result
@@ -451,7 +452,8 @@ _spoke_federation_verify_oidc_endpoints() {
         fi
 
         # Test Hub OIDC discovery endpoint
-        local hub_discovery_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}/realms/${hub_realm}/.well-known/openid-configuration"
+        local hub_discovery_url
+        hub_discovery_url="$(resolve_hub_public_url "idp")/realms/${hub_realm}/.well-known/openid-configuration"
         log_verbose "Testing Hub OIDC endpoint (attempt $attempt/$max_oidc_retries): $hub_discovery_url"
         
         local hub_curl_result
@@ -542,7 +544,8 @@ spoke_federation_configure_upstream_idp() {
     # - tokenUrl/userInfoUrl/jwksUrl: Internal Docker URL for server-to-server calls
     # - issuer: External URL (must match what's in the tokens)
     # ==========================================================================
-    local hub_public_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
+    local hub_public_url
+    hub_public_url=$(resolve_hub_public_url "idp")
     local hub_internal_url="https://dive-hub-keycloak:8443"
 
     # ==========================================================================
