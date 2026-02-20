@@ -490,6 +490,23 @@ spoke_pipeline_run_phase() {
                 orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error (exit: $phase_exit)"
             fi
 
+            # Guided error recovery (before rollback)
+            if type error_recovery_suggest &>/dev/null; then
+                error_recovery_suggest "$phase_name" "spoke" "$instance_code"
+                local recovery_action=$?
+                if [ $recovery_action -eq 0 ]; then
+                    # Retry: recurse into this function
+                    log_info "Retrying phase $phase_name..."
+                    spoke_pipeline_run_phase "$instance_code" "$phase_name" "$pipeline_mode" "$resume_mode"
+                    return $?
+                elif [ $recovery_action -eq 2 ]; then
+                    # Skip: return success
+                    log_warn "Skipping phase $phase_name (user chose to skip)"
+                    return 0
+                fi
+                # Abort: fall through to rollback
+            fi
+
             # FIX (2026-02-09): Only rollback on early-phase failures where containers
             # and Terraform are inconsistent. For CONFIGURATION/SEEDING/VERIFICATION
             # failures, the infrastructure is intact — destructive rollback just wastes
