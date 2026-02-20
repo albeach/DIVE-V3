@@ -3,6 +3,8 @@
 # DIVE V3 - Phase Ordering Tests
 # =============================================================================
 # Tests for Phase 5: Pre-validation gate ordering and documentation.
+# Updated for Phase 7 (registry refactoring) — verifies pre-validation gate
+# still runs before any registered phases.
 # =============================================================================
 
 # Setup
@@ -41,12 +43,11 @@ else
     assert_eq "exists" "missing" "hub pipeline: file should exist"
 fi
 
-# Test 2: Pre-validation gate appears before Phase 1 Vault Bootstrap
+# Test 2: Pre-validation gate appears before first phase registration
 if [ -f "$hub_pipeline_file" ]; then
-    local pre_val_line
     pre_val_line=$(grep -n 'pre_validate_hub' "$hub_pipeline_file" | head -1 | cut -d: -f1)
-    local phase1_line
-    phase1_line=$(grep -n 'Phase 1.*Vault Bootstrap' "$hub_pipeline_file" | head -1 | cut -d: -f1)
+    # Phase 1 is registered via pipeline_register_phase 1 "VAULT_BOOTSTRAP"
+    phase1_line=$(grep -n 'VAULT_BOOTSTRAP' "$hub_pipeline_file" | head -1 | cut -d: -f1)
 
     if [ -n "$pre_val_line" ] && [ -n "$phase1_line" ]; then
         if [ "$pre_val_line" -lt "$phase1_line" ]; then
@@ -59,21 +60,21 @@ if [ -f "$hub_pipeline_file" ]; then
     fi
 fi
 
-# Test 3: Phase 1 comment documents pre-validation gate
+# Test 3: Hub pipeline documents pre-validation gate
 if [ -f "$hub_pipeline_file" ]; then
-    if grep -q 'Pre-validation gate.*runs before' "$hub_pipeline_file"; then
-        assert_eq "0" "0" "hub pipeline: Phase 1 comment documents pre-validation gate"
+    if grep -q 'Pre-validation gate' "$hub_pipeline_file"; then
+        assert_eq "0" "0" "hub pipeline: documents pre-validation gate"
     else
-        assert_eq "documented" "missing" "hub pipeline: Phase 1 should document pre-validation"
+        assert_eq "documented" "missing" "hub pipeline: should document pre-validation"
     fi
 fi
 
-# Test 4: Phase 3 comment documents infrastructure-dependent checks
+# Test 4: Hub pipeline documents that Vault must be first
 if [ -f "$hub_pipeline_file" ]; then
-    if grep -q 'infrastructure-dependent' "$hub_pipeline_file"; then
-        assert_eq "0" "0" "hub pipeline: Phase 3 comment documents infra-dependent checks"
+    if grep -q 'Vault MUST be first' "$hub_pipeline_file"; then
+        assert_eq "0" "0" "hub pipeline: documents Vault-first requirement"
     else
-        assert_eq "documented" "missing" "hub pipeline: Phase 3 should note infra-dependent checks"
+        assert_eq "documented" "missing" "hub pipeline: should document Vault-first"
     fi
 fi
 
@@ -96,9 +97,7 @@ fi
 
 # Test 6: Pre-validation appears before Phase 1 in spoke pipeline
 if [ -f "$spoke_pipeline_file" ]; then
-    local spoke_pre_val_line
     spoke_pre_val_line=$(grep -n 'pre_validate_spoke' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
-    local spoke_phase1_line
     spoke_phase1_line=$(grep -n 'Phase 1.*Preflight' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
 
     if [ -n "$spoke_pre_val_line" ] && [ -n "$spoke_phase1_line" ]; then
@@ -170,9 +169,7 @@ fi
 
 # Test 12: Pre-validation checks Docker before anything else
 if [ -f "$pre_val_file" ]; then
-    local docker_check_line
     docker_check_line=$(grep -n 'pre_validate_check_docker' "$pre_val_file" | head -1 | cut -d: -f1)
-    local tools_check_line
     tools_check_line=$(grep -n 'pre_validate_check_tools' "$pre_val_file" | head -1 | cut -d: -f1)
 
     if [ -n "$docker_check_line" ] && [ -n "$tools_check_line" ]; then
@@ -182,17 +179,15 @@ if [ -f "$pre_val_file" ]; then
 fi
 
 # =============================================================================
-# Test: Hub phase numbering is consecutive 1-13
+# Test: Hub has all 13 phases registered
 # =============================================================================
 
-# Test 13: All 13 phases are present in hub pipeline
+# Test 13: All 13 phases are registered in hub pipeline
 if [ -f "$hub_pipeline_file" ]; then
-    local phase_count
-    phase_count=$(grep -c 'Phase [0-9]\+ (' "$hub_pipeline_file" || true)
-    # Each phase appears at least twice (comment + skip/execute blocks)
+    phase_count=$(grep -c 'pipeline_register_phase' "$hub_pipeline_file" || true)
     if [ "$phase_count" -ge 13 ]; then
-        assert_eq "0" "0" "hub pipeline: contains all 13 phases ($phase_count references)"
+        assert_eq "0" "0" "hub pipeline: all 13 phases registered ($phase_count)"
     else
-        assert_eq ">=13" "$phase_count" "hub pipeline: should reference all 13 phases"
+        assert_eq ">=13" "$phase_count" "hub pipeline: should register all 13 phases"
     fi
 fi
