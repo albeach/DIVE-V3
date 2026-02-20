@@ -247,9 +247,14 @@ spoke_phase_configuration() {
         log_warn "Standalone mode — skipping federation registration and setup"
     elif [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_register_in_registries "$instance_code"; then
-            log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
-            log_error "To retry: ./dive spoke register $code_upper"
-            return 1
+            if [ "${SKIP_FEDERATION_ERRORS:-false}" = "true" ]; then
+                log_warn "Registry registration failed — continuing with --skip-federation-errors"
+                log_info "To retry: ./dive spoke register $code_upper"
+            else
+                log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
+                log_error "To retry: ./dive spoke register $code_upper"
+                return 1
+            fi
         fi
 
         # NOTE: Federation client scopes are now configured in Terraform
@@ -281,9 +286,21 @@ spoke_phase_configuration() {
         # spoke_federation_setup() is idempotent and will skip links that already exist
         # It checks if IdPs exist before attempting creation to avoid race conditions
         if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
-            log_error "CRITICAL: Federation setup failed - SSO will not work"
-            log_error "To retry: ./dive federation link $code_upper"
-            return 1
+            if [ "${SKIP_FEDERATION_ERRORS:-false}" = "true" ]; then
+                log_warn "Federation setup failed — continuing with --skip-federation-errors"
+                log_warn "SSO will NOT work until federation is repaired"
+                log_info "To repair: ./dive federation repair $code_upper"
+                # Record degraded state if DB functions available
+                if type federation_set_link_state &>/dev/null; then
+                    federation_set_link_state "$code_upper" "DEGRADED" \
+                        "Federation setup failed during deployment (skip-federation-errors)" 2>/dev/null || true
+                fi
+            else
+                log_error "CRITICAL: Federation setup failed - SSO will not work"
+                log_error "To retry: ./dive federation link $code_upper"
+                log_info "Tip: Use --skip-federation-errors to continue deployment despite federation failures"
+                return 1
+            fi
         fi
     fi
 

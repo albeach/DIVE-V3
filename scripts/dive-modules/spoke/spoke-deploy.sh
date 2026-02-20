@@ -201,6 +201,10 @@ spoke_deploy() {
                 export DEPLOYMENT_MODE="standalone"
                 log_warn "Federation setup will be skipped (--skip-federation flag)"
                 ;;
+            --skip-federation-errors)
+                export SKIP_FEDERATION_ERRORS=true
+                log_warn "Federation errors will be non-fatal (--skip-federation-errors flag)"
+                ;;
             --seed)
                 export DIVE_ENABLE_SEEDING="true"
                 ;;
@@ -327,6 +331,7 @@ spoke_deploy() {
         echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
         echo "  --only-phase <PHASE>   Run only the specified phase"
         echo "  --skip-federation      Skip federation setup (standalone mode)"
+        echo "  --skip-federation-errors  Continue deployment even if federation fails (marks DEGRADED)"
         echo "  --seed                 Opt-in seeding during deploy (federated mode only)"
         echo "  --seed-count <N>       Number of resources to seed when --seed is enabled (default: 5000)"
         echo "  --domain [<base>]      Custom domain (e.g. gbr.mod.uk); omit value for interactive wizard"

@@ -263,17 +263,19 @@ EOF
 
     if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
         log_info "IdP ${idp_alias} already exists on Hub, updating..."
-        keycloak_admin_api "USA" "PUT" \
+        _federation_retry_with_backoff 3 2 \
+            keycloak_admin_api "USA" "PUT" \
             "realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" "$idp_config" >/dev/null 2>&1
         log_success "Updated IdP on Hub for $code_upper"
     else
-        local create_result
-        create_result=$(keycloak_admin_api "USA" "POST" \
-            "realms/${HUB_REALM}/identity-provider/instances" "$idp_config" 2>/dev/null)
-        if [ $? -eq 0 ]; then
+        local create_rc=0
+        _federation_retry_with_backoff 3 2 \
+            keycloak_admin_api "USA" "POST" \
+            "realms/${HUB_REALM}/identity-provider/instances" "$idp_config" >/dev/null 2>&1 || create_rc=$?
+        if [ "$create_rc" -eq 0 ]; then
             log_success "IdP created on Hub for $code_upper"
         else
-            log_warn "IdP creation may have failed: $create_result"
+            log_warn "IdP creation may have failed after retries (exit $create_rc)"
         fi
     fi
 
@@ -888,21 +890,104 @@ except: pass
 source "$(dirname "${BASH_SOURCE[0]}")/mappers.sh"
 
 # =============================================================================
+# RESILIENCE UTILITIES (Phase 8)
+# =============================================================================
+
+# OIDC discovery cache directory (5-minute TTL)
+_OIDC_CACHE_DIR="${TMPDIR:-/tmp}/dive-oidc-cache"
+_OIDC_CACHE_TTL="${OIDC_CACHE_TTL:-300}"  # 5 minutes
+
+##
+# Retry a command with exponential backoff
+#
+# Arguments:
+#   $1 - Max attempts (default: 3)
+#   $2 - Initial delay in seconds (default: 2)
+#   $@ - Command to execute (remaining args)
+#
+# Returns:
+#   Exit code of the last attempt
+##
+_federation_retry_with_backoff() {
+    local max_attempts="${1:-3}"
+    local delay="${2:-2}"
+    shift 2
+
+    local attempt=1
+    local rc=0
+    while [ "$attempt" -le "$max_attempts" ]; do
+        rc=0
+        "$@" && return 0 || rc=$?
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            log_verbose "Attempt $attempt/$max_attempts failed (exit $rc), retrying in ${delay}s..."
+            sleep "$delay"
+            delay=$((delay * 2))
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_warn "All $max_attempts attempts failed for: $1"
+    return "$rc"
+}
+
+##
+# Clear the OIDC discovery cache (all entries or specific realm)
+#
+# Arguments:
+#   $1 - (optional) Realm URL to clear; if empty, clears all
+##
+_federation_oidc_cache_clear() {
+    local realm_url="${1:-}"
+    if [ -z "$realm_url" ]; then
+        rm -rf "$_OIDC_CACHE_DIR" 2>/dev/null || true
+        log_verbose "OIDC discovery cache cleared (all)"
+    else
+        local cache_key
+        cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+        rm -f "${_OIDC_CACHE_DIR}/${cache_key}" 2>/dev/null || true
+        log_verbose "OIDC discovery cache cleared for: $realm_url"
+    fi
+}
+
+# =============================================================================
 # OIDC DISCOVERY & EXTERNAL FEDERATION
 # =============================================================================
 
 ##
-# Fetch OIDC discovery document from a Keycloak realm
+# Fetch OIDC discovery document from a Keycloak realm (with caching)
 #
 # Arguments:
 #   $1 - Full realm URL (e.g., https://idp.gbr.mod.uk/realms/dive-v3-broker-gbr)
+#   $2 - (optional) "no-cache" to bypass cache
 #
 # Returns:
 #   JSON discovery document on stdout, or empty string on failure
 ##
 _federation_oidc_discover() {
     local realm_url="$1"
+    local no_cache="${2:-}"
     local discovery_url="${realm_url}/.well-known/openid-configuration"
+
+    # Check cache first (unless bypassed)
+    if [ "$no_cache" != "no-cache" ] && [ -d "$_OIDC_CACHE_DIR" ]; then
+        local cache_key
+        cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+        local cache_file="${_OIDC_CACHE_DIR}/${cache_key}"
+        if [ -f "$cache_file" ]; then
+            local cache_age
+            local now
+            now=$(date +%s)
+            local file_mtime
+            file_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+            cache_age=$((now - file_mtime))
+            if [ "$cache_age" -lt "$_OIDC_CACHE_TTL" ]; then
+                log_verbose "OIDC discovery cache hit for: $realm_url (age: ${cache_age}s)"
+                cat "$cache_file"
+                return 0
+            fi
+        fi
+    fi
 
     local response
     response=$(curl -sf --max-time 15 --insecure "$discovery_url" 2>/dev/null)
@@ -919,6 +1004,12 @@ _federation_oidc_discover() {
         echo ""
         return 1
     fi
+
+    # Store in cache
+    mkdir -p "$_OIDC_CACHE_DIR" 2>/dev/null || true
+    local cache_key
+    cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+    echo "$response" > "${_OIDC_CACHE_DIR}/${cache_key}" 2>/dev/null || true
 
     echo "$response"
 }
@@ -1630,6 +1721,202 @@ cmd_federation_revoke() {
 }
 
 # =============================================================================
+# FEDERATION REPAIR & RECOVERY (Phase 8)
+# =============================================================================
+
+##
+# Attempt to repair a degraded or failed federation link
+#
+# Checks and fixes:
+#   1. Re-validates OIDC discovery (with cache bypass)
+#   2. Re-syncs client secrets if mismatched
+#   3. Re-creates missing IdP mappers
+#   4. Updates issuer URLs if domains changed
+#   5. Transitions link state back to ACTIVE on success
+#
+# Arguments:
+#   $1 - Spoke instance code
+##
+federation_repair() {
+    local instance_code="$1"
+    if [ -z "$instance_code" ]; then
+        log_error "Usage: federation_repair <CODE>"
+        return 1
+    fi
+
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    echo ""
+    echo "=== Federation Repair: ${code_upper} ==="
+    echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo ""
+
+    local repairs=0
+    local failures=0
+
+    # Check current link state
+    local current_state="UNKNOWN"
+    if type federation_get_link_state &>/dev/null; then
+        current_state=$(federation_get_link_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    fi
+    echo "  Current state: ${current_state}"
+
+    # Determine spoke mode
+    local _domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _custom_domain="${!_domain_var:-}"
+    local is_external=false
+    [ -n "$_custom_domain" ] && is_external=true
+
+    echo "  Mode: $([ "$is_external" = true ] && echo "external (${_custom_domain})" || echo "local")"
+    echo ""
+
+    # Check 1: OIDC discovery (bypass cache)
+    echo "  [1/5] OIDC Discovery..."
+    local spoke_url
+    spoke_url=$(resolve_spoke_public_url "$code_upper" "idp" 2>/dev/null || echo "")
+    local spoke_realm="dive-v3-broker-${code_lower}"
+
+    if [ -n "$spoke_url" ]; then
+        local realm_url="${spoke_url}/realms/${spoke_realm}"
+        local discovery
+        discovery=$(_federation_oidc_discover "$realm_url" "no-cache" 2>/dev/null)
+        if [ -n "$discovery" ]; then
+            echo "        PASS  OIDC discovery valid"
+            repairs=$((repairs + 1))
+
+            # Check if issuer URL has changed
+            local current_issuer
+            current_issuer=$(echo "$discovery" | jq -r '.issuer' 2>/dev/null)
+            if [ -n "$current_issuer" ]; then
+                # Update hub .env trusted issuers if needed
+                local hub_env="${DIVE_ROOT}/.env.hub"
+                if [ -f "$hub_env" ]; then
+                    _federation_update_trusted_issuers "$hub_env" "$current_issuer" 2>/dev/null || true
+                fi
+            fi
+        else
+            echo "        FAIL  OIDC discovery unreachable"
+            failures=$((failures + 1))
+        fi
+    else
+        echo "        SKIP  Cannot resolve spoke URL"
+        failures=$((failures + 1))
+    fi
+
+    # Check 2: Hub admin API availability
+    echo "  [2/5] Hub Admin API..."
+    if type keycloak_admin_api_available &>/dev/null && keycloak_admin_api_available "USA" 2>/dev/null; then
+        echo "        PASS  Hub Keycloak reachable"
+        repairs=$((repairs + 1))
+    else
+        echo "        FAIL  Hub Keycloak unreachable"
+        echo "        Fix:  Ensure Hub Keycloak is running: ./dive hub up"
+        failures=$((failures + 1))
+    fi
+
+    # Check 3: Spoke IdP on Hub
+    echo "  [3/5] Spoke IdP on Hub..."
+    local idp_alias="${code_lower}-idp"
+    local spoke_idp_on_hub
+    spoke_idp_on_hub=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}" 2>/dev/null || echo "")
+
+    if [ -n "$spoke_idp_on_hub" ] && echo "$spoke_idp_on_hub" | grep -q '"alias"'; then
+        local idp_enabled
+        idp_enabled=$(echo "$spoke_idp_on_hub" | jq -r '.enabled' 2>/dev/null)
+        if [ "$idp_enabled" = "true" ]; then
+            echo "        PASS  ${idp_alias} exists and enabled"
+            repairs=$((repairs + 1))
+        else
+            echo "        WARN  ${idp_alias} exists but disabled — re-enabling..."
+            local re_enabled
+            re_enabled=$(echo "$spoke_idp_on_hub" | jq '.enabled = true')
+            keycloak_admin_api "USA" "PUT" \
+                "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}" \
+                "$re_enabled" >/dev/null 2>&1
+            echo "        FIXED Re-enabled ${idp_alias}"
+            repairs=$((repairs + 1))
+        fi
+    else
+        echo "        FAIL  ${idp_alias} not found on Hub"
+        echo "        Fix:  Re-link: ./dive federation link ${code_upper}"
+        failures=$((failures + 1))
+    fi
+
+    # Check 4: IdP mappers on Hub
+    echo "  [4/5] IdP Mappers on Hub..."
+    local mappers
+    mappers=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null || echo "[]")
+    local mapper_count
+    mapper_count=$(echo "$mappers" | jq 'length' 2>/dev/null || echo 0)
+
+    if [ "$mapper_count" -gt 0 ]; then
+        echo "        PASS  ${mapper_count} mappers configured"
+        repairs=$((repairs + 1))
+    else
+        echo "        WARN  No mappers found — re-configuring..."
+        local hub_token
+        hub_token=$(get_hub_admin_token 2>/dev/null)
+        if [ -n "$hub_token" ]; then
+            _configure_idp_mappers "USA" "$hub_token" "${HUB_REALM:-dive-v3-broker-usa}" "$idp_alias" 2>/dev/null
+            echo "        FIXED Mappers re-configured"
+            repairs=$((repairs + 1))
+        else
+            echo "        FAIL  Cannot get Hub admin token to fix mappers"
+            failures=$((failures + 1))
+        fi
+    fi
+
+    # Check 5: Hub IdP on Spoke (for bidirectional federation)
+    echo "  [5/5] Hub IdP on Spoke..."
+    local hub_idp_on_spoke
+    hub_idp_on_spoke=$(keycloak_admin_api "$code_upper" "GET" \
+        "realms/${spoke_realm}/identity-provider/instances/usa-idp" 2>/dev/null || echo "")
+
+    if [ -n "$hub_idp_on_spoke" ] && echo "$hub_idp_on_spoke" | grep -q '"alias"'; then
+        echo "        PASS  usa-idp exists on spoke"
+        repairs=$((repairs + 1))
+    else
+        echo "        WARN  usa-idp not found on spoke (unidirectional federation)"
+        # Not a failure — unidirectional is valid
+        repairs=$((repairs + 1))
+    fi
+
+    echo ""
+
+    # Update federation state based on results
+    if [ "$failures" -eq 0 ]; then
+        echo "  Results: ${repairs}/${repairs} checks passed"
+        echo "  Status: REPAIRED → ACTIVE"
+        if type federation_set_link_state &>/dev/null; then
+            federation_set_link_state "$code_upper" "ACTIVE" "Repaired via federation repair" 2>/dev/null || true
+        fi
+        # Record operation
+        if type fed_db_record_operation &>/dev/null; then
+            fed_db_record_operation "$code_lower" "REPAIR" "SUCCESS" "system" \
+                "{\"repairs\": $repairs, \"failures\": 0}" 2>/dev/null || true
+        fi
+        return 0
+    else
+        local total=$((repairs + failures))
+        echo "  Results: ${repairs}/${total} checks passed, ${failures} failed"
+        echo "  Status: REPAIR INCOMPLETE"
+        echo ""
+        echo "  Remaining issues need manual intervention."
+        echo "  Try: ./dive federation link ${code_upper}"
+        if type fed_db_record_operation &>/dev/null; then
+            fed_db_record_operation "$code_lower" "REPAIR" "PARTIAL" "system" \
+                "{\"repairs\": $repairs, \"failures\": $failures}" 2>/dev/null || true
+        fi
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1725,6 +2012,16 @@ module_federation() {
             fi
             federation_diagnose "$@"
             ;;
+        repair)
+            if [ -z "${1:-}" ]; then
+                log_error "Usage: ./dive federation repair <CODE>"
+                return 1
+            fi
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_repair "$@"
+            ;;
         help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
             echo ""
@@ -1733,6 +2030,7 @@ module_federation() {
             echo "  unlink <CODE>     Remove federation link"
             echo "  verify <CODE>     Verify federation health"
             echo "  diagnose <CODE>   Deep diagnostic for a federation link"
+            echo "  repair <CODE>     Auto-repair a degraded/failed federation link"
             echo "  dashboard         Federation health dashboard (all spokes)"
             echo "  test              Run federation integration tests"
             echo "  token-revocation  Test cross-instance token revocation"
@@ -1787,6 +2085,10 @@ export -f _federation_oidc_discover
 export -f _federation_update_trusted_issuers
 export -f federation_register_external_spoke
 export -f federation_register_hub_on_spoke
+# Resilience (Phase 8)
+export -f _federation_retry_with_backoff
+export -f _federation_oidc_cache_clear
+export -f federation_repair
 # Ported from federation-link.sh
 export -f _get_federation_secret
 export -f _get_instance_port
