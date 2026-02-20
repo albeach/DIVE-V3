@@ -122,6 +122,20 @@ _spoke_should_skip_phase() {
         return 1
     fi
 
+    # --from-phase: skip all phases before the specified phase
+    if [ -n "${DIVE_FROM_PHASE:-}" ]; then
+        if [ "${_DIVE_FROM_PHASE_REACHED:-false}" = "false" ]; then
+            if [ "$phase_name" = "$DIVE_FROM_PHASE" ]; then
+                # Reached the target phase — run it and all subsequent
+                export _DIVE_FROM_PHASE_REACHED=true
+                return 1
+            fi
+            log_info "Skipping $phase_name (--from-phase ${DIVE_FROM_PHASE})"
+            return 0
+        fi
+        return 1
+    fi
+
     # --skip-phase: check if this phase is in the skip list
     if [ -n "${DIVE_SKIP_PHASES:-}" ]; then
         local skip_phase
@@ -195,10 +209,20 @@ spoke_pipeline_execute() {
         lock_acquired=true
     fi
 
+    # Install SIGINT handler for graceful interrupt
+    if type pipeline_install_sigint_handler &>/dev/null; then
+        pipeline_install_sigint_handler "$code_upper"
+    fi
+
     # CRITICAL: Execute pipeline with guaranteed lock cleanup
     # Use subshell pattern to ensure cleanup happens even on early returns
     local pipeline_result=0
     _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
+
+    # Uninstall SIGINT handler
+    if type pipeline_uninstall_sigint_handler &>/dev/null; then
+        pipeline_uninstall_sigint_handler
+    fi
 
     # ALWAYS release lock (runs whether pipeline succeeded or failed)
     if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
@@ -268,6 +292,9 @@ _spoke_pipeline_execute_internal() {
     # Execute phases based on mode
     local phase_result=0
     local spoke_phase_times=()
+
+    # Reset --from-phase tracking state
+    export _DIVE_FROM_PHASE_REACHED=false
 
     log_verbose "Starting phase execution (mode: $pipeline_mode, resume: $resume_mode)"
 
@@ -564,6 +591,15 @@ spoke_pipeline_run_phase() {
     local phase_name="$2"
     local pipeline_mode="$3"
     local resume_mode="${4:-false}"
+
+    # Check if pipeline was interrupted
+    if pipeline_check_sigint 2>/dev/null; then
+        log_warn "Skipping $phase_name (pipeline interrupted)"
+        return 1
+    fi
+
+    # Track current phase for SIGINT handler
+    export _PIPELINE_CURRENT_PHASE="$phase_name"
 
     # Check if phase should be skipped (resume mode + already complete)
     if [ "$resume_mode" = "true" ] && type spoke_checkpoint_is_complete &>/dev/null; then
@@ -911,6 +947,104 @@ spoke_pipeline_redeploy() {
     local instance_name="$2"
 
     spoke_pipeline_execute "$instance_code" "$instance_name" "$PIPELINE_MODE_REDEPLOY"
+}
+
+# =============================================================================
+# PHASE STATUS DISPLAY
+# =============================================================================
+
+##
+# Display the status of all spoke pipeline phases for an instance
+#
+# Arguments:
+#   $1 - Instance code (e.g., GBR, FRA)
+#
+# Shows each phase with its status (pending/complete/failed),
+# completion info, and which phase would resume next.
+##
+spoke_phases() {
+    local instance_code="${1:-}"
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo "Usage: ./dive spoke phases <CODE>"
+        return 1
+    fi
+
+    local code_upper
+    code_upper=$(upper "$instance_code")
+
+    echo ""
+    echo "==============================================================================="
+    echo "  Spoke Pipeline Phases — $code_upper"
+    echo "==============================================================================="
+    echo ""
+
+    local -a phase_names=(PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION)
+    local -a phase_labels=("Preflight" "Initialization" "Deployment" "Configuration" "Seeding" "Verification")
+
+    local total=${#phase_names[@]}
+    local completed=0
+    local failed=0
+
+    local i
+    for (( i = 0; i < total; i++ )); do
+        local name="${phase_names[$i]}"
+        local label="${phase_labels[$i]}"
+        local num=$((i + 1))
+
+        local status="pending"
+
+        # Check checkpoint status
+        if type spoke_checkpoint_is_complete &>/dev/null && spoke_checkpoint_is_complete "$code_upper" "$name"; then
+            status="complete"
+            completed=$((completed + 1))
+        fi
+
+        # Check orchestration DB for failed status
+        if type orch_db_get_step_status &>/dev/null; then
+            local db_status
+            db_status=$(orch_db_get_step_status "$code_upper" "$name" 2>/dev/null || echo "")
+            if [ "$db_status" = "FAILED" ] && [ "$status" != "complete" ]; then
+                status="failed"
+                failed=$((failed + 1))
+            fi
+        fi
+
+        # Format output
+        local icon=" "
+        local color="${NC:-}"
+        case "$status" in
+            complete) icon="+"; color="${GREEN:-}" ;;
+            failed)   icon="x"; color="${RED:-}" ;;
+            pending)  icon="-"; color="${YELLOW:-}" ;;
+        esac
+
+        printf "  %s[%s]%s Phase %d: %-18s (%s)\n" \
+            "$color" "$icon" "${NC:-}" "$num" "$label" "$status"
+    done
+
+    echo ""
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    echo "  Summary: $completed/$total complete, $failed failed"
+
+    # Determine resume point
+    local resume_phase=""
+    for (( i = 0; i < total; i++ )); do
+        local name="${phase_names[$i]}"
+        if type spoke_checkpoint_is_complete &>/dev/null && ! spoke_checkpoint_is_complete "$code_upper" "$name"; then
+            resume_phase="$name"
+            break
+        fi
+    done
+
+    if [ -n "$resume_phase" ]; then
+        echo "  Resume:  ./dive spoke deploy $code_upper --resume  (starts at $resume_phase)"
+    elif [ $completed -eq $total ]; then
+        echo "  Status:  All phases complete"
+    fi
+
+    echo "==============================================================================="
+    echo ""
 }
 
 # sc2034-anchor

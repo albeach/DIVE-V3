@@ -119,6 +119,7 @@ module_hub() {
         down|stop)      hub_down "$@" ;;
         reset)          hub_reset "$@" ;;
         status)         hub_status "$@" ;;
+        phases)         hub_phases "$@" ;;
         verify)         hub_verify "$@" ;;
         logs)           hub_logs "$@" ;;
         seed)           hub_seed "$@" ;;
@@ -138,6 +139,7 @@ module_hub() {
             echo "  up        Start hub services"
             echo "  down      Stop hub services"
             echo "  status    Show hub status"
+            echo "  phases    Show pipeline phase status"
             echo "  verify    Run deployment validation tests"
             echo "  reset     Reset hub to clean state"
             echo "  logs      View hub logs"
@@ -146,6 +148,7 @@ module_hub() {
             echo ""
             echo "Deploy Options:"
             echo "  --resume               Resume from last checkpoint"
+            echo "  --from-phase <PHASE>   Start from specified phase (skip earlier)"
             echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
             echo "  --only-phase <PHASE>   Run only the specified phase"
             echo "  --force-build          Force rebuild all Docker images (bypass cache)"
@@ -156,9 +159,11 @@ module_hub() {
             echo ""
             echo "Examples:"
             echo "  ./dive hub deploy --resume"
+            echo "  ./dive hub deploy --from-phase SERVICES"
             echo "  ./dive hub deploy --skip-phase SEEDING --skip-phase KAS_INIT"
             echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG"
             echo "  ./dive hub deploy --force-build"
+            echo "  ./dive hub phases"
             ;;
     esac
 }
@@ -178,6 +183,7 @@ export -f hub_configure_keycloak
 export -f hub_verify_realm
 export -f hub_verify
 export -f hub_status
+export -f hub_phases
 export -f hub_reset
 export -f hub_logs
 export -f hub_seed
