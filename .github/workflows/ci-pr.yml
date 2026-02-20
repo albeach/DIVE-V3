@@ -186,10 +186,14 @@ jobs:
         run: |
           cd backend
           npm run lint
+        env:
+          ESLINT_USE_FLAT_CONFIG: "false"
       - name: Frontend Lint
         run: |
           cd frontend
           npm run lint
+        env:
+          ESLINT_USE_FLAT_CONFIG: "false"
   # Backend tests (unit only for speed)
   backend-tests:
     name: Backend - Unit Tests
