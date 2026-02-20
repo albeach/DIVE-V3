@@ -15,7 +15,7 @@ hub_pipeline_execute() {
 
     log_info "Starting Hub pipeline: $instance_code ($pipeline_mode mode)"
 
-    # Source utilities (deployment logging + timing dashboard + pre-validation)
+    # Source utilities (deployment logging + timing dashboard + pre-validation + health sentinel)
     local _utils_dir="${DIVE_ROOT}/scripts/dive-modules/utilities"
     if ! type deployment_log_start &>/dev/null; then
         [ -f "${_utils_dir}/deployment-logging.sh" ] && source "${_utils_dir}/deployment-logging.sh"
@@ -25,6 +25,9 @@ hub_pipeline_execute() {
     fi
     if ! type pre_validate_hub &>/dev/null; then
         [ -f "${_utils_dir}/pre-validation.sh" ] && source "${_utils_dir}/pre-validation.sh"
+    fi
+    if ! type health_sentinel_start &>/dev/null; then
+        [ -f "${_utils_dir}/health-sentinel.sh" ] && source "${_utils_dir}/health-sentinel.sh"
     fi
     if type deployment_log_start &>/dev/null; then
         if deployment_log_start "hub" "$instance_code"; then
@@ -392,6 +395,13 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
+    # Health Sentinel: Start monitoring during configuration phases (8-13)
+    # =========================================================================
+    if [ $phase_result -eq 0 ] && type health_sentinel_start &>/dev/null; then
+        health_sentinel_start "hub" "dive-hub" || true
+    fi
+
+    # =========================================================================
     # Phase 8: Vault Database Engine (dynamic credentials)
     # =========================================================================
     # Non-fatal: if this fails, backend falls back to static credentials
@@ -536,6 +546,13 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
+    # Stop Health Sentinel
+    # =========================================================================
+    if type health_sentinel_stop &>/dev/null; then
+        health_sentinel_stop || true
+    fi
+
+    # =========================================================================
     # Finalize
     # =========================================================================
     local end_time=$(date +%s)
@@ -567,6 +584,11 @@ _hub_pipeline_execute_internal() {
         fi
         deployment_print_success "$instance_code" "Hub" "$duration" "$pipeline_mode" "hub"
 
+        # Health sentinel report (if any alerts during configuration phases)
+        if type health_sentinel_report &>/dev/null; then
+            health_sentinel_report || true
+        fi
+
         # Post-deployment summary with URLs and next steps
         if type deployment_post_summary &>/dev/null; then
             deployment_post_summary "hub" "$instance_code" "$duration"
@@ -582,6 +604,11 @@ _hub_pipeline_execute_internal() {
         # Finalize log file
         if type deployment_log_stop &>/dev/null; then
             deployment_log_stop 0 "$duration"
+        fi
+
+        # Cleanup sentinel temp files
+        if type health_sentinel_cleanup &>/dev/null; then
+            health_sentinel_cleanup
         fi
 
         return 0
@@ -602,6 +629,11 @@ _hub_pipeline_execute_internal() {
             orch_generate_error_summary "$instance_code"
         fi
 
+        # Health sentinel report (may show service crashes that caused failure)
+        if type health_sentinel_report &>/dev/null; then
+            health_sentinel_report || true
+        fi
+
         deployment_print_failure "$instance_code" "Hub" "$duration" "hub"
 
         # Show log file location
@@ -614,6 +646,11 @@ _hub_pipeline_execute_internal() {
         # Finalize log file
         if type deployment_log_stop &>/dev/null; then
             deployment_log_stop 1 "$duration"
+        fi
+
+        # Cleanup sentinel temp files
+        if type health_sentinel_cleanup &>/dev/null; then
+            health_sentinel_cleanup
         fi
 
         return 1
