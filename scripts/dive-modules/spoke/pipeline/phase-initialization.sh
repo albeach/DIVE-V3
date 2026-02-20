@@ -434,17 +434,27 @@ spoke_init_generate_config() {
         log_info "Remote mode: Hub URL → ${hub_url_internal}"
     fi
 
-    # Hub OPAL URL: Docker container name (local) or external Caddy URL (remote)
-    # In remote mode, derive from HUB_API_URL if HUB_OPAL_URL not explicitly set
-    # (e.g., https://dev-usa-api.dive25.com → https://dev-usa-opal.dive25.com)
+    # Hub OPAL URL resolution: supports local, remote (DIVE_DOMAIN_SUFFIX),
+    # and external (custom domain hub) deployments.
     local hub_opal_url="https://dive-hub-opal-server:7002"
-    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
-        if [ -n "${HUB_OPAL_URL:-}" ]; then
-            hub_opal_url="$HUB_OPAL_URL"
-        elif [[ "${hub_url_internal}" =~ ^https://([^-]+-[^-]+)-api\.(.+)$ ]]; then
-            hub_opal_url="https://${BASH_REMATCH[1]}-opal.${BASH_REMATCH[2]}"
-            export HUB_OPAL_URL="$hub_opal_url"
+    if [ -n "${HUB_OPAL_URL:-}" ]; then
+        # Explicit override always wins
+        hub_opal_url="$HUB_OPAL_URL"
+        log_info "Hub OPAL URL (explicit): ${hub_opal_url}"
+    elif [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        # Remote/standalone: use URL resolution helper if available
+        if type resolve_hub_public_url &>/dev/null; then
+            local _resolved_opal
+            _resolved_opal=$(resolve_hub_public_url "opal" 2>/dev/null)
+            if [ -n "$_resolved_opal" ] && [[ "$_resolved_opal" != *localhost* ]]; then
+                hub_opal_url="$_resolved_opal"
+            fi
         fi
+        # Fallback: derive from HUB_API_URL pattern
+        if [[ "$hub_opal_url" == *"dive-hub-opal"* ]] && [[ "${hub_url_internal:-}" =~ ^https://([^-]+-[^-]+)-api\.(.+)$ ]]; then
+            hub_opal_url="https://${BASH_REMATCH[1]}-opal.${BASH_REMATCH[2]}"
+        fi
+        export HUB_OPAL_URL="$hub_opal_url"
         log_info "Remote mode: Hub OPAL URL → ${hub_opal_url}"
     fi
 
@@ -500,10 +510,10 @@ spoke_init_generate_config() {
     local opal_server_url=""
     local master_token="${OPAL_AUTH_MASTER_TOKEN:-}"
 
-    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
-        # Remote mode: use Hub OPAL public URL
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        # Remote/standalone mode: use Hub OPAL public URL (may be empty for standalone)
         opal_server_url="${HUB_OPAL_URL:-}"
-        log_verbose "Remote mode — OPAL server: ${opal_server_url}"
+        [ -n "$opal_server_url" ] && log_verbose "Remote mode — OPAL server: ${opal_server_url}"
     elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
         # Local mode: use localhost
         opal_server_url="https://localhost:${OPAL_PORT:-7002}"
