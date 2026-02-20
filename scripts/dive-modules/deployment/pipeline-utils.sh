@@ -312,12 +312,6 @@ pipeline_batch_health_check() {
 
     local all_healthy=true
 
-    # Use docker ps with filter to get all containers matching prefix in one call
-    local container_health
-    container_health=$(${DOCKER_CMD:-docker} ps \
-        --filter "name=^${prefix}-" \
-        --format '{{.Names}}:{{.Label "com.docker.compose.service"}}:{{.Status}}' 2>/dev/null || echo "")
-
     for service in "${services[@]}"; do
         local container="${prefix}-${service}"
         local health

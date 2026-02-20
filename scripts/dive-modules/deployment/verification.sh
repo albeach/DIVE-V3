@@ -151,7 +151,7 @@ verification_run_all() {
 
     # OPA health check
     total=$((total + 1))
-    if verification_check_opa; then
+    if verification_check_opa 8181; then
         passed=$((passed + 1))
         log_success "OPA health: PASS"
     else

@@ -966,12 +966,12 @@ spoke_containers_force_recreate() {
 ##
 spoke_containers_wait_for_services() {
     local instance_code="$1"
-    local services="$2"
+    local service_list="$2"
     local timeout="${3:-60}"
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    log_info "Waiting up to ${timeout}s for services to become healthy: $services"
+    log_info "Waiting up to ${timeout}s for services to become healthy: $service_list"
 
     local start_time
     start_time=$(date +%s)
@@ -980,7 +980,7 @@ spoke_containers_wait_for_services() {
         local elapsed=$(($(date +%s) - start_time))
         local all_healthy=true
 
-        for service in $services; do
+        for service in $service_list; do
             # Service is in format "service-instance", extract base service name
             local service_name="${service%%-*}"  # Get part before first dash
             # Check if service is running and healthy
@@ -1000,14 +1000,14 @@ spoke_containers_wait_for_services() {
 
         # Show progress every 15 seconds so the user knows we're still working
         if [ $((elapsed - last_progress)) -ge 15 ]; then
-            log_info "  Still waiting for $services to become healthy... (${elapsed}/${timeout}s)"
+            log_info "  Still waiting for $service_list to become healthy... (${elapsed}/${timeout}s)"
             last_progress=$elapsed
         fi
 
         sleep 2
     done
 
-    log_warn "Services did not become healthy within ${timeout}s: $services"
+    log_warn "Services did not become healthy within ${timeout}s: $service_list"
     return 1
 }
 

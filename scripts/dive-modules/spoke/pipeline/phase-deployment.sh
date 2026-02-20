@@ -876,19 +876,19 @@ spoke_deployment_provision_opal_token() {
 ##
 spoke_deployment_restart_services() {
     local instance_code="$1"
-    local services="$2"
+    local service_list="$2"
 
     local code_lower
     code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    log_verbose "Restarting services: $services"
+    log_verbose "Restarting services: $service_list"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     local _saved_dir="$PWD"
     cd "$spoke_dir" || return 1
 
-    for service in $services; do
+    for service in $service_list; do
         local container="dive-spoke-${code_lower}-${service}"
 
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
