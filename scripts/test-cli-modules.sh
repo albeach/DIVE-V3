@@ -696,6 +696,89 @@ test_cli_config_manager() {
 }
 
 ##
+# Test deployment profiles (Phase 8)
+#
+test_cli_profiles() {
+    log_verbose "Testing deployment profiles module..."
+
+    local profiles="${DIVE_ROOT}/scripts/dive-modules/configuration/profiles.sh"
+    if [ ! -f "$profiles" ]; then
+        log_error "profiles.sh not found"
+        return 1
+    fi
+
+    source "$profiles"
+
+    # Verify functions exist
+    for func in module_profile profile_save profile_load profile_list profile_delete profile_show; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Function $func not found"
+            return 1
+        fi
+    done
+
+    # Use temp dir for test profiles
+    local orig_dir="$_PROFILE_DIR"
+    _PROFILE_DIR=$(mktemp -d)
+
+    # Test profile_save
+    export ENVIRONMENT="test-env"
+    export DIVE_DEFAULT_DOMAIN="test.example.com"
+    profile_save "test-profile" >/dev/null 2>&1
+    if [ ! -f "${_PROFILE_DIR}/test-profile.env" ]; then
+        log_error "profile_save did not create profile file"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Verify profile content
+    if ! grep -q "ENVIRONMENT=test-env" "${_PROFILE_DIR}/test-profile.env"; then
+        log_error "Profile missing ENVIRONMENT"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_list
+    local output
+    output=$(profile_list 2>&1)
+    if ! echo "$output" | grep -q "test-profile"; then
+        log_error "profile_list doesn't show test-profile"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_load
+    unset DIVE_DEFAULT_DOMAIN
+    profile_load "test-profile" >/dev/null 2>&1
+    if [ "${DIVE_DEFAULT_DOMAIN:-}" != "test.example.com" ]; then
+        log_error "profile_load did not restore DIVE_DEFAULT_DOMAIN"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Test profile_delete (non-interactive)
+    DIVE_NON_INTERACTIVE=true profile_delete "test-profile" >/dev/null 2>&1
+    if [ -f "${_PROFILE_DIR}/test-profile.env" ]; then
+        log_error "profile_delete did not remove file"
+        rm -rf "$_PROFILE_DIR"
+        _PROFILE_DIR="$orig_dir"
+        return 1
+    fi
+
+    # Cleanup
+    rm -rf "$_PROFILE_DIR"
+    _PROFILE_DIR="$orig_dir"
+    export DIVE_DEFAULT_DOMAIN="dive25.com"
+    unset ENVIRONMENT
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -711,6 +794,7 @@ test_run_cli_module_tests() {
         "test_cli_setup_wizard"
         "test_cli_error_recovery"
         "test_cli_config_manager"
+        "test_cli_profiles"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
