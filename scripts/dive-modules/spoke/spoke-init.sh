@@ -209,7 +209,7 @@ spoke_setup_wizard() {
         echo ""
         echo "  How will your spoke be accessed?"
         echo ""
-        echo "  1) Use dive25.com subdomains (${code_lower}-app.dive25.com, etc.)"
+        echo "  1) Use ${DIVE_DEFAULT_DOMAIN:-dive25.com} subdomains (${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}, etc.)"
         echo "  2) Use custom domain names"
         echo "  3) Use IP address (local/development only)"
         echo ""
@@ -228,12 +228,13 @@ spoke_setup_wizard() {
 
     case "$hostname_option" in
         1)
-            base_url="https://${code_lower}-app.dive25.com"
-            api_url="https://${code_lower}-api.dive25.com"
+            local _default_domain="${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+            base_url="https://${code_lower}-app.${_default_domain}"
+            api_url="https://${code_lower}-api.${_default_domain}"
             # For production: both URLs are the public domain
-            idp_url="https://${code_lower}-idp.dive25.com"
-            idp_public_url="https://${code_lower}-idp.dive25.com"
-            kas_url="https://${code_lower}-kas.dive25.com"
+            idp_url="https://${code_lower}-idp.${_default_domain}"
+            idp_public_url="https://${code_lower}-idp.${_default_domain}"
+            kas_url="https://${code_lower}-kas.${_default_domain}"
             needs_tunnel=true
             ;;
         2)
@@ -299,7 +300,7 @@ spoke_setup_wizard() {
     echo "    KAS:       $kas_url"
     echo ""
 
-    # Step 3: Cloudflare Tunnel (if using dive25.com)
+    # Step 3: Cloudflare Tunnel (if using default domain subdomains)
     local tunnel_token=""
     local setup_tunnel=false
     local tunnel_id=""
@@ -309,7 +310,7 @@ spoke_setup_wizard() {
         if is_interactive; then
             echo -e "${CYAN}Step 3: Cloudflare Tunnel Setup${NC}"
             echo ""
-            echo "  To make your spoke accessible at ${code_lower}-*.dive25.com,"
+            echo "  To make your spoke accessible at ${code_lower}-*.${DIVE_DEFAULT_DOMAIN:-dive25.com},"
             echo "  you need a Cloudflare tunnel."
             echo ""
             echo "  Options:"
@@ -366,9 +367,9 @@ spoke_setup_wizard() {
                 echo "    5. Copy the tunnel token"
                 echo ""
                 echo "  Add these public hostnames to your tunnel:"
-                echo "    ${code_lower}-app.dive25.com → http://frontend-${code_lower}:3000"
-                echo "    ${code_lower}-api.dive25.com → https://backend-${code_lower}:4000"
-                echo "    ${code_lower}-idp.dive25.com → http://keycloak-${code_lower}:8080"
+                echo "    ${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com} → http://frontend-${code_lower}:3000"
+                echo "    ${code_lower}-api.${DIVE_DEFAULT_DOMAIN:-dive25.com} → https://backend-${code_lower}:4000"
+                echo "    ${code_lower}-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com} → http://keycloak-${code_lower}:8080"
                 echo ""
                 # Try to open browser
                 if command -v xdg-open &> /dev/null; then
@@ -410,7 +411,7 @@ spoke_setup_wizard() {
     local hub_url=""
     local default_hub="https://localhost:4000"
     if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
-        default_hub="https://usa-api.dive25.com"
+        default_hub="${HUB_FALLBACK_URL:-https://usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com}}"
     fi
     if is_interactive; then
         echo ""
@@ -616,21 +617,21 @@ credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
   # Frontend (Next.js)
-  - hostname: ${code_lower}-app.dive25.com
+  - hostname: ${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}
     service: http://frontend-${code_lower}:3000
 
   # Backend API
-  - hostname: ${code_lower}-api.dive25.com
+  - hostname: ${code_lower}-api.${DIVE_DEFAULT_DOMAIN:-dive25.com}
     service: https://backend-${code_lower}:4000
     originRequest:
       noTLSVerify: true
 
   # Keycloak IdP
-  - hostname: ${code_lower}-idp.dive25.com
+  - hostname: ${code_lower}-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}
     service: http://keycloak-${code_lower}:8080
 
   # KAS (Key Access Service)
-  - hostname: ${code_lower}-kas.dive25.com
+  - hostname: ${code_lower}-kas.${DIVE_DEFAULT_DOMAIN:-dive25.com}
     service: http://kas-${code_lower}:8080
 
   # Catch-all (required)

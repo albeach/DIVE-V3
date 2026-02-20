@@ -87,7 +87,7 @@ spoke_kas_init() {
         mkdir -p "$kas_certs_dir"
         openssl req -x509 -newkey rsa:4096 -keyout "$kas_certs_dir/key.pem" \
             -out "$kas_certs_dir/certificate.pem" -days 365 -nodes \
-            -subj "/CN=kas-${code_lower}.dive25.com/O=DIVE V3/C=US" 2>/dev/null
+            -subj "/CN=kas-${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}/O=DIVE V3/C=US" 2>/dev/null
         log_success "KAS certificates created"
     else
         log_info "KAS certificates already exist"
@@ -223,9 +223,9 @@ spoke_kas_register() {
     kas_url=$(spoke_config_get "$code_upper" "endpoints.kasUrl" "")
     idp_url=$(spoke_config_get "$code_upper" "endpoints.idpPublicUrl" "")
 
-    kas_url="${kas_url:-https://${code_lower}-api.dive25.com/api/kas}"
+    kas_url="${kas_url:-https://${code_lower}-api.${DIVE_DEFAULT_DOMAIN:-dive25.com}/api/kas}"
     # FIX (2026-01-15): Realm name includes instance code suffix
-    idp_url="${idp_url:-https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}}"
+    idp_url="${idp_url:-https://${code_lower}-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}/realms/dive-v3-broker-${code_lower}}"
     internal_kas_url="http://kas-${code_lower}:8080"
 
     if [ "$DRY_RUN" = true ]; then
@@ -272,7 +272,7 @@ spoke_kas_register() {
   "metadata": {
     "version": "1.0.0",
     "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
-    "contact": "kas-admin@${code_lower}.dive25.com",
+    "contact": "kas-admin@${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
     "lastVerified": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "healthEndpoint": "/health",
     "requestKeyEndpoint": "/request-key"
@@ -511,7 +511,7 @@ spoke_kas_register_mongodb() {
   "supportedCountries": ["${code_upper}"],
   "supportedCOIs": ["NATO", "NATO-COSMIC"],
   "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
-  "contact": "kas-admin@${code_lower}.dive25.com"
+  "contact": "kas-admin@${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 }
 EOF
 )
@@ -747,7 +747,7 @@ spoke_kas_sync_from_hub() {
   "supportedCountries": ["$country_code"],
   "supportedCOIs": ["NATO", "NATO-COSMIC", "FVEY"],
   "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
-  "contact": "kas-admin@${country_code,,}.dive25.com"
+  "contact": "kas-admin@${country_code,,}.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 }
 EOF
 )

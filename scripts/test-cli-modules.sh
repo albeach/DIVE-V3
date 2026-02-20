@@ -352,6 +352,64 @@ test_cli_flags_parsing() {
 }
 
 ##
+# Test centralized config defaults loading (Phase 2)
+#
+test_cli_config_loader() {
+    log_verbose "Testing centralized config loader..."
+
+    # Verify _load_dive_config_file function exists
+    if ! type _load_dive_config_file &>/dev/null; then
+        log_error "_load_dive_config_file function not found"
+        return 1
+    fi
+
+    # Verify dive-defaults.env exists
+    if [ ! -f "${DIVE_ROOT}/config/dive-defaults.env" ]; then
+        log_error "config/dive-defaults.env not found"
+        return 1
+    fi
+
+    # Test that defaults file loads DIVE_DEFAULT_DOMAIN
+    if [ -z "${DIVE_DEFAULT_DOMAIN:-}" ]; then
+        log_error "DIVE_DEFAULT_DOMAIN not loaded from dive-defaults.env"
+        return 1
+    fi
+
+    # Test env var override precedence: env var should win over defaults file
+    local orig_dom="${DIVE_DEFAULT_DOMAIN}"
+    export DIVE_DEFAULT_DOMAIN="override.example.com"
+    # Re-load — should NOT overwrite since var is already set
+    _load_dive_config_file "${DIVE_ROOT}/config/dive-defaults.env"
+    if [ "$DIVE_DEFAULT_DOMAIN" != "override.example.com" ]; then
+        log_error "Config loader overwrote existing env var (expected override.example.com, got $DIVE_DEFAULT_DOMAIN)"
+        export DIVE_DEFAULT_DOMAIN="$orig_dom"
+        return 1
+    fi
+    export DIVE_DEFAULT_DOMAIN="$orig_dom"
+
+    # Test SECRETS_PROVIDER default is vault (not gcp)
+    # The defaults file should set this
+    if [ "${SECRETS_PROVIDER:-}" != "vault" ]; then
+        # Only fail if no override was set — the user may have a custom value
+        local defaults_value
+        defaults_value=$(grep "^SECRETS_PROVIDER=" "${DIVE_ROOT}/config/dive-defaults.env" 2>/dev/null | cut -d= -f2)
+        if [ "$defaults_value" != "vault" ]; then
+            log_error "dive-defaults.env SECRETS_PROVIDER should be 'vault', got '$defaults_value'"
+            return 1
+        fi
+    fi
+
+    # Test loading a non-existent file doesn't fail
+    _load_dive_config_file "/tmp/nonexistent-dive-config-test.env"
+    if [ $? -ne 0 ]; then
+        log_error "_load_dive_config_file should return 0 for missing file"
+        return 1
+    fi
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -361,6 +419,7 @@ test_run_cli_module_tests() {
         "test_cli_core_module"
         "test_cli_interactive_mode"
         "test_cli_flags_parsing"
+        "test_cli_config_loader"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
