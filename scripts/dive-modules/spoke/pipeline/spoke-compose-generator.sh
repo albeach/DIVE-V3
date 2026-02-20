@@ -196,9 +196,9 @@ spoke_compose_get_placeholders() {
     local opal_opa_port=$((9181 + SPOKE_PORT_OFFSET))  # OPAL inline OPA (separate from standalone OPA)
     local kas_port="${SPOKE_KAS_PORT:-$((DEFAULT_KAS_PORT + SPOKE_PORT_OFFSET))}"
 
-    # Domain-aware URLs: when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy),
+    # Domain-aware URLs: when SPOKE_CUSTOM_DOMAIN or DIVE_DOMAIN_SUFFIX is set,
     # use external domain names instead of localhost:port.
-    # For non-local environments, DIVE_DOMAIN_SUFFIX or HUB_EXTERNAL_ADDRESS is required.
+    # For non-local environments, a domain config is required.
     local idp_hostname="dive-spoke-${code_lower}-keycloak"
     local idp_url="https://${idp_hostname}:8443"  # Container-to-container (always internal)
 
@@ -208,7 +208,14 @@ spoke_compose_get_placeholders() {
     api_url=$(resolve_spoke_public_url "$code_upper" "api")
     idp_base_url=$(resolve_spoke_public_url "$code_upper" "idp")
 
-    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+    # Priority: per-spoke custom domain > session custom domain > DIVE_DOMAIN_SUFFIX
+    local _per_spoke_domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _effective_domain="${!_per_spoke_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
+
+    if [ -n "$_effective_domain" ]; then
+        idp_hostname="idp.${_effective_domain}"
+        log_verbose "Custom domain: spoke ${code_upper} IDP hostname → ${idp_hostname}"
+    elif [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
         local _env_prefix _base_domain
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
         _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"

@@ -97,6 +97,11 @@ spoke_remote_normalize_hub_endpoints() {
 
     # Guard against invalid input like bare domain without env/service prefix
     if [ -z "$_env_prefix" ] || [ "$_env_prefix" = "$_base" ]; then
+        # Check if Hub URLs are already explicitly set (custom domain hub)
+        if [ -n "${HUB_API_URL:-}" ] && [ -n "${HUB_KC_URL:-}" ]; then
+            log_info "Hub endpoints already configured — skipping normalization"
+            return 0
+        fi
         log_warn "Could not normalize Hub endpoints from HUB_EXTERNAL_ADDRESS=${hub_host}"
         return 0
     fi
@@ -196,6 +201,10 @@ spoke_deploy() {
                 export DEPLOYMENT_MODE="standalone"
                 log_warn "Federation setup will be skipped (--skip-federation flag)"
                 ;;
+            --skip-federation-errors)
+                export SKIP_FEDERATION_ERRORS=true
+                log_warn "Federation errors will be non-fatal (--skip-federation-errors flag)"
+                ;;
             --seed)
                 export DIVE_ENABLE_SEEDING="true"
                 ;;
@@ -209,15 +218,20 @@ spoke_deploy() {
                 shift
                 ;;
             --domain)
-                if [ -z "${2:-}" ]; then
-                    log_error "--domain requires a value"
-                    return 1
-                fi
-                export SPOKE_CUSTOM_DOMAIN="${2:-}"
-                if [ -n "$SPOKE_CUSTOM_DOMAIN" ]; then
+                if [ -z "${2:-}" ] || [[ "${2:-}" == --* ]]; then
+                    # No value: trigger interactive wizard (deferred until after CODE is parsed)
+                    export SPOKE_DOMAIN_WIZARD_REQUESTED=true
+                else
+                    export SPOKE_CUSTOM_DOMAIN="${2:-}"
+                    # Validate domain format
+                    if type spoke_domain_validate &>/dev/null && ! spoke_domain_validate "$SPOKE_CUSTOM_DOMAIN"; then
+                        log_error "Invalid domain format: $SPOKE_CUSTOM_DOMAIN"
+                        log_info "Expected format: gbr.mod.uk, fra.defense.gouv.fr"
+                        return 1
+                    fi
                     log_info "Custom domain: $SPOKE_CUSTOM_DOMAIN"
+                    shift
                 fi
-                shift
                 ;;
             --auth-code)
                 if [ -z "${2:-}" ]; then
@@ -317,9 +331,10 @@ spoke_deploy() {
         echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
         echo "  --only-phase <PHASE>   Run only the specified phase"
         echo "  --skip-federation      Skip federation setup (standalone mode)"
+        echo "  --skip-federation-errors  Continue deployment even if federation fails (marks DEGRADED)"
         echo "  --seed                 Opt-in seeding during deploy (federated mode only)"
         echo "  --seed-count <N>       Number of resources to seed when --seed is enabled (default: 5000)"
-        echo "  --domain <base>        Custom domain (e.g. gbr.mod.uk)"
+        echo "  --domain [<base>]      Custom domain (e.g. gbr.mod.uk); omit value for interactive wizard"
         echo ""
         echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
         echo ""
@@ -342,6 +357,28 @@ spoke_deploy() {
         if ! spoke_validate_instance_code "$instance_code"; then
             return 1
         fi
+    fi
+
+    # =========================================================================
+    # INTERACTIVE DOMAIN WIZARD (triggered by --domain without value)
+    # =========================================================================
+    if [ "${SPOKE_DOMAIN_WIZARD_REQUESTED:-false}" = "true" ]; then
+        # Load domain wizard module
+        local _wizard_module="$(dirname "${BASH_SOURCE[0]}")/domain-wizard.sh"
+        if [ -f "$_wizard_module" ]; then
+            source "$_wizard_module"
+        fi
+
+        if type spoke_domain_wizard &>/dev/null && is_interactive; then
+            if ! spoke_domain_wizard "$instance_code"; then
+                return 1
+            fi
+        else
+            log_error "--domain requires a value in non-interactive mode"
+            log_info "Usage: --domain gbr.mod.uk"
+            return 1
+        fi
+        unset SPOKE_DOMAIN_WIZARD_REQUESTED
     fi
 
     # =========================================================================
@@ -452,6 +489,15 @@ spoke_deploy() {
     code_upper=$(upper "$instance_code")
     code_lower=$(lower "$instance_code")
     instance_code="$code_upper"
+
+    # Set per-spoke custom domain for Phase 1 URL resolution layer
+    # This enables resolve_spoke_internal_url, resolve_spoke_public_url, etc.
+    # to correctly resolve URLs for this specific spoke instance.
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        local _domain_var="SPOKE_${code_upper}_DOMAIN"
+        export "${_domain_var}=${SPOKE_CUSTOM_DOMAIN}"
+        log_verbose "Per-spoke domain: ${_domain_var}=${SPOKE_CUSTOM_DOMAIN}"
+    fi
 
     # Set default name from NATO database or parameter
     if [ -z "$instance_name" ]; then

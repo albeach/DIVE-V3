@@ -265,15 +265,31 @@ _post_summary_spoke_urls() {
     local domain="$2"
     local code_lower="$3"
 
-    if [ "$env" != "local" ] && [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+    # Check for custom domain (per-spoke or session)
+    local code_upper
+    code_upper="$(echo "$code_lower" | tr '[:lower:]' '[:upper:]')"
+    local _per_spoke_var="SPOKE_${code_upper}_DOMAIN"
+    local _custom_domain="${!_per_spoke_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
+
+    if [ -n "$_custom_domain" ]; then
+        echo "  URLs (custom domain):"
+        printf "    %-12s https://app.%s\n" "App:" "$_custom_domain"
+        printf "    %-12s https://api.%s\n" "API:" "$_custom_domain"
+        printf "    %-12s https://idp.%s\n" "IdP:" "$_custom_domain"
+        echo ""
+        echo "  Deployment mode: external (custom domain)"
+    elif [ "$env" != "local" ] && [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
         echo "  URLs (via Caddy reverse proxy):"
-        printf "    %-12s https://%s-app.%s\n" "App:" "$code_lower" "${DIVE_DOMAIN_SUFFIX}"
-        printf "    %-12s https://%s-api.%s\n" "API:" "$code_lower" "${DIVE_DOMAIN_SUFFIX}"
-        printf "    %-12s https://%s-idp.%s\n" "IdP:" "$code_lower" "${DIVE_DOMAIN_SUFFIX}"
+        printf "    %-12s https://%s-%s-app.%s\n" "App:" "$_env_prefix" "$code_lower" "$_base_domain"
+        printf "    %-12s https://%s-%s-api.%s\n" "API:" "$_env_prefix" "$code_lower" "$_base_domain"
+        printf "    %-12s https://%s-%s-idp.%s\n" "IdP:" "$_env_prefix" "$code_lower" "$_base_domain"
     else
         local frontend_port backend_port kc_port
         if type get_instance_ports &>/dev/null; then
-            eval "$(get_instance_ports "$(echo "$code_lower" | tr '[:lower:]' '[:upper:]')")"
+            eval "$(get_instance_ports "$code_upper")"
             frontend_port="${SPOKE_FRONTEND_PORT:-}"
             backend_port="${SPOKE_BACKEND_PORT:-}"
             kc_port="${SPOKE_KEYCLOAK_PORT:-}"
