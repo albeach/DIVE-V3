@@ -254,7 +254,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes]
-    if: github.event_name != 'pull_request' || needs.changes.outputs.terraform_changed == 'true'
+    if: github.event_name != 'pull_request' && needs.changes.outputs.terraform_changed == 'true'
     permissions:
       security-events: write
       contents: read
