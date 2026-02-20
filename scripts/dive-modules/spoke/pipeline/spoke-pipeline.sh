@@ -214,7 +214,7 @@ _spoke_pipeline_execute_internal() {
     local start_time="$4"
     local resume_mode="${5:-false}"
 
-    # Source utilities (deployment logging + timing dashboard)
+    # Source utilities (deployment logging + timing dashboard + pre-validation)
     local _utils_dir="${DIVE_ROOT}/scripts/dive-modules/utilities"
     if ! type deployment_log_start &>/dev/null; then
         [ -f "${_utils_dir}/deployment-logging.sh" ] && source "${_utils_dir}/deployment-logging.sh"
@@ -222,9 +222,23 @@ _spoke_pipeline_execute_internal() {
     if ! type deployment_print_timing_dashboard &>/dev/null; then
         [ -f "${_utils_dir}/deployment-dashboard.sh" ] && source "${_utils_dir}/deployment-dashboard.sh"
     fi
+    if ! type pre_validate_spoke &>/dev/null; then
+        [ -f "${_utils_dir}/pre-validation.sh" ] && source "${_utils_dir}/pre-validation.sh"
+    fi
     if type deployment_log_start &>/dev/null; then
         if deployment_log_start "spoke" "$code_upper"; then
             log_verbose "Deployment log: $(deployment_log_path)"
+        fi
+    fi
+
+    # Pre-deployment validation gate (fail fast before any containers start)
+    if type pre_validate_spoke &>/dev/null; then
+        if ! pre_validate_spoke "$code_upper"; then
+            log_error "Pre-deployment validation failed. Aborting."
+            if type deployment_log_stop &>/dev/null; then
+                deployment_log_stop 1 "$(($(date +%s) - start_time))"
+            fi
+            return 1
         fi
     fi
 
