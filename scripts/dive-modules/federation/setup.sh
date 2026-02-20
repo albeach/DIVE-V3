@@ -31,6 +31,11 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load Keycloak admin API abstraction (cross-network support)
+if [ -z "${KEYCLOAK_API_LOADED:-}" ]; then
+    source "${FEDERATION_DIR}/keycloak-api.sh"
+fi
+
 # =============================================================================
 # FEDERATION CONFIGURATION
 # =============================================================================
@@ -199,9 +204,8 @@ federation_link() {
     # Detect Simple Post-Broker OTP flow in Hub realm (created by Terraform realm-mfa module)
     local _hub_otp_flow=""
     local _hub_fed_flows
-    _hub_fed_flows=$(docker exec "${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}" curl -sf --max-time 5 \
-        -H "Authorization: Bearer $hub_token" \
-        "http://localhost:8080/admin/realms/dive-v3-broker-usa/authentication/flows" 2>/dev/null || echo "[]")
+    _hub_fed_flows=$(keycloak_admin_api "USA" "GET" \
+        "realms/dive-v3-broker-usa/authentication/flows" 2>/dev/null || echo "[]")
     _hub_otp_flow=$(echo "$_hub_fed_flows" | python3 -c "
 import json,sys
 try:
@@ -604,20 +608,25 @@ _federation_link_direct() {
 
     log_info "✓ $target_upper password resolved (${#target_pass} chars)"
 
-    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    # Quick readiness check (uses abstraction layer — works local or remote)
     log_info "Verifying $target_upper Keycloak admin API..."
-    if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 30 "$target_pass"; then
-        log_error "Keycloak admin API not ready: $target_kc_container"
-        return 1
+    if ! keycloak_admin_api_available "$target_code"; then
+        # Fallback: try legacy wait_for_keycloak_admin_api_ready for local containers
+        if is_spoke_local "$target_code" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+            if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 30 "$target_pass"; then
+                log_error "Keycloak admin API not ready: $target_upper"
+                return 1
+            fi
+        else
+            log_error "Keycloak admin API not reachable: $target_upper"
+            return 1
+        fi
     fi
 
-    # Authenticate with target Keycloak
+    # Authenticate with target Keycloak (via unified API)
     log_info "Authenticating with $target_upper Keycloak..."
     local token
-    token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
-        -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-        -d "grant_type=password" -d "username=admin" -d "password=${target_pass}" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    token=$(keycloak_get_admin_token "$target_code")
 
     if [ -z "$token" ]; then
         log_error "Failed to authenticate with $target_upper Keycloak"
@@ -649,34 +658,28 @@ _federation_link_direct() {
 
     log_info "✓ $source_upper password resolved (${#source_pass} chars)"
 
-    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    # Quick readiness check (uses abstraction layer — works local or remote)
     log_info "Verifying $source_upper Keycloak admin API..."
-    if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 30 "$source_pass"; then
-        log_error "Source Keycloak admin API not ready: $source_kc_container"
-        return 1
+    if ! keycloak_admin_api_available "$source_code"; then
+        if is_spoke_local "$source_code" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+            if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 30 "$source_pass"; then
+                log_error "Source Keycloak admin API not ready: $source_upper"
+                return 1
+            fi
+        else
+            log_error "Source Keycloak admin API not reachable: $source_upper"
+            return 1
+        fi
     fi
     log_info "✓ $source_upper Keycloak admin API ready"
 
-    # Authenticate with source Keycloak
+    # Authenticate with source Keycloak (via unified API)
     log_info "Authenticating with source $source_upper Keycloak..."
-    local auth_response
-    auth_response=$(docker exec "$source_kc_container" curl -s --max-time 10 \
-        -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-        -d "grant_type=password" \
-        -d "username=admin" \
-        -d "password=${source_pass}" \
-        -d "client_id=admin-cli" 2>&1)
-
     local source_token
-    source_token=$(echo "$auth_response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    source_token=$(keycloak_get_admin_token "$source_code")
 
     if [ -z "$source_token" ]; then
         log_error "Failed to authenticate with source $source_upper Keycloak"
-        if echo "$auth_response" | grep -q "error"; then
-            local error_desc
-            error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
-            [ -n "$error_desc" ] && log_error "Keycloak error: $error_desc"
-        fi
         return 1
     fi
 
@@ -685,17 +688,15 @@ _federation_link_direct() {
     # Get client secret
     log_info "Querying for existing federation client: $federation_client_id"
     local client_uuid
-    client_uuid=$(docker exec "$source_kc_container" curl -sf --max-time 10 \
-        -H "Authorization: Bearer $source_token" \
-        "http://localhost:8080/admin/realms/${source_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
+    client_uuid=$(keycloak_admin_api "$source_code" "GET" \
+        "realms/${source_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
 
     local client_secret=""
     if [ -n "$client_uuid" ]; then
         log_info "Found existing client, retrieving secret..."
-        client_secret=$(docker exec "$source_kc_container" curl -s --max-time 10 \
-            -H "Authorization: Bearer $source_token" \
-            "http://localhost:8080/admin/realms/${source_realm}/clients/${client_uuid}/client-secret" 2>/dev/null | \
+        client_secret=$(keycloak_admin_api "$source_code" "GET" \
+            "realms/${source_realm}/clients/${client_uuid}/client-secret" 2>/dev/null | \
             grep -o '"value":"[^"]*' | cut -d'"' -f4)
 
         if [ -z "$client_secret" ]; then
@@ -729,13 +730,8 @@ _federation_link_direct() {
         log_info "POSTing client configuration to Keycloak..."
 
         local create_output
-        create_output=$(echo "$new_client_config" | docker exec -i "$source_kc_container" \
-            curl -s --max-time 15 -w "\nHTTP_CODE:%{http_code}" \
-            -X POST "http://localhost:8080/admin/realms/${source_realm}/clients" \
-            -H "Authorization: Bearer $source_token" \
-            -H "Content-Type: application/json" \
-            -d @- 2>&1)
-
+        create_output=$(keycloak_admin_api_with_status "$source_code" "POST" \
+            "realms/${source_realm}/clients" "$new_client_config")
         local create_exit=$?
 
         if [ $create_exit -eq 0 ]; then
@@ -757,28 +753,29 @@ _federation_link_direct() {
 
     # Add protocol mappers to the SOURCE federation client
     log_info "Adding protocol mappers to source federation client..."
-    _ensure_federation_client_mappers "$source_kc_container" "$source_token" "$source_realm" "$federation_client_id"
+    _ensure_federation_client_mappers "$source_code" "$source_token" "$source_realm" "$federation_client_id"
 
     if [ -z "$client_secret" ]; then
         client_secret=$(_get_federation_secret "$source_lower" "$target_lower")
     fi
 
     # URL Strategy: Dual URLs for browser vs server-to-server
+    # Internal URLs are resolved dynamically — works for both co-located and
+    # external (separate-network) deployments.
     local source_public_url source_internal_url
     if [ "$source_upper" = "USA" ]; then
         source_public_url=$(resolve_hub_public_url "idp")
-        source_internal_url="https://dive-hub-keycloak:8443"
+        source_internal_url=$(resolve_hub_internal_url "idp")
     else
         source_public_url=$(resolve_spoke_public_url "$source_upper" "idp")
-        source_internal_url="https://dive-spoke-${source_lower}-keycloak:8443"
+        source_internal_url=$(resolve_spoke_internal_url "$source_upper" "idp")
     fi
 
     # Detect Simple Post-Broker OTP flow in target realm (created by Terraform realm-mfa module)
     local _target_otp_flow=""
     local _target_all_flows
-    _target_all_flows=$(docker exec "$target_kc_container" curl -sf --max-time 5 \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
+    _target_all_flows=$(keycloak_admin_api "$target_code" "GET" \
+        "realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
     _target_otp_flow=$(echo "$_target_all_flows" | python3 -c "
 import json,sys
 try:
@@ -821,19 +818,15 @@ except: pass
 
     # Idempotent IdP creation: check if exists, update if needed, create if not
     local existing_idp
-    existing_idp=$(docker exec "$target_kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
+    existing_idp=$(keycloak_admin_api "$target_code" "GET" \
+        "realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
 
     if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
         log_info "IdP ${idp_alias} already exists in ${target_upper}, updating..."
 
         local update_result
-        update_result=$(docker exec "$target_kc_container" curl -sf -w "\nHTTP_CODE:%{http_code}" \
-            -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$idp_config" 2>&1)
+        update_result=$(keycloak_admin_api_with_status "$target_code" "PUT" \
+            "realms/${target_realm}/identity-provider/instances/${idp_alias}" "$idp_config")
 
         local http_code
         http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
@@ -846,11 +839,8 @@ except: pass
         log_info "Creating ${idp_alias} in ${target_upper}..."
 
         local create_result
-        create_result=$(docker exec "$target_kc_container" curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X POST "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$idp_config" 2>&1)
+        create_result=$(keycloak_admin_api_with_status "$target_code" "POST" \
+            "realms/${target_realm}/identity-provider/instances" "$idp_config")
 
         local http_code
         http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
@@ -859,11 +849,8 @@ except: pass
             log_success "Created ${idp_alias} in ${target_upper}"
         elif [ "$http_code" = "409" ]; then
             log_warn "IdP already exists (409), updating instead..."
-            docker exec "$target_kc_container" curl -sf \
-                -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
-                -H "Authorization: Bearer $token" \
-                -H "Content-Type: application/json" \
-                -d "$idp_config" 2>/dev/null || true
+            keycloak_admin_api "$target_code" "PUT" \
+                "realms/${target_realm}/identity-provider/instances/${idp_alias}" "$idp_config" 2>/dev/null || true
             log_success "Updated ${idp_alias} in ${target_upper}"
         else
             log_error "Failed to create IdP: HTTP $http_code"
@@ -874,7 +861,7 @@ except: pass
 
     # Configure IdP mappers to import claims from federated tokens
     log_info "Configuring IdP claim mappers for ${idp_alias}..."
-    _configure_idp_mappers "$target_kc_container" "$token" "$target_realm" "$idp_alias"
+    _configure_idp_mappers "$target_code" "$token" "$target_realm" "$idp_alias"
 
     return 0
 }
