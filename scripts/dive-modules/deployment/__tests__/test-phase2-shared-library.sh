@@ -26,7 +26,6 @@ TOTAL=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m'
 
 assert_eq() {
@@ -173,8 +172,6 @@ docker() {
             ;;
         ps)
             local filter_name=""
-            local format_str=""
-            local show_all=false
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --filter) shift
@@ -182,8 +179,7 @@ docker() {
                             name=*) filter_name="${1#name=}" ;;
                         esac
                         ;;
-                    --format) shift; format_str="$1" ;;
-                    -a) show_all=true ;;
+                    --format) shift ;;  # consume arg but stub ignores format
                 esac
                 shift
             done
@@ -317,7 +313,7 @@ assert_eq "60" "$(pipeline_get_service_timeout unknown-service)" \
     "Unknown service default timeout is 60s"
 
 # Override via env var
-TIMEOUT_POSTGRES=120
+export TIMEOUT_POSTGRES=120
 assert_eq "120" "$(pipeline_get_service_timeout postgres)" \
     "Postgres timeout override via TIMEOUT_POSTGRES=120"
 unset TIMEOUT_POSTGRES
@@ -342,7 +338,7 @@ assert_eq "dive-spoke-fra-backend" "$(pipeline_container_name spoke backend FRA)
     "Spoke FRA backend container name"
 
 # Test COMPOSE_PROJECT_NAME override
-COMPOSE_PROJECT_NAME=custom-project
+export COMPOSE_PROJECT_NAME=custom-project
 assert_eq "custom-project-vault-1" "$(pipeline_container_name hub vault-1)" \
     "Hub vault-1 with custom COMPOSE_PROJECT_NAME"
 unset COMPOSE_PROJECT_NAME
