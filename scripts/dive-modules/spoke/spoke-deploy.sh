@@ -135,7 +135,7 @@ spoke_deploy() {
     export DIVE_SKIP_PHASES=""
     export DIVE_ONLY_PHASE=""
     export DIVE_FROM_PHASE=""
-    export DIVE_DRY_RUN="false"
+    export DIVE_DRY_RUN="${DIVE_DRY_RUN:-${DRY_RUN:-false}}"
     local spoke_resume_mode=false
 
     # Parse options (handle both --key value and positional args)
