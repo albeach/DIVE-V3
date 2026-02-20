@@ -8,14 +8,12 @@ on:
       - 'frontend/src/components/admin/shared/AdminPageTransition.tsx'
       - 'frontend/src/components/admin/shared/PresenceIndicator.tsx'
       - 'frontend/src/__tests__/e2e/animations/**'
-      - '.github/workflows/test-animations.yml'
   pull_request:
     branches: [main]
     paths:
       - 'frontend/src/components/admin/shared/**'
       - 'frontend/src/app/admin/**'
       - 'frontend/src/__tests__/e2e/animations/**'
-      - '.github/workflows/test-animations.yml'
   workflow_dispatch:
 
 permissions:
@@ -85,6 +83,7 @@ jobs:
 
       - name: Start Keycloak
         run: |
+          set -euo pipefail
           SERVICE_NETWORK=$(docker network ls -q -f name=github_network_ | head -1)
           if [ -z "$SERVICE_NETWORK" ]; then
             echo "Unable to locate GitHub Actions service network"
@@ -109,15 +108,31 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
 
-          for i in {1..60}; do
-            if nc -z localhost 9000 >/dev/null 2>&1; then
-              exit 0
+          max_attempts=300
+          for i in $(seq 1 "$max_attempts"); do
+            if curl -kfsS https://localhost:9000/health/ready >/dev/null 2>&1; then
+              echo "Keycloak management endpoint is ready"
+              break
+            fi
+
+            if curl -kfsS https://localhost:8443/realms/master/.well-known/openid-configuration >/dev/null 2>&1; then
+              echo "Keycloak OIDC endpoint is ready"
+              break
+            fi
+
+            if ! docker ps --filter "name=^/keycloak$" --filter "status=running" --format '{{.Names}}' | grep -q '^keycloak$'; then
+              echo "Keycloak container exited before becoming ready"
+              docker logs keycloak
+              exit 1
+            fi
+
+            if [ "$i" -eq "$max_attempts" ]; then
+              echo "Keycloak failed to become ready after 10 minutes"
+              docker logs keycloak
+              exit 1
             fi
             sleep 2
           done
-
-          docker logs keycloak
-          exit 1
 
       - name: Configure Keycloak realm and test user
         run: |
