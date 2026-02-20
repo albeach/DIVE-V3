@@ -322,9 +322,18 @@ verification_check_redis() {
     local container_prefix="$1"
     local code_lower="${container_prefix##*-}"
     local redis_container=""
+    local redis_password=""
+    local redis_health=""
 
     redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-redis[^-]|redis.*${code_lower}|${code_lower}.*redis" | head -1)
     [ -z "$redis_container" ] && return 1
+
+    # Prefer Docker health status when available. Compose healthcheck already
+    # performs an authenticated TLS ping using the instance secret.
+    redis_health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$redis_container" 2>/dev/null || echo "")
+    if [ "$redis_health" = "healthy" ]; then
+        return 0
+    fi
 
     # Try TLS ping first (expected in production)
     if docker exec "$redis_container" redis-cli --tls --insecure ping 2>/dev/null | grep -q "PONG"; then
@@ -335,6 +344,20 @@ verification_check_redis() {
     if docker exec "$redis_container" redis-cli ping 2>/dev/null | grep -q "PONG"; then
         log_verbose "Redis responding on plain TCP (TLS may not be enabled)"
         return 0
+    fi
+
+    # Authenticated fallback for password-protected Redis deployments.
+    redis_password=$(docker exec "$redis_container" printenv REDIS_PASSWORD_EST 2>/dev/null || echo "")
+    if [ -n "$redis_password" ]; then
+        if docker exec "$redis_container" redis-cli -a "$redis_password" ping 2>/dev/null | grep -q "PONG"; then
+            log_verbose "Redis responding with authentication"
+            return 0
+        fi
+
+        if docker exec "$redis_container" redis-cli --tls --insecure -a "$redis_password" ping 2>/dev/null | grep -q "PONG"; then
+            log_verbose "Redis responding with TLS + authentication"
+            return 0
+        fi
     fi
 
     return 1

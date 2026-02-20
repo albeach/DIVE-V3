@@ -721,6 +721,11 @@ spoke_init_generate_env() {
     # Fetch OPAL public key from Hub (best-effort)
     local opal_public_key=""
     opal_public_key=$(spoke_get_hub_opal_public_key || echo "")
+    # Normalize to a single valid SSH public key line. Some legacy sources may
+    # contain multiple keys/newlines, which would corrupt .env parsing.
+    if [ -n "$opal_public_key" ]; then
+        opal_public_key=$(printf "%s\n" "$opal_public_key" | tr -d '\r' | awk '/^ssh-(rsa|ed25519|ecdsa)[[:space:]]/ { print; exit }')
+    fi
 
     if [ -n "$opal_public_key" ]; then
         log_success "Retrieved OPAL public key for authentication"

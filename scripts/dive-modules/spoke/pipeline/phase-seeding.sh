@@ -60,6 +60,7 @@ spoke_phase_seeding() {
     code_upper=$(upper "$instance_code")
     local code_lower
     code_lower=$(lower "$instance_code")
+    local resource_count="${DIVE_SEED_COUNT:-5000}"
 
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
@@ -163,7 +164,7 @@ spoke_phase_seeding() {
     # Step 3: Seed ZTDF resources (MANDATORY - no plaintext fallback)
     log_step "Step 3/4: Seeding ZTDF encrypted resources (MANDATORY)"
     local resource_seeding_failed=false
-    if ! spoke_seed_resources "$instance_code" 5000; then
+    if ! spoke_seed_resources "$instance_code" "$resource_count"; then
         resource_seeding_failed=true
         log_error "ZTDF resource seeding FAILED"
         log_error "Plaintext fallback is NOT acceptable per ACP-240"
@@ -585,17 +586,33 @@ spoke_seed_resources_legacy() {
 #   1 - Failure
 ##
 spoke_seed() {
-    local resource_count="${1:-5000}"
+    local first_arg="${1:-}"
     local instance_code="${INSTANCE:-}"
+    local resource_count="5000"
+
+    # Support both:
+    #   ./dive --instance FRA spoke seed [count]
+    #   ./dive spoke seed FRA [count]
+    if [ -n "$first_arg" ] && [[ "$first_arg" =~ ^[A-Za-z]{3}$ ]]; then
+        instance_code="$first_arg"
+        resource_count="${2:-5000}"
+    else
+        resource_count="${first_arg:-5000}"
+    fi
+
+    if ! [[ "$resource_count" =~ ^[0-9]+$ ]] || [ "$resource_count" -le 0 ]; then
+        log_error "Resource count must be a positive integer"
+        return 1
+    fi
 
     if [ -z "$instance_code" ]; then
         log_error "No instance specified"
         echo ""
-        echo "Usage: ./dive --instance <code> spoke seed [count]"
+        echo "Usage: ./dive spoke seed <CODE> [count]"
         echo ""
         echo "Examples:"
-        echo "  ./dive --instance nzl spoke seed          # Seed 5000 resources"
-        echo "  ./dive --instance nzl spoke seed 10000    # Seed 10000 resources"
+        echo "  ./dive spoke seed NZL         # Seed 5000 resources"
+        echo "  ./dive spoke seed NZL 10000   # Seed 10000 resources"
         echo ""
         return 1
     fi

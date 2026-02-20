@@ -52,11 +52,16 @@ spoke_get_service_order() {
 
     # Get services dynamically from compose file
     if type compose_get_spoke_services &>/dev/null; then
-        compose_get_spoke_services "$instance_code"
-    else
-        # Fallback to SSOT service list
-        echo "$PIPELINE_SPOKE_ALL_SERVICES"
+        local dynamic_services
+        if dynamic_services=$(compose_get_spoke_services "$instance_code" 2>/dev/null); then
+            echo "$dynamic_services"
+            return 0
+        fi
+        log_verbose "Falling back to SSOT service order for $instance_code"
     fi
+
+    # Fallback to SSOT service list
+    echo "${PIPELINE_SPOKE_ALL_SERVICES:-postgres mongodb redis keycloak opa opal-client backend frontend kas}"
 }
 
 ##

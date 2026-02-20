@@ -330,6 +330,16 @@ _spoke_pipeline_execute_internal() {
     # Execute phases based on mode
     local phase_result=0
     local spoke_phase_times=()
+    local deployment_mode="${DEPLOYMENT_MODE:-local}"
+    local federation_mode="FEDERATED"
+    if [ "$deployment_mode" = "standalone" ] || [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+        federation_mode="STANDALONE"
+    fi
+    local verification_executed=false
+    local partial_pipeline_run=false
+    if [ -n "${DIVE_ONLY_PHASE:-}" ] || [ -n "${DIVE_SKIP_PHASES:-}" ]; then
+        partial_pipeline_run=true
+    fi
 
     # Reset --from-phase tracking state
     export _DIVE_FROM_PHASE_REACHED=false
@@ -367,7 +377,7 @@ _spoke_pipeline_execute_internal() {
     if [ $phase_result -eq 0 ] && [ "$_is_dry_run" = "false" ]; then
         log_verbose "Preflight passed, setting state to INITIALIZING..."
         if orch_db_set_state "$code_upper" "INITIALIZING" "" \
-            "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}"; then
+            "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\",\"deployment_mode\":\"$deployment_mode\",\"federation_mode\":\"$federation_mode\",\"deployment_profile\":\"$federation_mode\"}"; then
             log_verbose "State set to INITIALIZING"
         else
             log_verbose "Could not update state to INITIALIZING (database may be unavailable)"
@@ -453,8 +463,8 @@ _spoke_pipeline_execute_internal() {
         fi
     fi
 
-    # Phase 5: Seeding (deploy mode only)
-    if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ]; then
+    # Phase 5: Seeding (deploy mode only, opt-in)
+    if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ] && [ "${DIVE_ENABLE_SEEDING:-false}" = "true" ]; then
         if _spoke_should_skip_phase "SEEDING"; then
             spoke_phase_times+=("Phase 5 (Seeding): skipped")
         else
@@ -476,6 +486,9 @@ _spoke_pipeline_execute_internal() {
             fi
         fi
     else
+        if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ] && [ "${DIVE_ENABLE_SEEDING:-false}" != "true" ]; then
+            log_info "Skipping SEEDING (opt-in disabled; use --seed on deploy or federate)"
+        fi
         [ "$pipeline_mode" != "$PIPELINE_MODE_DEPLOY" ] && log_verbose "Skipping SEEDING (not deploy mode)"
     fi
 
@@ -490,6 +503,8 @@ _spoke_pipeline_execute_internal() {
             if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode" "$resume_mode"; then
                 log_warn "Verification phase failed, stopping pipeline"
                 phase_result=1
+            else
+                verification_executed=true
             fi
             spoke_phase_times+=("Phase 6 (Verification): $(($(date +%s) - _ps))s")
 
@@ -524,8 +539,12 @@ _spoke_pipeline_execute_internal() {
 
     # Finalize
     if [ $phase_result -eq 0 ]; then
-        orch_db_set_state "$code_upper" "COMPLETE" "" \
-            "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
+        if [ "$verification_executed" = "true" ] && [ "$partial_pipeline_run" = "false" ]; then
+            orch_db_set_state "$code_upper" "COMPLETE" "" \
+                "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\",\"deployment_mode\":\"$deployment_mode\",\"federation_mode\":\"$federation_mode\",\"deployment_profile\":\"$federation_mode\"}"
+        else
+            log_warn "Skipping COMPLETE state transition (partial pipeline run)"
+        fi
 
         # Create final checkpoint
         if type orch_create_checkpoint &>/dev/null; then
@@ -582,7 +601,7 @@ _spoke_pipeline_execute_internal() {
         return 0
     else
         orch_db_set_state "$code_upper" "FAILED" "Pipeline failed" \
-            "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
+            "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\",\"deployment_mode\":\"$deployment_mode\",\"federation_mode\":\"$federation_mode\",\"deployment_profile\":\"$federation_mode\"}"
 
         # Generate error summary
         if type orch_generate_error_summary &>/dev/null; then

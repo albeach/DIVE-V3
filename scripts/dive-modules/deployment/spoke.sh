@@ -44,6 +44,7 @@ fi
 _load_spoke_modules() {
     # Core spoke modules
     [ -f "${SPOKE_DIR}/spoke-deploy.sh" ] && source "${SPOKE_DIR}/spoke-deploy.sh"
+    [ -f "${SPOKE_DIR}/spoke-register.sh" ] && source "${SPOKE_DIR}/spoke-register.sh"
     [ -f "${SPOKE_DIR}/spoke-init.sh" ] && source "${SPOKE_DIR}/spoke-init.sh"
     [ -f "${SPOKE_DIR}/operations.sh" ] && source "${SPOKE_DIR}/operations.sh"
     [ -f "${SPOKE_DIR}/maintenance.sh" ] && source "${SPOKE_DIR}/maintenance.sh"
@@ -74,7 +75,7 @@ module_spoke() {
         source "${MODULES_DIR}/aws/remote-exec.sh"
         if is_remote_environment 2>/dev/null; then
             case "$action" in
-                prepare|configure|deploy|start-remote)
+                prepare|configure|deploy|federate|start-remote)
                     # These run on the Hub — do NOT delegate to spoke EC2
                     # deploy in remote env triggers the ECR-based prepare→start→configure chain
                     log_info "Remote environment: ${action} runs on Hub (ECR-based)"
@@ -226,6 +227,30 @@ module_spoke() {
                     spoke_deploy "$@"
                 else
                     log_error "spoke_deploy not available. Try: ./dive hub deploy first, then ./dive spoke deploy <CODE>"
+                    return 1
+                fi
+            fi
+            ;;
+
+        federate)
+            if type -t spoke_federate &>/dev/null; then
+                spoke_federate "$@"
+            else
+                log_error "spoke_federate not available. Ensure spoke/pipeline/spoke-federation.sh is loaded"
+                return 1
+            fi
+            ;;
+
+        seed)
+            if type -t spoke_seed &>/dev/null; then
+                spoke_seed "$@"
+            else
+                local _seed_mod="${SPOKE_DIR}/pipeline/phase-seeding.sh"
+                [ -f "$_seed_mod" ] && source "$_seed_mod"
+                if type -t spoke_seed &>/dev/null; then
+                    spoke_seed "$@"
+                else
+                    log_error "spoke_seed not available. Ensure spoke seeding module is loaded"
                     return 1
                 fi
             fi
@@ -449,6 +474,8 @@ _spoke_help() {
     echo ""
     echo "Commands:"
     echo "  deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)"
+    echo "  federate <CODE>             Attach Hub federation to an existing standalone spoke"
+    echo "  seed <CODE> [count]         Seed users/resources (opt-in; recommended post-federation)"
     echo "  deploy-all [CODES...]       Deploy multiple spokes in parallel (--all for all)"
     echo "  authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)"
     echo "  revoke <CODE>               Revoke a spoke's federation authorization"
@@ -486,6 +513,8 @@ _spoke_help() {
     echo "  --skip-phase <PHASE>        Skip specified phase (can be repeated)"
     echo "  --only-phase <PHASE>        Run only the specified phase"
     echo "  --skip-federation           Skip federation setup"
+    echo "  --seed                      Opt-in seeding during deploy/federate (default: off)"
+    echo "  --seed-count <N>            Resource count when --seed is enabled (default: 5000)"
     echo "  --domain <base>             Custom domain (e.g. gbr.mod.uk)"
     echo ""
     echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
@@ -493,6 +522,8 @@ _spoke_help() {
     echo "Examples:"
     echo "  ./dive spoke deploy ALB \"Albania\"                # Full local deployment"
     echo "  ./dive spoke deploy GBR --resume                  # Resume from checkpoint"
+    echo "  ./dive spoke federate GBR --auth-code <UUID>      # Attach Hub federation post-deploy"
+    echo "  ./dive spoke federate GBR --auth-code <UUID> --seed --seed-count 5000"
     echo "  ./dive spoke deploy GBR --dry-run                 # Simulate without changes"
     echo "  ./dive spoke deploy GBR --from-phase CONFIGURATION  # Skip to phase"
     echo "  ./dive --env dev spoke deploy GBR                 # ECR-based remote deploy"

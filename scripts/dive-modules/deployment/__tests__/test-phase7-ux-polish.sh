@@ -188,6 +188,7 @@ cmd_help() {
     echo ""
     echo -e "${BOLD}${CYAN}Spoke Commands:${NC}"
     echo "  spoke deploy <CODE>          Deploy Spoke (e.g., ALB, FRA)"
+    echo "  spoke federate <CODE>        Attach Hub federation to standalone spoke"
     echo "  spoke deploy-all [CODES]     Deploy multiple spokes in parallel"
     echo "  spoke up / start <CODE>      Start Spoke services"
     echo "  spoke down / stop <CODE>     Stop Spoke services"
@@ -267,6 +268,7 @@ _spoke_help() {
     echo ""
     echo "Commands:"
     echo "  deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)"
+    echo "  federate <CODE>             Attach Hub federation to an existing standalone spoke"
     echo "  deploy-all [CODES...]       Deploy multiple spokes in parallel (--all for all)"
     echo "  authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)"
     echo "  revoke <CODE>               Revoke a spoke's federation authorization"
@@ -311,6 +313,7 @@ _spoke_help() {
     echo "Examples:"
     echo "  ./dive spoke deploy ALB \"Albania\"                # Full local deployment"
     echo "  ./dive spoke deploy GBR --resume                  # Resume from checkpoint"
+    echo "  ./dive spoke federate GBR --auth-code <UUID>      # Attach Hub federation post-deploy"
     echo "  ./dive spoke deploy GBR --dry-run                 # Simulate without changes"
     echo "  ./dive spoke deploy GBR --from-phase CONFIGURATION  # Skip to phase"
     echo "  ./dive --env dev spoke deploy GBR                 # ECR-based remote deploy"
@@ -411,6 +414,7 @@ assert_contains "$_help_output" "hub diagnose" "Global help contains 'hub diagno
 assert_contains "$_help_output" "spoke diagnose" "Global help contains 'spoke diagnose'"
 assert_contains "$_help_output" "hub history" "Global help contains 'hub history'"
 assert_contains "$_help_output" "spoke history" "Global help contains 'spoke history'"
+assert_contains "$_help_output" "spoke federate" "Global help contains 'spoke federate'"
 
 # Phase 6 commands
 assert_contains "$_help_output" "hub state" "Global help contains 'hub state'"
@@ -504,6 +508,7 @@ assert_contains "$_spoke_output" "Remote Deployment" "Spoke help has 'Remote Dep
 assert_contains "$_spoke_output" "up <CODE> / start" "Spoke help documents up/start alias"
 assert_contains "$_spoke_output" "down <CODE> / stop" "Spoke help documents down/stop alias"
 assert_contains "$_spoke_output" "verify <CODE> / health" "Spoke help documents verify/health alias"
+assert_contains "$_spoke_output" "federate <CODE>" "Spoke help lists standalone federation attach command"
 
 # Phase 3-6 commands present
 assert_contains "$_spoke_output" "phases <CODE> [--timing]" "Spoke help lists 'phases <CODE> [--timing]'"

@@ -58,10 +58,10 @@ fi
 
 # Shared orchestration state (declared once, reused across sourced modules).
 if ! declare -p ORCH_CONTEXT &>/dev/null; then
-    declare -A ORCH_CONTEXT=()
+    declare -gA ORCH_CONTEXT=()
 fi
 if [ "${ORCHESTRATION_ERRORS+set}" != "set" ]; then
-    ORCHESTRATION_ERRORS=()
+    declare -ga ORCHESTRATION_ERRORS=()
 fi
 
 # =============================================================================
@@ -111,7 +111,7 @@ fi
 # =============================================================================
 
 # Service startup order and dependencies
-declare -A SERVICE_DEPENDENCIES=(
+declare -gA SERVICE_DEPENDENCIES=(
     ["postgres"]="none"
     ["mongodb"]="none"
     ["redis"]="none"
