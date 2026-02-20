@@ -795,6 +795,214 @@ EOF
     log_verbose "IdP mappers configured (no duplicates)"
 }
 
+##
+# Attach federation to an already deployed standalone spoke (no redeploy)
+#
+# Arguments:
+#   $1 - Instance code
+#   --auth-code <UUID>   Optional pre-authorization code from Hub
+#   --domain <hostname>  Optional Hub domain (e.g., dev-usa-api.dive25.com)
+#   --seed               Run user/resource seeding after federation attach
+#   --seed-count <N>     Resource count for post-federation seeding (default: 5000)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_federate() {
+    local instance_code="${1:-}"
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo "Usage: ./dive spoke federate <CODE> [--auth-code <UUID>] [--domain <hub-api-domain>] [--seed] [--seed-count <N>]"
+        return 1
+    fi
+    shift || true
+
+    local auth_code=""
+    local hub_domain=""
+    local seed_after_federation=false
+    local seed_count=5000
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --auth-code)
+                if [ -z "${2:-}" ]; then
+                    log_error "--auth-code requires a value"
+                    return 1
+                fi
+                auth_code="$2"
+                shift 2
+                ;;
+            --domain|--hub-domain)
+                if [ -z "${2:-}" ]; then
+                    log_error "--domain requires a value"
+                    return 1
+                fi
+                hub_domain="$2"
+                shift 2
+                ;;
+            --seed)
+                seed_after_federation=true
+                shift
+                ;;
+            --seed-count)
+                if [ -z "${2:-}" ]; then
+                    log_error "--seed-count requires a value"
+                    return 1
+                fi
+                if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -le 0 ]; then
+                    log_error "--seed-count must be a positive integer"
+                    return 1
+                fi
+                seed_count="$2"
+                seed_after_federation=true
+                shift 2
+                ;;
+            -h|--help)
+                echo "Usage: ./dive spoke federate <CODE> [--auth-code <UUID>] [--domain <hub-api-domain>] [--seed] [--seed-count <N>]"
+                return 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Usage: ./dive spoke federate <CODE> [--auth-code <UUID>] [--domain <hub-api-domain>] [--seed] [--seed-count <N>]"
+                return 1
+                ;;
+        esac
+    done
+
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    if [ ! -d "$spoke_dir" ] || [ ! -f "$spoke_dir/docker-compose.yml" ]; then
+        log_error "Spoke ${code_upper} is not deployed. Deploy first: ./dive spoke deploy ${code_upper} --skip-federation"
+        return 1
+    fi
+
+    # Standalone -> federated attach path
+    export SKIP_FEDERATION=false
+    if [ -n "$auth_code" ]; then
+        export SPOKE_AUTH_CODE="$auth_code"
+        log_info "Using federation auth code for ${code_upper}"
+    fi
+
+    # Resolve Hub endpoints for remote attachment when domain is provided.
+    if [ -n "$hub_domain" ]; then
+        hub_domain="${hub_domain#https://}"
+        hub_domain="${hub_domain#http://}"
+        hub_domain="${hub_domain%%/*}"
+
+        local _prefix="${hub_domain%%.*}"
+        local _base="${hub_domain#*.}"
+        local _env_prefix="$_prefix"
+        _env_prefix="${_env_prefix%-api}"
+        _env_prefix="${_env_prefix%-app}"
+        _env_prefix="${_env_prefix%-idp}"
+        _env_prefix="${_env_prefix%-opal}"
+        _env_prefix="${_env_prefix%-vault}"
+
+        export HUB_EXTERNAL_ADDRESS="${_env_prefix}-api.${_base}"
+        export HUB_API_URL="https://${_env_prefix}-api.${_base}"
+        export HUB_KC_URL="https://${_env_prefix}-idp.${_base}"
+        export HUB_OPAL_URL="https://${_env_prefix}-opal.${_base}"
+        export HUB_VAULT_URL="https://${_env_prefix}-vault.${_base}"
+        export DEPLOYMENT_MODE="remote"
+        log_info "Resolved Hub endpoints from domain: ${hub_domain}"
+    elif [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] || [ -n "${HUB_API_URL:-}" ]; then
+        export DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-remote}"
+    else
+        local _hub_containers
+        _hub_containers=$(docker ps -q --filter "name=dive-hub" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${_hub_containers:-0}" -gt 0 ]; then
+            export DEPLOYMENT_MODE="local"
+        else
+            log_error "No Hub detected. Provide --domain <hub-api-domain> to attach federation remotely."
+            return 1
+        fi
+    fi
+
+    # Load configuration-phase federation helpers if not already loaded.
+    if ! type spoke_config_register_in_registries &>/dev/null || ! type spoke_config_setup_federation &>/dev/null; then
+        local _cfg_module="${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/phase-configuration.sh"
+        if [ -f "$_cfg_module" ]; then
+            # shellcheck source=./phase-configuration.sh
+            source "$_cfg_module"
+        fi
+    fi
+    if ! type spoke_config_register_in_registries &>/dev/null || ! type spoke_config_setup_federation &>/dev/null; then
+        log_error "Federation configuration functions unavailable"
+        return 1
+    fi
+
+    # Ensure instance env values are in process for registration/setup.
+    if [ -f "${spoke_dir}/.env" ]; then
+        set -a
+        source "${spoke_dir}/.env" 2>/dev/null || true
+        set +a
+    fi
+    if type spoke_secrets_load &>/dev/null; then
+        spoke_secrets_load "$code_upper" "load" 2>/dev/null || true
+    fi
+
+    # Persist deployment mode so subsequent status/verification reflects federated attach.
+    if [ -f "${spoke_dir}/.env" ]; then
+        if grep -q "^DEPLOYMENT_MODE=" "${spoke_dir}/.env" 2>/dev/null; then
+            sed -i.bak "s|^DEPLOYMENT_MODE=.*|DEPLOYMENT_MODE=${DEPLOYMENT_MODE}|" "${spoke_dir}/.env"
+        else
+            echo "DEPLOYMENT_MODE=${DEPLOYMENT_MODE}" >> "${spoke_dir}/.env"
+        fi
+        rm -f "${spoke_dir}/.env.bak"
+    fi
+
+    log_step "Attaching federation for ${code_upper}"
+    if ! spoke_config_register_in_registries "$code_upper"; then
+        log_error "Failed to register ${code_upper} with Hub registries"
+        return 1
+    fi
+
+    if ! spoke_config_setup_federation "$code_upper" "deploy"; then
+        log_error "Failed to configure federation links for ${code_upper}"
+        return 1
+    fi
+
+    if type spoke_verify_federation &>/dev/null; then
+        if ! spoke_verify_federation "$code_upper"; then
+            log_error "Federation verification failed after attach"
+            return 1
+        fi
+    fi
+
+    if [ "$seed_after_federation" = "true" ]; then
+        # Load seeding helpers on demand.
+        if ! type spoke_seed_users &>/dev/null || ! type spoke_seed_resources &>/dev/null; then
+            local _seed_module="${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/phase-seeding.sh"
+            if [ -f "$_seed_module" ]; then
+                # shellcheck source=./phase-seeding.sh
+                source "$_seed_module"
+            fi
+        fi
+        if ! type spoke_seed_users &>/dev/null || ! type spoke_seed_resources &>/dev/null; then
+            log_error "Seeding functions unavailable"
+            return 1
+        fi
+
+        log_step "Running post-federation seeding for ${code_upper} (${seed_count} resources)"
+        if ! spoke_seed_users "$code_upper"; then
+            log_error "Post-federation user seeding failed"
+            return 1
+        fi
+        if ! spoke_seed_resources "$code_upper" "$seed_count"; then
+            log_error "Post-federation resource seeding failed"
+            return 1
+        fi
+        log_success "Post-federation seeding complete for ${code_upper}"
+    fi
+
+    log_success "Federation attached for ${code_upper}"
+    return 0
+}
+
 
 # Load extended federation functions
 source "$(dirname "${BASH_SOURCE[0]}")/spoke-federation-extended.sh"
