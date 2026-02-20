@@ -29,6 +29,11 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load shared pipeline utilities (health checks, service SSOT)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "${DEPLOYMENT_DIR}/pipeline-utils.sh"
+fi
+
 # =============================================================================
 # VERIFICATION FUNCTIONS
 # =============================================================================
@@ -114,14 +119,44 @@ verification_run_all() {
         log_error "Frontend accessibility: FAIL"
     fi
 
-    # Database connectivity check
+    # Database connectivity check (PostgreSQL)
     total=$((total + 1))
     if verification_check_database "$container_prefix"; then
         passed=$((passed + 1))
-        log_success "Database connectivity: PASS"
+        log_success "PostgreSQL connectivity: PASS"
     else
         failed=$((failed + 1))
-        log_error "Database connectivity: FAIL"
+        log_error "PostgreSQL connectivity: FAIL"
+    fi
+
+    # MongoDB connectivity check
+    total=$((total + 1))
+    if verification_check_mongodb "$container_prefix"; then
+        passed=$((passed + 1))
+        log_success "MongoDB connectivity: PASS"
+    else
+        failed=$((failed + 1))
+        log_error "MongoDB connectivity: FAIL"
+    fi
+
+    # Redis connectivity check
+    total=$((total + 1))
+    if verification_check_redis "$container_prefix"; then
+        passed=$((passed + 1))
+        log_success "Redis connectivity: PASS"
+    else
+        failed=$((failed + 1))
+        log_error "Redis connectivity: FAIL"
+    fi
+
+    # OPA health check
+    total=$((total + 1))
+    if verification_check_opa; then
+        passed=$((passed + 1))
+        log_success "OPA health: PASS"
+    else
+        failed=$((failed + 1))
+        log_error "OPA health: FAIL"
     fi
 
     # Summary
@@ -143,12 +178,22 @@ verification_run_all() {
 verification_check_containers() {
     local container_prefix="$1"
 
-    local expected_containers=("postgres" "keycloak" "backend" "frontend")
+    # Use SSOT service list — check ALL services, not just 4
+    local expected_services_str
+    if [[ "$container_prefix" == *"hub"* ]]; then
+        expected_services_str="$PIPELINE_HUB_INFRA_SERVICES $PIPELINE_HUB_CORE_SERVICES $PIPELINE_HUB_APP_SERVICES"
+    else
+        expected_services_str="$PIPELINE_SPOKE_ALL_SERVICES"
+    fi
+
+    local expected_services
+    read -r -a expected_services <<< "$expected_services_str"
     local missing=0
 
-    for container in "${expected_containers[@]}"; do
-        if ! docker ps --format '{{.Names}}' | grep -q "^${container_prefix}-${container}$"; then
-            log_verbose "Container missing: ${container_prefix}-${container}"
+    for service in "${expected_services[@]}"; do
+        local container="${container_prefix}-${service}"
+        if ! pipeline_container_running "$container"; then
+            log_verbose "Container missing: ${container}"
             missing=$((missing + 1))
         fi
     done
@@ -163,12 +208,12 @@ verification_check_health() {
     local container_prefix="$1"
 
     local containers
-    containers=$(docker ps --filter "name=${container_prefix}" --format '{{.Names}}')
+    containers=$(${DOCKER_CMD:-docker} ps --filter "name=${container_prefix}" --format '{{.Names}}')
     local unhealthy=0
 
     for container in $containers; do
         local health
-        health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        health=$(pipeline_get_container_health "$container")
 
         if [ "$health" = "unhealthy" ]; then
             log_verbose "Container unhealthy: $container"
