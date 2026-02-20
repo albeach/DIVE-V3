@@ -272,6 +272,87 @@ REMEDIATION
 }
 
 # =============================================================================
+# CONTAINER LOG CAPTURE
+# =============================================================================
+
+# Map phase names to their primary container(s) for automatic log capture
+_error_get_phase_containers() {
+    local phase="$1"
+    local deploy_type="${2:-hub}"
+    local prefix="dive-${deploy_type}"
+
+    case "$phase" in
+        VAULT_BOOTSTRAP|VAULT_DB_ENGINE)
+            echo "${prefix}-vault" ;;
+        DATABASE_INIT)
+            echo "${prefix}-postgres" ;;
+        MONGODB_INIT|MONGODB)
+            echo "${prefix}-mongodb" ;;
+        BUILD|SERVICES)
+            echo "${prefix}-backend ${prefix}-frontend ${prefix}-kas" ;;
+        KEYCLOAK_CONFIG|REALM_VERIFY|CONFIGURATION)
+            echo "${prefix}-keycloak" ;;
+        KAS_REGISTER|KAS_INIT)
+            echo "${prefix}-backend ${prefix}-kas" ;;
+        SEEDING)
+            echo "${prefix}-backend ${prefix}-mongodb" ;;
+        DEPLOYMENT)
+            echo "${prefix}-backend ${prefix}-keycloak ${prefix}-frontend" ;;
+        VERIFICATION)
+            echo "${prefix}-backend ${prefix}-keycloak" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
+##
+# Capture recent container logs for failed phase
+#
+# Arguments:
+#   $1 - Phase name
+#   $2 - Deploy type (hub|spoke)
+#   $3 - Number of log lines to show (default: 30)
+#
+# Output:
+#   Container logs to stdout (for display during error recovery)
+##
+_error_capture_container_logs() {
+    local phase="$1"
+    local deploy_type="${2:-hub}"
+    local tail_lines="${3:-30}"
+
+    local containers
+    containers=$(_error_get_phase_containers "$phase" "$deploy_type")
+    [ -z "$containers" ] && return 0
+
+    local found_any=false
+    for container in $containers; do
+        # Check if container exists
+        if docker inspect "$container" &>/dev/null; then
+            if [ "$found_any" = false ]; then
+                echo ""
+                echo "  Container Logs (last ${tail_lines} lines):"
+                echo "  ──────────────────────────────────────────"
+                found_any=true
+            fi
+            local status
+            status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
+            local health
+            health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$container" 2>/dev/null || echo "unknown")
+            echo ""
+            echo "  [$container] (status: $status, health: $health)"
+            echo "  $(printf '─%.0s' $(seq 1 ${#container}))"
+            docker logs "$container" 2>&1 | tail -"$tail_lines" | sed 's/^/    /'
+        fi
+    done
+
+    if [ "$found_any" = true ]; then
+        echo ""
+        echo "  ──────────────────────────────────────────"
+    fi
+}
+
+# =============================================================================
 # INTERACTIVE RECOVERY
 # =============================================================================
 
@@ -304,6 +385,9 @@ error_recovery_suggest() {
 
     # Show remediation
     _error_get_remediation "$phase" "$deploy_type"
+
+    # Capture and display relevant container logs
+    _error_capture_container_logs "$phase" "$deploy_type"
 
     echo ""
     echo "==============================================================================="
@@ -355,5 +439,7 @@ error_recovery_suggest() {
 
 export -f error_recovery_suggest
 export -f _error_get_remediation
+export -f _error_capture_container_logs
+export -f _error_get_phase_containers
 
 log_verbose "Error recovery module loaded"
