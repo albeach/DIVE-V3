@@ -376,20 +376,13 @@ if [ -f "$hub_pipeline_file" ]; then
     fi
 fi
 
-# Test 37: Hub pipeline starts sentinel before Phase 8
+# Test 37: Hub pipeline starts sentinel before VAULT_DB_ENGINE in execution engine
 if [ -f "$hub_pipeline_file" ]; then
-    local _start_line
-    _start_line=$(grep -n 'health_sentinel_start' "$hub_pipeline_file" | head -1 | cut -d: -f1)
-    local _phase8_line
-    _phase8_line=$(grep -n 'Phase 8.*Vault Database Engine' "$hub_pipeline_file" | head -1 | cut -d: -f1)
-    if [ -n "$_start_line" ] && [ -n "$_phase8_line" ]; then
-        if [ "$_start_line" -lt "$_phase8_line" ]; then
-            assert_eq "0" "0" "hub pipeline: sentinel starts before Phase 8 (line $_start_line < $_phase8_line)"
-        else
-            assert_eq "before" "after" "hub pipeline: sentinel should start before Phase 8"
-        fi
+    if grep -q 'VAULT_DB_ENGINE.*health_sentinel_start\|health_sentinel_start.*VAULT_DB_ENGINE' "$hub_pipeline_file" || \
+       grep -B5 'health_sentinel_start.*hub.*dive-hub' "$hub_pipeline_file" | grep -q 'VAULT_DB_ENGINE'; then
+        assert_eq "0" "0" "hub pipeline: sentinel starts before VAULT_DB_ENGINE phase"
     else
-        assert_eq "found" "missing" "hub pipeline: sentinel start and Phase 8 lines should exist"
+        assert_eq "found" "missing" "hub pipeline: sentinel should start before VAULT_DB_ENGINE"
     fi
 fi
 

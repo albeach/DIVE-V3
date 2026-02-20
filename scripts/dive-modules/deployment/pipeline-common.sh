@@ -480,9 +480,84 @@ deployment_print_failure() {
 }
 
 # =============================================================================
+# PHASE REGISTRY
+# =============================================================================
+# Declarative phase registration for pipeline execution.
+# Phases are stored in parallel arrays (compatible with bash 4+).
+#
+# Usage:
+#   pipeline_clear_phases
+#   pipeline_register_phase 1 "VAULT_BOOTSTRAP" "Vault Bootstrap" "hub_phase_vault_bootstrap" "standard" "" ""
+#   pipeline_register_phase 8 "VAULT_DB_ENGINE" "Vault DB Engine" "hub_phase_vault_db_engine" "non_fatal" "" "Backend will use static credentials"
+#   pipeline_register_phase 6 "BUILD" "Build" "hub_phase_build" "direct" "" ""
+# =============================================================================
+
+# Registry arrays
+_PIPELINE_REG_NUMS=()
+_PIPELINE_REG_NAMES=()
+_PIPELINE_REG_LABELS=()
+_PIPELINE_REG_FUNCS=()
+_PIPELINE_REG_MODES=()       # standard | non_fatal | direct
+_PIPELINE_REG_STATES=()      # state transition before phase (empty = none)
+_PIPELINE_REG_WARN_MSGS=()   # non-fatal failure message
+
+##
+# Clear all registered phases
+##
+pipeline_clear_phases() {
+    _PIPELINE_REG_NUMS=()
+    _PIPELINE_REG_NAMES=()
+    _PIPELINE_REG_LABELS=()
+    _PIPELINE_REG_FUNCS=()
+    _PIPELINE_REG_MODES=()
+    _PIPELINE_REG_STATES=()
+    _PIPELINE_REG_WARN_MSGS=()
+}
+
+##
+# Register a pipeline phase
+#
+# Arguments:
+#   $1 - Phase number (display order)
+#   $2 - Phase name (e.g., VAULT_BOOTSTRAP)
+#   $3 - Display label (e.g., "Vault Bootstrap")
+#   $4 - Function to execute
+#   $5 - Mode: "standard" (fatal+circuit breaker), "non_fatal" (warn+circuit breaker), "direct" (no circuit breaker)
+#   $6 - State transition before phase (empty for none, e.g., "DEPLOYING")
+#   $7 - Warning message for non-fatal failures
+##
+pipeline_register_phase() {
+    _PIPELINE_REG_NUMS+=("${1}")
+    _PIPELINE_REG_NAMES+=("${2}")
+    _PIPELINE_REG_LABELS+=("${3}")
+    _PIPELINE_REG_FUNCS+=("${4}")
+    _PIPELINE_REG_MODES+=("${5:-standard}")
+    _PIPELINE_REG_STATES+=("${6:-}")
+    _PIPELINE_REG_WARN_MSGS+=("${7:-}")
+}
+
+##
+# Get count of registered phases
+##
+pipeline_get_phase_count() {
+    echo "${#_PIPELINE_REG_NUMS[@]}"
+}
+
+##
+# Get all registered phase names (space-separated)
+##
+pipeline_get_phase_names() {
+    echo "${_PIPELINE_REG_NAMES[*]}"
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
+export -f pipeline_clear_phases
+export -f pipeline_register_phase
+export -f pipeline_get_phase_count
+export -f pipeline_get_phase_names
 export -f deployment_acquire_lock
 export -f deployment_release_lock
 export -f deployment_run_phase
