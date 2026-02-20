@@ -814,12 +814,17 @@ hub_deploy() {
     local resume_mode=false
     export DIVE_SKIP_PHASES=""
     export DIVE_ONLY_PHASE=""
+    export DIVE_FORCE_BUILD="false"
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --resume)
                 resume_mode=true
+                shift
+                ;;
+            --force-build)
+                DIVE_FORCE_BUILD="true"
                 shift
                 ;;
             --skip-phase)
