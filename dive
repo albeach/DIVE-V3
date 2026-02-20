@@ -6,17 +6,23 @@
 #   ./dive [options] [command] [subcommand] [args...]
 #
 # Global Options:
-#   --env local|gcp|pilot    Set environment (default: local)
-#   --instance usa|fra|deu   Set instance (default: usa)
-#   --dry-run                Show what would be done without executing
-#   --verbose                Show detailed output
-#   --quiet                  Suppress non-essential output
+#   --env local|dev|staging|pilot  Set environment (default: local)
+#   --instance usa|fra|deu         Set instance (default: usa)
+#   --domain <suffix>              Set domain suffix (e.g., myorg.com)
+#   --cloud-provider aws|gcp|local Set cloud provider explicitly
+#   --secrets-provider vault|gcp|aws|local  Set secrets provider
+#   --non-interactive              Skip all prompts, use defaults (CI/CD mode)
+#   --yes / -y                     Alias for --non-interactive
+#   --dry-run / -n                 Show what would be done without executing
+#   --verbose / -v                 Show detailed output
+#   --quiet / -q                   Suppress non-essential output
 #
 # Examples:
 #   ./dive up                      # Start locally with defaults
 #   ./dive --dry-run deploy        # Preview full deployment
-#   ./dive --env gcp up            # Start with GCP secrets
-#   ./dive pilot up                # Start on remote pilot VM
+#   ./dive --env dev hub deploy    # Deploy hub in dev environment
+#   ./dive --non-interactive --domain myorg.com hub deploy  # CI/CD mode
+#   ./dive --yes nuke              # Non-interactive nuke
 # =============================================================================
 
 set -e
@@ -69,6 +75,22 @@ while [[ $# -gt 0 ]]; do
             QUIET=true
             shift
             ;;
+        --non-interactive|--yes|-y)
+            export DIVE_NON_INTERACTIVE=true
+            shift
+            ;;
+        --domain)
+            export DIVE_DOMAIN_SUFFIX="$2"
+            shift 2
+            ;;
+        --cloud-provider)
+            export DIVE_CLOUD_PROVIDER="$2"
+            shift 2
+            ;;
+        --secrets-provider)
+            export SECRETS_PROVIDER="$2"
+            shift 2
+            ;;
         -h|--help)
             source "${MODULES_DIR}/utilities/help.sh"
             cmd_help
@@ -82,7 +104,7 @@ done
 
 # Guard against misplaced global flags after the command
 for arg in "$@"; do
-    if [[ "$arg" == "--instance" || "$arg" == "--env" ]]; then
+    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--domain" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" ]]; then
         log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
         exit 1
     fi

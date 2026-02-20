@@ -215,20 +215,31 @@ spoke_deploy() {
         local _hub_containers=0
         _hub_containers=$(docker ps -q --filter "name=dive-hub" 2>/dev/null | wc -l | tr -d ' ')
         if [ "$_hub_containers" -eq 0 ]; then
-            echo ""
-            echo "============================================"
-            echo "  NO HUB DETECTED"
-            echo "============================================"
-            echo "  Enter the Hub's base API domain to federate"
-            echo "  (e.g., dev-usa-api.dive25.com)"
-            echo ""
-            echo "  Press Enter or wait 30s for standalone mode."
-            echo "============================================"
-            echo -n "  Hub domain: "
-
             local _hub_domain=""
-            read -t 30 _hub_domain || true
-            echo ""
+
+            if is_interactive; then
+                echo ""
+                echo "============================================"
+                echo "  NO HUB DETECTED"
+                echo "============================================"
+                echo "  Enter the Hub's base API domain to federate"
+                echo "  (e.g., dev-usa-api.dive25.com)"
+                echo ""
+                echo "  Press Enter or wait 30s for standalone mode."
+                echo "============================================"
+                echo -n "  Hub domain: "
+
+                read -t 30 _hub_domain || true
+                echo ""
+            else
+                # Non-interactive: use DIVE_HUB_DOMAIN env var or default to standalone
+                _hub_domain="${DIVE_HUB_DOMAIN:-}"
+                if [ -n "$_hub_domain" ]; then
+                    log_info "Using Hub domain from DIVE_HUB_DOMAIN: $_hub_domain"
+                else
+                    log_info "Non-interactive mode: no DIVE_HUB_DOMAIN set, using standalone mode"
+                fi
+            fi
 
             if [ -n "$_hub_domain" ]; then
                 # Strip protocol prefix if accidentally included

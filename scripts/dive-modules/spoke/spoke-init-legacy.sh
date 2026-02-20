@@ -181,10 +181,14 @@ _spoke_init_legacy() {
             echo ""
             echo "  This may cause port conflicts if multiple non-NATO codes are used."
             echo ""
-            read -p "  Continue anyway? (yes/no): " confirm
-            if [ "$confirm" != "yes" ]; then
-                log_info "Cancelled"
-                return 1
+            if is_interactive; then
+                read -p "  Continue anyway? (yes/no): " confirm
+                if [ "$confirm" != "yes" ]; then
+                    log_info "Cancelled"
+                    return 1
+                fi
+            else
+                log_warn "Non-interactive mode: auto-confirming non-NATO code"
             fi
         else
             log_info "Partner nation detected: $instance_code (will use offsets 32-39)"

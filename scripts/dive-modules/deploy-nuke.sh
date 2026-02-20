@@ -330,8 +330,12 @@ _nuke_dry_run() {
 # Returns: 0 if confirmed, 1 if cancelled
 ##
 _nuke_confirm_destruction() {
-    # Skip if already confirmed via flag
+    # Skip if already confirmed via flag or non-interactive mode
     if [ "$confirm_flag" = true ]; then
+        return 0
+    fi
+    if ! is_interactive; then
+        log_warn "Non-interactive mode: auto-confirming nuke"
         return 0
     fi
 

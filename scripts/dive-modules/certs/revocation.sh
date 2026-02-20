@@ -517,14 +517,18 @@ cert_emergency_rotate() {
     log_info "==================================================================="
 
     if [ "$force" != true ]; then
-        echo ""
-        log_warn "This will REVOKE and REISSUE certificates, then restart containers."
-        log_warn "Services will be briefly unavailable during rotation."
-        echo ""
-        read -rp "Type 'ROTATE' to confirm: " confirm
-        if [ "$confirm" != "ROTATE" ]; then
-            log_info "Aborted"
-            return 0
+        if is_interactive; then
+            echo ""
+            log_warn "This will REVOKE and REISSUE certificates, then restart containers."
+            log_warn "Services will be briefly unavailable during rotation."
+            echo ""
+            read -rp "Type 'ROTATE' to confirm: " confirm
+            if [ "$confirm" != "ROTATE" ]; then
+                log_info "Aborted"
+                return 0
+            fi
+        else
+            log_warn "Non-interactive mode: auto-confirming certificate rotation"
         fi
     fi
 

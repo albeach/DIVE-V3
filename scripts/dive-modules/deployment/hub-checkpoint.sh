@@ -266,8 +266,8 @@ hub_checkpoint_clear_all() {
         return 0
     fi
 
-    # Confirm before clearing (unless confirm flag passed)
-    if [ "$confirm_flag" != "confirm" ]; then
+    # Confirm before clearing (unless confirm flag passed or non-interactive)
+    if [ "$confirm_flag" != "confirm" ] && is_interactive; then
         log_warn "This will remove all hub checkpoints"
         log_warn "Next hub deployment will run from scratch"
         read -p "Are you sure? (yes/no): " -r
@@ -275,6 +275,8 @@ hub_checkpoint_clear_all() {
             log_info "Hub checkpoint clear cancelled"
             return 1
         fi
+    elif [ "$confirm_flag" != "confirm" ]; then
+        log_warn "Non-interactive mode: auto-confirming checkpoint clear"
     fi
 
     # Remove all checkpoint files
