@@ -129,7 +129,7 @@ module_hub() {
             if type diag_full_report &>/dev/null; then
                 diag_full_report "hub" "USA"
             else
-                log_error "Diagnostics module not available"
+                log_error "Diagnostics module not available. Try: ./dive hub deploy first"
                 return 1
             fi
             ;;
@@ -137,7 +137,7 @@ module_hub() {
             if type pipeline_show_history &>/dev/null; then
                 pipeline_show_history "hub" "USA" "${1:-10}"
             else
-                log_error "History module not available"
+                log_error "History module not available. Try: ./dive hub deploy first"
                 return 1
             fi
             ;;
@@ -154,7 +154,7 @@ module_hub() {
                     pipeline_state_show "hub" "USA"
                 fi
             else
-                log_error "State module not available"
+                log_error "State module not available. Try: ./dive hub deploy first"
                 return 1
             fi
             ;;
@@ -166,26 +166,28 @@ module_hub() {
             shift || true
             case "$sub" in
                 list)    hub_spokes_list "$@" ;;
-                *)       echo "Usage: ./dive hub spokes <list>" ;;
+                *)       log_error "Unknown spokes subcommand. Usage: ./dive hub spokes list" ;;
             esac
             ;;
         help|*)
             echo "Usage: ./dive hub <command> [OPTIONS]"
             echo ""
             echo "Commands:"
-            echo "  deploy    Full hub deployment"
-            echo "  up        Start hub services"
-            echo "  down      Stop hub services"
-            echo "  status    Show hub status"
-            echo "  phases    Show pipeline phase status"
-            echo "  state     Show deployment state (--repair to fix inconsistencies)"
-            echo "  diagnose  Run diagnostic checks (containers, certs, ports, disk)"
-            echo "  history   Show recent deployment history"
-            echo "  verify    Run deployment validation tests"
-            echo "  reset     Reset hub to clean state"
-            echo "  logs      View hub logs"
-            echo "  seed      Seed database with test data"
-            echo "  spokes    Manage registered spokes"
+            echo "  deploy              Full hub deployment"
+            echo "  up / start          Start hub services"
+            echo "  down / stop         Stop hub services"
+            echo "  status              Show hub status"
+            echo "  verify              Run deployment validation tests"
+            echo "  reset               Reset hub to clean state"
+            echo "  logs [service]      View hub logs"
+            echo "  seed                Seed database with test data"
+            echo "  spokes              Manage registered spokes"
+            echo ""
+            echo "Pipeline & Diagnostics:"
+            echo "  phases [--timing]   Show pipeline phase status (optional timing)"
+            echo "  state [--repair]    Show deployment state (--repair to fix inconsistencies)"
+            echo "  diagnose            Run diagnostic checks (containers, certs, ports, disk)"
+            echo "  history [N]         Show recent deployment history (default: last 10)"
             echo ""
             echo "Deploy Options:"
             echo "  --resume               Resume from last checkpoint"
@@ -195,25 +197,22 @@ module_hub() {
             echo "  --only-phase <PHASE>   Run only the specified phase"
             echo "  --force-build          Force rebuild all Docker images (bypass cache)"
             echo ""
-            echo "Phase Options:"
-            echo "  ./dive hub phases --timing    Show phase durations"
-            echo ""
             echo "Phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION"
             echo "        MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG"
             echo "        REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
             echo ""
             echo "Examples:"
-            echo "  ./dive hub deploy --resume"
-            echo "  ./dive hub deploy --dry-run"
-            echo "  ./dive hub deploy --from-phase SERVICES"
-            echo "  ./dive hub deploy --skip-phase SEEDING --skip-phase KAS_INIT"
-            echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG"
-            echo "  ./dive hub deploy --force-build"
-            echo "  ./dive hub phases --timing"
-            echo "  ./dive hub diagnose"
-            echo "  ./dive hub history"
-            echo "  ./dive hub state"
-            echo "  ./dive hub state --repair"
+            echo "  ./dive hub deploy                                  # Full deployment"
+            echo "  ./dive hub deploy --resume                         # Resume from checkpoint"
+            echo "  ./dive hub deploy --dry-run                        # Simulate without changes"
+            echo "  ./dive hub deploy --from-phase SERVICES            # Skip to SERVICES phase"
+            echo "  ./dive hub deploy --skip-phase SEEDING             # Skip SEEDING phase"
+            echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG     # Run single phase"
+            echo "  ./dive hub deploy --force-build                    # Rebuild images"
+            echo "  ./dive hub phases --timing                         # Show phase durations"
+            echo "  ./dive hub diagnose                                # Run diagnostics"
+            echo "  ./dive hub history                                 # Deployment history"
+            echo "  ./dive hub state --repair                          # Fix state inconsistencies"
             ;;
     esac
 }
