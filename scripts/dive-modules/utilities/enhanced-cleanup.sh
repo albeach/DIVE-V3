@@ -55,10 +55,14 @@ enhanced_nuke() {
     echo ""
 
     # Count existing resources
-    local container_count=$(docker ps -aq --filter "name=dive" | wc -l | tr -d ' ')
-    local volume_count=$(docker volume ls --filter "name=dive" -q | wc -l | tr -d ' ')
-    local network_count=$(docker network ls --filter "name=dive" -q | wc -l | tr -d ' ')
-    local image_count=$(docker images --filter "reference=*dive*" -q | wc -l | tr -d ' ')
+    local container_count
+    container_count=$(docker ps -aq --filter "name=dive" | wc -l | tr -d ' ')
+    local volume_count
+    volume_count=$(docker volume ls --filter "name=dive" -q | wc -l | tr -d ' ')
+    local network_count
+    network_count=$(docker network ls --filter "name=dive" -q | wc -l | tr -d ' ')
+    local image_count
+    image_count=$(docker images --filter "reference=*dive*" -q | wc -l | tr -d ' ')
 
     log_verbose "📊 Current DIVE Resources:"
     log_verbose "   Containers: $container_count"
@@ -119,7 +123,8 @@ enhanced_nuke() {
         # Stop containers first
         log_verbose "   Stopping containers..."
         docker ps -q --filter "name=dive" | while read -r cid; do
-            local cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+            local cname
+            cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
             log_verbose "   - Stopping $cname"
             docker stop "$cid" >/dev/null 2>&1 || log_warn "     Failed to stop $cname"
         done
@@ -127,7 +132,8 @@ enhanced_nuke() {
         # Remove containers
         log_verbose "   Removing containers..."
         docker ps -aq --filter "name=dive" | while read -r cid; do
-            local cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+            local cname
+            cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
             log_verbose "   - Removing $cname"
             docker rm -f "$cid" >/dev/null 2>&1 || log_warn "     Failed to remove $cname"
         done
@@ -160,7 +166,8 @@ enhanced_nuke() {
         log_step "Step 3: Removing networks..."
 
         docker network ls --filter "name=dive" -q | while read -r net; do
-            local netname=$(docker network inspect --format='{{.Name}}' "$net")
+            local netname
+            netname=$(docker network inspect --format='{{.Name}}' "$net")
             log_verbose "   - Removing network: $netname"
             docker network rm "$net" >/dev/null 2>&1 || log_warn "     Failed to remove $netname"
         done
@@ -177,7 +184,8 @@ enhanced_nuke() {
         log_step "Step 4: Removing images..."
 
         docker images --filter "reference=*dive*" -q | while read -r img; do
-            local imgname=$(docker inspect --format='{{.RepoTags}}' "$img" | sed 's/\[//;s/\]//')
+            local imgname
+            imgname=$(docker inspect --format='{{.RepoTags}}' "$img" | sed 's/\[//;s/\]//')
             log_verbose "   - Removing image: $imgname"
             docker rmi -f "$img" >/dev/null 2>&1 || log_warn "     Failed to remove $imgname"
         done
@@ -193,7 +201,8 @@ enhanced_nuke() {
     if [ "$prune_cache" = true ]; then
         log_step "Step 5: Pruning Docker build cache..."
 
-        local cache_freed=$(docker builder prune -f 2>&1 | grep "Total reclaimed space" || echo "0B")
+        local cache_freed
+        cache_freed=$(docker builder prune -f 2>&1 | grep "Total reclaimed space" || echo "0B")
         log_verbose "   $cache_freed"
 
         log_success "✓ Build cache pruned"
@@ -202,7 +211,8 @@ enhanced_nuke() {
 
     # Step 6: Remove orphaned volumes (not matching dive* pattern)
     log_step "Checking for orphaned volumes..."
-    local orphaned_count=$(docker volume ls -qf dangling=true | wc -l | tr -d ' ')
+    local orphaned_count
+    orphaned_count=$(docker volume ls -qf dangling=true | wc -l | tr -d ' ')
 
     if [ $orphaned_count -gt 0 ]; then
         log_verbose "   Found $orphaned_count orphaned volume(s):"
@@ -272,13 +282,15 @@ enhanced_cleanup_instance() {
         return 1
     fi
 
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
 
     log_info "🧹 Cleaning up instance: $instance_code"
     echo ""
 
     # Count resources
-    local container_count=$(docker ps -aq --filter "name=dive-spoke-${code_lower}" | wc -l | tr -d ' ')
+    local container_count
+    container_count=$(docker ps -aq --filter "name=dive-spoke-${code_lower}" | wc -l | tr -d ' ')
 
     if [ $container_count -eq 0 ]; then
         log_verbose "✓ No containers found for $instance_code"
@@ -288,7 +300,8 @@ enhanced_cleanup_instance() {
     # Stop containers
     log_step "Stopping containers for $instance_code..."
     docker ps -q --filter "name=dive-spoke-${code_lower}" | while read -r cid; do
-        local cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+        local cname
+        cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
         log_verbose "   - Stopping $cname"
         docker stop "$cid" >/dev/null 2>&1
     done
@@ -296,7 +309,8 @@ enhanced_cleanup_instance() {
     # Remove containers
     log_step "Removing containers for $instance_code..."
     docker ps -aq --filter "name=dive-spoke-${code_lower}" | while read -r cid; do
-        local cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+        local cname
+        cname=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
         log_verbose "   - Removing $cname"
         docker rm -f "$cid" >/dev/null 2>&1
     done
@@ -307,7 +321,8 @@ enhanced_cleanup_instance() {
     # Remove volumes if requested
     if [ "$remove_volumes" = true ]; then
         log_step "Removing volumes for $instance_code..."
-        local volume_count=$(docker volume ls --filter "name=dive-spoke-${code_lower}" -q | wc -l | tr -d ' ')
+        local volume_count
+        volume_count=$(docker volume ls --filter "name=dive-spoke-${code_lower}" -q | wc -l | tr -d ' ')
 
         if [ $volume_count -gt 0 ]; then
             docker volume ls --filter "name=dive-spoke-${code_lower}" -q | while read -r vol; do
