@@ -333,13 +333,15 @@ _nuke_dry_run() {
 # Returns: 0 if confirmed, 1 if cancelled
 ##
 _nuke_confirm_destruction() {
-    # Skip if already confirmed via flag or non-interactive mode
+    # Skip if already confirmed via --confirm/--yes/--force flag
     if [ "$confirm_flag" = true ]; then
         return 0
     fi
+    # SAFETY: Non-interactive mode requires explicit --confirm for destructive ops
     if ! is_interactive; then
-        log_warn "Non-interactive mode: auto-confirming nuke"
-        return 0
+        log_error "Nuke requires --confirm flag in non-interactive mode"
+        log_error "Usage: ./dive --non-interactive nuke all --confirm"
+        return 1
     fi
 
     echo -e "${YELLOW}This action cannot be undone.${NC}"

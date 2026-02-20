@@ -160,8 +160,10 @@ orch_execute_phase() {
 
     log_info "Starting phase: $phase_name"
 
-    # Set deployment state
-    set_deployment_state_enhanced "${ORCH_CONTEXT[instance_code]}" "$phase_name" 2>/dev/null || true
+    # Set deployment state (use orch_db_set_state — the canonical state management function)
+    if type orch_db_set_state &>/dev/null; then
+        orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "$phase_name" 2>/dev/null || true
+    fi
 
     # Execute phase function
     if $phase_function; then
@@ -232,7 +234,9 @@ orch_execute_deployment() {
             # Check if we should continue
             if ! orch_should_continue; then
                 log_error "Orchestration stopped due to error threshold"
-                set_deployment_state_enhanced "$instance_code" "FAILED" "Orchestration failed in phase $phase_name"
+                if type orch_db_set_state &>/dev/null; then
+                    orch_db_set_state "$instance_code" "FAILED" "Orchestration failed in phase $phase_name"
+                fi
                 orch_generate_error_summary "$instance_code"
                 deployment_failed="true"
                 break
@@ -240,9 +244,9 @@ orch_execute_deployment() {
         fi
     done
 
-    # Release lock before returning
-    orch_release_deployment_lock "$instance_code"
+    # Clear trap FIRST to prevent double-release race, then release lock
     trap - EXIT ERR INT TERM
+    orch_release_deployment_lock "$instance_code"
 
     if [ "$deployment_failed" = true ]; then
         return 1
@@ -251,7 +255,9 @@ orch_execute_deployment() {
     # Final success
     local total_time=$(($(date +%s) - ORCH_CONTEXT[start_time]))
     log_success "Orchestrated deployment completed successfully in ${total_time}s"
-    set_deployment_state_enhanced "$instance_code" "COMPLETE"
+    if type orch_db_set_state &>/dev/null; then
+        orch_db_set_state "$instance_code" "COMPLETE"
+    fi
 
     orch_generate_error_summary "$instance_code"
     return 0
