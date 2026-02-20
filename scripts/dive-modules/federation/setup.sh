@@ -35,8 +35,8 @@ fi
 # FEDERATION CONFIGURATION
 # =============================================================================
 
-# Hub Keycloak configuration
-HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:8443}"
+# Hub Keycloak configuration — resolved via SSOT helper
+HUB_KC_URL="${HUB_KC_URL:-$(resolve_hub_public_url "idp")}"
 HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 
 # =============================================================================
@@ -109,8 +109,8 @@ get_spoke_admin_token() {
 
     # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
-    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
-    local spoke_url="https://localhost:${kc_port}"
+    local spoke_url
+    spoke_url=$(resolve_spoke_public_url "$instance_code" "idp")
 
     # Get admin password
     local admin_pass=""
@@ -187,8 +187,8 @@ federation_link() {
 
     # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
-    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
-    local spoke_url="https://localhost:${kc_port}"
+    local spoke_url
+    spoke_url=$(resolve_spoke_public_url "$instance_code" "idp")
     local spoke_realm="dive-v3-broker-${code_lower}"
 
     # Step 3: Create IdP on Hub for this Spoke
@@ -349,8 +349,8 @@ federation_configure_mappers() {
 
     # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
-    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
-    local spoke_url="https://localhost:${kc_port}"
+    local spoke_url
+    spoke_url=$(resolve_spoke_public_url "$instance_code" "idp")
     local spoke_realm="dive-v3-broker-${code_lower}"
 
     # Get client ID
@@ -766,12 +766,10 @@ _federation_link_direct() {
     # URL Strategy: Dual URLs for browser vs server-to-server
     local source_public_url source_internal_url
     if [ "$source_upper" = "USA" ]; then
-        source_public_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
+        source_public_url=$(resolve_hub_public_url "idp")
         source_internal_url="https://dive-hub-keycloak:8443"
     else
-        local _kc_port
-        _kc_port=$(_get_keycloak_port "$source_upper")
-        source_public_url="https://localhost:${_kc_port}"
+        source_public_url=$(resolve_spoke_public_url "$source_upper" "idp")
         source_internal_url="https://dive-spoke-${source_lower}-keycloak:8443"
     fi
 
@@ -942,16 +940,7 @@ federation_status() {
 
 # Resolve Hub API URL for CLI management operations
 _fed_hub_api_url() {
-    if [ -n "${HUB_API_URL:-}" ]; then
-        echo "$HUB_API_URL"
-    elif [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
-        local _env_prefix _base_domain
-        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
-        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
-        echo "https://${_env_prefix}-usa-api.${_base_domain}"
-    else
-        echo "https://localhost:${BACKEND_PORT:-4000}"
-    fi
+    resolve_hub_public_url "api"
 }
 
 # Get admin key for CLI API calls

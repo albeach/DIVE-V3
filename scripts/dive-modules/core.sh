@@ -289,8 +289,8 @@ ensure_client_https_redirects() {
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
     local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
-    local base_url="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
-    local api_url="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
+    local base_url="${NEXT_PUBLIC_BASE_URL:-$(resolve_hub_public_url "app")}"
+    local api_url="${NEXT_PUBLIC_API_URL:-$(resolve_hub_public_url "api")}"
     local extra_web_origins="${WEB_ORIGINS_EXTRA:-}"
     local redirect_candidates=("${base_url}/*" "https://localhost:${FRONTEND_PORT:-3000}/*" "https://localhost:3003/*")
     local web_candidates=("${base_url}" "${api_url}" "https://localhost:${FRONTEND_PORT:-3000}" "https://localhost:3003" "https://localhost:${BACKEND_PORT:-4000}" "https://localhost:4003")
@@ -352,6 +352,12 @@ ensure_webauthn_policy() {
     if [ -z "$rp_id" ] && [ -n "${NEXT_PUBLIC_KEYCLOAK_URL:-}" ]; then
         # Strip scheme/port/path to leave host only for RP ID
         rp_id=$(echo "$NEXT_PUBLIC_KEYCLOAK_URL" | sed 's#^[a-zA-Z]*://##' | cut -d/ -f1 | cut -d: -f1)
+    fi
+    if [ -z "$rp_id" ]; then
+        # Derive from hub public URL if no explicit RP ID
+        local _hub_idp_url
+        _hub_idp_url=$(resolve_hub_public_url "idp")
+        rp_id=$(echo "$_hub_idp_url" | sed 's#^[a-zA-Z]*://##' | cut -d/ -f1 | cut -d: -f1)
     fi
     rp_id="${rp_id:-localhost}"
 
