@@ -64,19 +64,24 @@ test_cli_core_module() {
 }
 
 ##
-# Test federation.sh module
+# Test federation/setup.sh module
 #
 test_cli_federation_module() {
-    log_verbose "Testing federation.sh module..."
+    log_verbose "Testing federation/setup.sh module..."
+
+    # Check syntax first
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
+        log_error "Syntax error in federation/setup.sh"
+        return 1
+    fi
 
     # Source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation.sh"; then
-        log_error "Failed to source federation.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
+        log_error "Failed to source federation/setup.sh"
         return 1
     fi
 
     # Test federation functions exist
-    # Functions available via federation/setup.sh (sourced by federation.sh shim)
     local required_functions=(
         "federation_status"
         "get_hub_admin_token"
@@ -178,11 +183,11 @@ test_cli_db_module() {
 # Test env-sync.sh module
 #
 test_cli_env_sync_module() {
-    log_verbose "Testing env-sync.sh module..."
+    log_verbose "Testing configuration/env-sync.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" 2>/dev/null; then
-        log_error "Syntax error in env-sync.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" 2>/dev/null; then
+        log_error "Syntax error in configuration/env-sync.sh"
         return 1
     fi
 
@@ -216,14 +221,14 @@ test_cli_orchestration_state_db_module() {
 }
 
 ##
-# Test federation-state-db.sh module
+# Test federation/health.sh module (formerly federation-state-db.sh)
 #
 test_cli_federation_state_db_module() {
-    log_verbose "Testing federation-state-db.sh module..."
+    log_verbose "Testing federation/health.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" 2>/dev/null; then
-        log_error "Syntax error in federation-state-db.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" 2>/dev/null; then
+        log_error "Syntax error in federation/health.sh"
         return 1
     fi
 
@@ -232,6 +237,20 @@ test_cli_federation_state_db_module() {
         log_error "Failed to source federation/health.sh"
         return 1
     fi
+
+    # Verify key functions exist
+    local required_functions=(
+        "fed_db_upsert_link"
+        "fed_db_list_links"
+        "federation_health_dashboard"
+    )
+
+    for func in "${required_functions[@]}"; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Required function missing: $func"
+            return 1
+        fi
+    done
 
     return 0
 }
@@ -834,6 +853,12 @@ test_run_cli_module_tests() {
 # =============================================================================
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-    # Script is being run directly
+    # Script is being run directly — bootstrap DIVE_ROOT and common.sh
+    if [ -z "${DIVE_ROOT:-}" ]; then
+        export DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    fi
+    if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
+    fi
     test_run_cli_module_tests
 fi
