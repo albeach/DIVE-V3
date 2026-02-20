@@ -479,6 +479,58 @@ test_cli_config_validator() {
 }
 
 ##
+# Test deployment summary functions (Phase 4)
+#
+test_cli_deploy_summary() {
+    log_verbose "Testing deployment summary module..."
+
+    local summary="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-summary.sh"
+    if [ ! -f "$summary" ]; then
+        log_error "deployment-summary.sh not found"
+        return 1
+    fi
+
+    source "$summary"
+
+    # Verify functions exist
+    for func in deployment_pre_summary_hub deployment_pre_summary_spoke deployment_post_summary; do
+        if ! type "$func" &>/dev/null; then
+            log_error "Function $func not found"
+            return 1
+        fi
+    done
+
+    # Test hub pre-summary in non-interactive mode (should not prompt)
+    local output
+    output=$(DIVE_NON_INTERACTIVE=true deployment_pre_summary_hub 2>&1)
+    if [ $? -ne 0 ]; then
+        log_error "Hub pre-summary failed in non-interactive mode"
+        return 1
+    fi
+    if ! echo "$output" | grep -q "Hub Deployment Summary"; then
+        log_error "Hub pre-summary missing header"
+        return 1
+    fi
+
+    # Test spoke pre-summary in non-interactive mode
+    output=$(DIVE_NON_INTERACTIVE=true deployment_pre_summary_spoke "FRA" 2>&1)
+    if [ $? -ne 0 ]; then
+        log_error "Spoke pre-summary failed in non-interactive mode"
+        return 1
+    fi
+    if ! echo "$output" | grep -q "Spoke Deployment Summary"; then
+        log_error "Spoke pre-summary missing header"
+        return 1
+    fi
+
+    # Test post-summary doesn't crash
+    deployment_post_summary "hub" "USA" "120" >/dev/null 2>&1
+    deployment_post_summary "spoke" "FRA" "60" >/dev/null 2>&1
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -490,6 +542,7 @@ test_run_cli_module_tests() {
         "test_cli_flags_parsing"
         "test_cli_config_loader"
         "test_cli_config_validator"
+        "test_cli_deploy_summary"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
