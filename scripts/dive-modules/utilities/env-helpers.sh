@@ -11,13 +11,15 @@
 
 get_instance_ports() {
     local code="$1"
-    local code_upper=$(upper "$code")
+    local code_upper
+    code_upper=$(upper "$code")
     local port_offset=0
 
     # SSOT: Always load NATO database for port calculations
     if [ -z "${NATO_COUNTRIES_LOADED:-}" ]; then
         local nato_script="${DIVE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/scripts/nato-countries.sh"
         if [ -f "$nato_script" ]; then
+            # shellcheck source=../../nato-countries.sh
             source "$nato_script" 2>/dev/null
             export NATO_COUNTRIES_LOADED=1
         fi
@@ -121,13 +123,15 @@ wait_for_keycloak_admin_api_ready() {
     fi
 
     # Check 2: Container must be healthy
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local elapsed=0
     local healthy=false
 
     # PERFORMANCE FIX (2026-02-11): Skip wait loop if already healthy
     # By CONFIGURATION phase, containers are already healthy from DEPLOYMENT phase
-    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+    local health_status
+    health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
     if [ "$health_status" = "healthy" ]; then
         healthy=true
         log_verbose "Container already healthy (0s)"
@@ -169,7 +173,8 @@ wait_for_keycloak_admin_api_ready() {
             fi
         else
             # Spoke: Get from GCP or environment
-            local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+            local code_upper
+            code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
             local pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
             admin_password="${!pass_var:-}"
 
@@ -216,7 +221,8 @@ wait_for_keycloak_admin_api_ready() {
 
         # Log errors for debugging (verbose only)
         if echo "$auth_response" | grep -q "error"; then
-            local error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
+            local error_desc
+            error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
             if [ -n "$error_desc" ] && [ $((elapsed % 30)) -eq 0 ]; then
                 log_verbose "Authentication error: $error_desc (will retry)"
             fi

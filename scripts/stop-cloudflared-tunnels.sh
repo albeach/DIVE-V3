@@ -31,14 +31,15 @@ stop_tunnel() {
     local pid_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.pid"
 
     if [ -f "${pid_file}" ]; then
-        local pid=$(cat "${pid_file}")
+        local pid
+        pid=$(cat "${pid_file}")
 
         if ps -p "${pid}" > /dev/null 2>&1; then
             echo -e "${GREEN}🛑 Stopping ${instance} tunnel (PID: ${pid})...${NC}"
             kill "${pid}" 2>/dev/null || true
 
             # Wait for process to stop (max 5 seconds)
-            for i in {1..5}; do
+            for _i in {1..5}; do
                 if ! ps -p "${pid}" > /dev/null 2>&1; then
                     echo -e "${GREEN}✅ ${instance} tunnel stopped${NC}"
                     rm -f "${pid_file}"
@@ -59,7 +60,8 @@ stop_tunnel() {
         fi
     else
         # Try to find and kill by process name
-        local pids=$(pgrep -f "cloudflared.*${instance}" || true)
+        local pids
+        pids=$(pgrep -f "cloudflared.*${instance}" || true)
         if [ -n "${pids}" ]; then
             echo -e "${GREEN}🛑 Stopping ${instance} tunnel (found by name)...${NC}"
             echo "${pids}" | xargs kill 2>/dev/null || true
@@ -94,3 +96,6 @@ else
     echo -e "${GREEN}✅ No cloudflared processes remaining${NC}"
 fi
 echo ""
+
+# sc2034-anchor
+: "${RED:-}"

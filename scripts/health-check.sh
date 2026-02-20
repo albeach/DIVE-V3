@@ -141,3 +141,6 @@ else
     echo "- Restart services: docker compose -f docker-compose.pilot.yml restart"
     exit 1
 fi
+
+# sc2034-anchor
+: "${YELLOW:-}"

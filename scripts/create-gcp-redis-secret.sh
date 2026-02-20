@@ -39,11 +39,13 @@ PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 24)
 
 # Create secret
 log_info "Creating secret in GCP Secret Manager..."
+creator_label="$(whoami)@$(hostname)"
+created_at="$(date -u +%Y%m%d-%H%M%S)"
 if echo -n "$PASSWORD" | gcloud secrets create "$SECRET_NAME" \
     --project="$PROJECT" \
     --data-file=- \
     --replication-policy="automatic" \
-    --labels=environment="${ENVIRONMENT:-local}",managed-by=dive-cli,created-by="$(whoami)@$(hostname)",created-at="$(date -u +%Y%m%d-%H%M%S)"; then
+    --labels="environment=${ENVIRONMENT:-local},managed-by=dive-cli,created-by=${creator_label},created-at=${created_at}"; then
     log_success "✓ Secret created: $SECRET_NAME"
     log_info "Password length: ${#PASSWORD} characters"
     log_info "Project: $PROJECT"

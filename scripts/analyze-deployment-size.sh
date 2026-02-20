@@ -93,7 +93,7 @@ echo "-------------------------"
 echo ""
 
 # Convert sizes to MB for calculation
-frontend_mb=$(echo "${FRONTEND_SIZE}" | sed 's/GB/000/;s/MB//;s/[^0-9.]//g')
+_frontend_mb=$(echo "${FRONTEND_SIZE}" | sed 's/GB/000/;s/MB//;s/[^0-9.]//g')
 backend_mb=$(echo "${BACKEND_SIZE}" | sed 's/GB/000/;s/MB//;s/[^0-9.]//g')
 
 echo "Expected results after optimization:"

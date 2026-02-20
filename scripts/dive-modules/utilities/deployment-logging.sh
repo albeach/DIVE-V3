@@ -148,3 +148,6 @@ export -f deployment_log_start
 export -f deployment_log_path
 export -f deployment_log_stop
 export -f deployment_log_cleanup
+
+# sc2034-anchor
+: "${DEPLOYMENT_LOG_TEE_PID:-}"

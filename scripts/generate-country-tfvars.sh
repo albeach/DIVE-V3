@@ -108,10 +108,10 @@ generate_tfvars() {
     fi
 
     # Get country data using unified functions
-    local name flag timezone
+    local name flag _timezone
     name=$(get_any_country_name "$code")
     flag=$(get_any_country_flag "$code")
-    timezone=$(get_any_country_timezone "$code")
+    _timezone=$(get_any_country_timezone "$code")
     eval "$(get_any_country_ports "$code")"
 
     # Determine if this is the hub
@@ -241,8 +241,10 @@ TFVARS
         fi
         local hub_lower="${HUB_CODE,,}"
         # Get hub ports separately
-        local hub_port_output=$(get_any_country_ports "$HUB_CODE")
-        local hub_port=$(echo "$hub_port_output" | grep SPOKE_KEYCLOAK_HTTPS_PORT | cut -d= -f2)
+        local hub_port_output
+        hub_port_output=$(get_any_country_ports "$HUB_CODE")
+        local hub_port
+        hub_port=$(echo "$hub_port_output" | grep SPOKE_KEYCLOAK_HTTPS_PORT | cut -d= -f2)
 
         cat >> "$tfvars_file" << TFVARS
 federation_partners = {

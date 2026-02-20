@@ -51,7 +51,8 @@ spoke_policy_help() {
 spoke_policy_status() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -67,13 +68,19 @@ spoke_policy_status() {
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
     echo -e "${CYAN}Hub Policy Version:${NC}"
 
-    local hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    local hub_version
+    hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
     if [ -n "$hub_version" ] && echo "$hub_version" | grep -q '"version"'; then
-        local version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local timestamp=$(echo "$hub_version" | grep -o '"timestamp"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local bundle_id=$(echo "$hub_version" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local signed_at=$(echo "$hub_version" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local version
+        version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash
+        hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local timestamp
+        timestamp=$(echo "$hub_version" | grep -o '"timestamp"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local bundle_id
+        bundle_id=$(echo "$hub_version" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local signed_at
+        signed_at=$(echo "$hub_version" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
 
         echo "  Version:           ${version:-unknown}"
         echo "  Hash:              ${hash:0:16}..."
@@ -89,21 +96,26 @@ spoke_policy_status() {
 
     # Get local OPA status
     echo -e "${CYAN}Local OPA Status:${NC}"
-    local opa_health=$(curl -s "http://localhost:8181/health" --max-time 5 2>/dev/null)
+    local opa_health
+    opa_health=$(curl -s "http://localhost:8181/health" --max-time 5 2>/dev/null)
     if [ -n "$opa_health" ]; then
         echo -e "  Status:            ${GREEN}✓ Running${NC}"
 
         # Query for loaded policies
-        local policies=$(curl -s "http://localhost:8181/v1/policies" --max-time 5 2>/dev/null)
+        local policies
+        policies=$(curl -s "http://localhost:8181/v1/policies" --max-time 5 2>/dev/null)
         if [ -n "$policies" ]; then
-            local policy_count=$(echo "$policies" | grep -o '"id"' | wc -l | tr -d ' ')
+            local policy_count
+            policy_count=$(echo "$policies" | grep -o '"id"' | wc -l | tr -d ' ')
             echo "  Loaded Policies:   $policy_count"
         fi
 
         # Try to get guardrails metadata
-        local guardrails=$(curl -s "http://localhost:8181/v1/data/dive/base/guardrails/metadata" --max-time 5 2>/dev/null)
+        local guardrails
+        guardrails=$(curl -s "http://localhost:8181/v1/data/dive/base/guardrails/metadata" --max-time 5 2>/dev/null)
         if echo "$guardrails" | grep -q '"version"'; then
-            local local_version=$(echo "$guardrails" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+            local local_version
+            local_version=$(echo "$guardrails" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
             echo "  Guardrails Ver:    $local_version"
         fi
     else
@@ -114,11 +126,13 @@ spoke_policy_status() {
 
     # Get OPAL client status
     echo -e "${CYAN}OPAL Client Status:${NC}"
-    local opal_health=$(curl -s "http://localhost:7000/healthcheck" --max-time 5 2>/dev/null)
+    local opal_health
+    opal_health=$(curl -s "http://localhost:7000/healthcheck" --max-time 5 2>/dev/null)
     if [ -n "$opal_health" ]; then
         echo -e "  Status:            ${GREEN}✓ Connected${NC}"
 
-        local last_update=$(echo "$opal_health" | grep -o '"last_update"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local last_update
+        last_update=$(echo "$opal_health" | grep -o '"last_update"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         [ -n "$last_update" ] && echo "  Last Update:       $last_update"
     else
         echo -e "  Status:            ${YELLOW}⚠ Not Connected${NC}"
@@ -129,14 +143,17 @@ spoke_policy_status() {
 
     # Show scopes from token if available
     if [ -f "$spoke_dir/.env" ]; then
-        local token=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2- | tr -d '"')
+        local token
+        token=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2- | tr -d '"')
         if [ -n "$token" ] && [ "$token" != "" ]; then
             echo -e "${CYAN}Spoke Configuration:${NC}"
             echo "  Token:             ✓ Configured"
 
-            local token_info=$(curl -ks -H "Authorization: Bearer $token" "${hub_url}/api/federation/policy/bundle" --max-time 5 2>/dev/null)
+            local token_info
+            token_info=$(curl -ks -H "Authorization: Bearer $token" "${hub_url}/api/federation/policy/bundle" --max-time 5 2>/dev/null)
             if echo "$token_info" | grep -q '"scopes"'; then
-                local scopes=$(echo "$token_info" | grep -o '"scopes"[[:space:]]*:\s*\[[^]]*\]' | head -1)
+                local scopes
+                scopes=$(echo "$token_info" | grep -o '"scopes"[[:space:]]*:\s*\[[^]]*\]' | head -1)
                 echo "  Scopes:            $scopes"
             fi
         else
@@ -152,7 +169,8 @@ spoke_policy_status() {
 spoke_policy_sync() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Forcing policy sync from Hub..."
@@ -179,15 +197,21 @@ spoke_policy_sync() {
 
     log_info "Fetching policy bundle from hub..."
 
-    local scope="policy:$(lower "$instance_code")"
-    local response=$(curl -ks -H "Authorization: Bearer $token" \
+    local scope
+    scope="policy:$(lower "$instance_code")"
+    local response
+    response=$(curl -ks -H "Authorization: Bearer $token" \
         "${hub_url}/api/opal/bundle/$scope" --max-time 30 2>/dev/null)
 
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
-        local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
-        local signed=$(echo "$response" | grep -o '"signed"[[:space:]]*:[[:space:]]*[a-z]*' | head -1 | cut -d: -f2 | tr -d ' ')
+        local version
+        version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash
+        hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local file_count
+        file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+        local signed
+        signed=$(echo "$response" | grep -o '"signed"[[:space:]]*:[[:space:]]*[a-z]*' | head -1 | cut -d: -f2 | tr -d ' ')
 
         log_success "Policy bundle fetched from hub!"
         echo ""
@@ -208,7 +232,8 @@ spoke_policy_sync() {
         # Verify signature
         if [ "$signed" = "true" ]; then
             log_info "Verifying bundle signature..."
-            local verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${hash}" --max-time 10 2>/dev/null)
+            local verify_result
+            verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${hash}" --max-time 10 2>/dev/null)
             if echo "$verify_result" | grep -q '"verified"[[:space:]]*:[[:space:]]*true'; then
                 log_success "Bundle signature verified ✓"
             else
@@ -217,7 +242,8 @@ spoke_policy_sync() {
         fi
 
     elif echo "$response" | grep -q '"error"'; then
-        local error=$(echo "$response" | grep -o '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local error
+        error=$(echo "$response" | grep -o '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         log_error "Failed to fetch policy bundle: $error"
         return 1
     else
@@ -246,7 +272,8 @@ spoke_policy_verify() {
 
     log_info "Querying local OPA for bundle info..."
 
-    local bundle_info=$(curl -s "http://localhost:8181/v1/data/system/bundle" --max-time 5 2>/dev/null)
+    local bundle_info
+    bundle_info=$(curl -s "http://localhost:8181/v1/data/system/bundle" --max-time 5 2>/dev/null)
 
     if [ -z "$bundle_info" ]; then
         log_warn "Could not query OPA bundle info"
@@ -257,14 +284,17 @@ spoke_policy_verify() {
 
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
 
-    local hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    local hub_version
+    hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
     if ! echo "$hub_version" | grep -q '"version"'; then
         log_error "Could not reach hub to get current version"
         return 1
     fi
 
-    local current_hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local current_version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local current_hash
+    current_hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local current_version
+    current_version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
 
     if [ -z "$current_hash" ]; then
         log_error "No bundle hash available from hub"
@@ -273,13 +303,18 @@ spoke_policy_verify() {
 
     log_info "Verifying bundle signature with hub..."
 
-    local verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${current_hash}" --max-time 10 2>/dev/null)
+    local verify_result
+    verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${current_hash}" --max-time 10 2>/dev/null)
 
     if echo "$verify_result" | grep -q '"verified"[[:space:]]*:[[:space:]]*true'; then
-        local bundle_id=$(echo "$verify_result" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        local signed_at=$(echo "$verify_result" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        local signed_by=$(echo "$verify_result" | grep -o '"signedBy"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        local file_count=$(echo "$verify_result" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+        local bundle_id
+        bundle_id=$(echo "$verify_result" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local signed_at
+        signed_at=$(echo "$verify_result" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local signed_by
+        signed_by=$(echo "$verify_result" | grep -o '"signedBy"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local file_count
+        file_count=$(echo "$verify_result" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
 
         log_success "Bundle Signature: VALID ✓"
         echo ""
@@ -292,7 +327,8 @@ spoke_policy_verify() {
         echo ""
 
     elif echo "$verify_result" | grep -q '"signatureError"'; then
-        local sig_error=$(echo "$verify_result" | grep -o '"signatureError"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local sig_error
+        sig_error=$(echo "$verify_result" | grep -o '"signatureError"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
         log_error "Bundle Signature: INVALID ✗"
         echo ""
@@ -323,11 +359,14 @@ spoke_policy_version() {
     fi
 
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
-    local response=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    local response
+    response=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
 
     if echo "$response" | grep -q '"version"'; then
-        local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        local hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local version
+        version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash
+        hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
 
         echo "Policy Version: $version"
         echo "Hash: ${hash:0:16}..."

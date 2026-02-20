@@ -145,7 +145,8 @@ discover_instances() {
         if [ -d "$DIVE_ROOT/tests/fixtures/federation/spoke-configs" ]; then
             for config_file in "$DIVE_ROOT/tests/fixtures/federation/spoke-configs"/*.json; do
                 if [ -f "$config_file" ]; then
-                    local base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
+                    local base_url
+                    base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
                     if [ -n "$base_url" ] && [ "$base_url" != "null" ]; then
                         instances+=("$base_url")
                     fi
@@ -238,7 +239,8 @@ EOF
     # Add projects for each instance
     local project_count=0
     for instance in "${instances[@]}"; do
-        local instance_name=$(echo "$instance" | sed 's|https://||; s|http://||; s|[:/].*||')
+        local instance_name
+        instance_name=$(echo "$instance" | sed 's|https://||; s|http://||; s|[:/].*||')
         local project_name="${instance_name:-instance$project_count}"
 
         cat >> "$config_file" << EOF
@@ -291,7 +293,8 @@ run_tests() {
     log_info "Timeout: ${TEST_TIMEOUT}s"
     log_info "Retries: $RETRIES"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     # Set environment variables for tests
     export DIVE_TEST_ENV=dynamic
@@ -305,7 +308,8 @@ run_tests() {
     fi
 
     local exit_code=$?
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     log_info "Tests completed in ${duration}s"
@@ -342,7 +346,8 @@ main() {
     echo ""
 
     # Discover instances
-    local instances_string=$(discover_instances)
+    local instances_string
+    instances_string=$(discover_instances)
     IFS=' ' read -ra instances <<< "$instances_string"
 
     if [ ${#instances[@]} -eq 0 ]; then
@@ -362,7 +367,8 @@ main() {
     echo ""
 
     # Generate Playwright config
-    local config_file=$(generate_playwright_config "${instances[@]}")
+    local config_file
+    config_file=$(generate_playwright_config "${instances[@]}")
     log_success "Generated config: $config_file"
     echo ""
 
@@ -389,3 +395,5 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
+# sc2034-anchor
+: "${YELLOW:-}"

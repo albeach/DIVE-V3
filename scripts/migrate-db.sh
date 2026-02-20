@@ -94,8 +94,10 @@ migrate_k8s() {
     fi
 
     # Create migration job
-    kubectl create job --from=cronjob/db-migrate db-migrate-manual-$(date +%s) -n dive-v3 || \
-    kubectl run db-migrate-$(date +%s) \
+    local job_suffix
+    job_suffix="$(date +%s)"
+    kubectl create job --from=cronjob/db-migrate "db-migrate-manual-${job_suffix}" -n dive-v3 || \
+    kubectl run "db-migrate-${job_suffix}" \
         --image=gcr.io/dive25/dive-v3-frontend:latest \
         --restart=Never \
         --namespace=dive-v3 \
@@ -128,4 +130,3 @@ main() {
 }
 
 main
-

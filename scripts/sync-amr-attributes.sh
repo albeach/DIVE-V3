@@ -130,13 +130,15 @@ build_amr_array() {
     local amr='["pwd"'  # All users have password
 
     # Check for OTP credential
-    local has_otp=$(echo "$credentials" | jq 'any(.type == "otp")')
+    local has_otp
+    has_otp=$(echo "$credentials" | jq 'any(.type == "otp")')
     if [ "$has_otp" == "true" ]; then
         amr="${amr},\"otp\""
     fi
 
     # Check for WebAuthn credential
-    local has_webauthn=$(echo "$credentials" | jq 'any(.type == "webauthn" or .type == "webauthn-passwordless")')
+    local has_webauthn
+    has_webauthn=$(echo "$credentials" | jq 'any(.type == "webauthn" or .type == "webauthn-passwordless")')
     if [ "$has_webauthn" == "true" ]; then
         amr="${amr},\"hwk\""
     fi
@@ -152,10 +154,12 @@ update_user_amr() {
     local new_amr="$3"
 
     # Get current user data
-    local user_data=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
+    local user_data
+    user_data=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
         -H "Authorization: Bearer $TOKEN")
 
-    local current_amr=$(echo "$user_data" | jq -r '.attributes.amr // ["pwd"] | tojson')
+    local current_amr
+    current_amr=$(echo "$user_data" | jq -r '.attributes.amr // ["pwd"] | tojson')
 
     if [ "$current_amr" == "$new_amr" ]; then
         log_info "No change needed: ${username} (amr=${current_amr})"
@@ -168,7 +172,8 @@ update_user_amr() {
     fi
 
     # Update the user's AMR attribute
-    local updated_attrs=$(echo "$user_data" | jq --argjson amr "$new_amr" '.attributes.amr = $amr')
+    local updated_attrs
+    updated_attrs=$(echo "$user_data" | jq --argjson amr "$new_amr" '.attributes.amr = $amr')
 
     curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
         -H "Authorization: Bearer $TOKEN" \
@@ -201,9 +206,11 @@ echo ""
 # Function to check if user is federated (has external IdP link)
 is_federated_user() {
     local user_id="$1"
-    local fed_identities=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/federated-identity" \
+    local fed_identities
+    fed_identities=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/federated-identity" \
         -H "Authorization: Bearer $TOKEN")
-    local count=$(echo "$fed_identities" | jq 'length')
+    local count
+    count=$(echo "$fed_identities" | jq 'length')
     [ "$count" -gt 0 ]
 }
 
@@ -264,3 +271,5 @@ echo "    AAL3 = Hardware key (pwd + hwk)"
 echo "═══════════════════════════════════════════════════════════════"
 
 
+# sc2034-anchor
+: "${PROJECT_ROOT:-}" "${SKIPPED:-}" "${UPDATED:-}"

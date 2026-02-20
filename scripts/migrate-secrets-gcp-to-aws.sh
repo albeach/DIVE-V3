@@ -71,8 +71,10 @@ migrate_secret() {
             ;;
     esac
     
-    local full_gcp_name="dive-v3-${gcp_name}-$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')"
-    local full_aws_name="dive-v3-${aws_name}-$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')"
+    local full_gcp_name
+    full_gcp_name="dive-v3-${gcp_name}-$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')"
+    local full_aws_name
+    full_aws_name="dive-v3-${aws_name}-$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')"
     
     log_step "Migrating: $full_gcp_name → $full_aws_name"
     
@@ -220,3 +222,6 @@ main() {
 
 # Run main
 main "$@"
+
+# sc2034-anchor
+: "${REPO_ROOT:-}"

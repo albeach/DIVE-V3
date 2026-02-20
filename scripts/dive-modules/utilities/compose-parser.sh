@@ -97,8 +97,10 @@ compose_get_service_label() {
         fi
     else
         # Fallback: Parse docker compose config output
-        local config=$(${DOCKER_CMD:-docker} compose -f "$compose_file" config 2>/dev/null)
-        local label_value=$(echo "$config" | grep -A 50 "^  $service:" | grep -A 30 "labels:" | grep "$label_key:" | head -n1 | cut -d':' -f2- | xargs)
+        local config
+        config=$(${DOCKER_CMD:-docker} compose -f "$compose_file" config 2>/dev/null)
+        local label_value
+        label_value=$(echo "$config" | grep -A 50 "^  $service:" | grep -A 30 "labels:" | grep "$label_key:" | head -n1 | cut -d':' -f2- | xargs)
         
         echo "$label_value"
     fi
@@ -125,7 +127,8 @@ compose_get_dependencies() {
 
     if command -v yq &>/dev/null; then
         # Extract depends_on keys
-        local deps=$(yq eval ".services.[\"$service\"].depends_on | keys | .[]" "$compose_file" 2>/dev/null)
+        local deps
+        deps=$(yq eval ".services.[\"$service\"].depends_on | keys | .[]" "$compose_file" 2>/dev/null)
 
         if [ -z "$deps" ]; then
             echo "none"
@@ -134,8 +137,10 @@ compose_get_dependencies() {
         fi
     else
         # Fallback: Parse docker compose config output
-        local config=$(${DOCKER_CMD:-docker} compose -f "$compose_file" config 2>/dev/null)
-        local deps=$(echo "$config" | grep -A 20 "^  $service:" | grep -A 10 "depends_on:" | grep "^      [a-z]" | awk '{print $1}' | tr -d ':' | tr '\n' ',')
+        local config
+        config=$(${DOCKER_CMD:-docker} compose -f "$compose_file" config 2>/dev/null)
+        local deps
+        deps=$(echo "$config" | grep -A 20 "^  $service:" | grep -A 10 "depends_on:" | grep "^      [a-z]" | awk '{print $1}' | tr -d ':' | tr '\n' ',')
 
         if [ -z "$deps" ]; then
             echo "none"
@@ -168,7 +173,8 @@ compose_get_label() {
 
     if command -v yq &>/dev/null; then
         # Use proper yq syntax for label lookup
-        local result=$(yq eval ".services.\"$service\".labels.\"$label_key\" // \"\"" "$compose_file" 2>/dev/null | tr -d '"')
+        local result
+        result=$(yq eval ".services.\"$service\".labels.\"$label_key\" // \"\"" "$compose_file" 2>/dev/null | tr -d '"')
         echo "$result"
     else
         # Fallback: Parse docker compose config
@@ -202,11 +208,13 @@ compose_get_services_by_label() {
         return 1
     fi
 
-    local all_services=$(compose_get_services "$compose_file")
+    local all_services
+    all_services=$(compose_get_services "$compose_file")
     local matching_services=""
 
     for service in $all_services; do
-        local value=$(compose_get_label "$service" "$label_key" "$compose_file")
+        local value
+        value=$(compose_get_label "$service" "$label_key" "$compose_file")
         if [ "$value" = "$label_value" ]; then
             matching_services="$matching_services $service"
         fi
@@ -251,7 +259,8 @@ compose_build_dependency_graph() {
         return 1
     fi
 
-    local services=$(compose_get_services "$compose_file")
+    local services
+    services=$(compose_get_services "$compose_file")
 
     # Start JSON object
     echo "{" > "$output_file"
@@ -264,8 +273,10 @@ compose_build_dependency_graph() {
         fi
         first=false
 
-        local deps=$(compose_get_dependencies "$service" "$compose_file")
-        local class=$(compose_get_label "$service" "dive.service.class" "$compose_file")
+        local deps
+        deps=$(compose_get_dependencies "$service" "$compose_file")
+        local class
+        class=$(compose_get_label "$service" "dive.service.class" "$compose_file")
 
         # Default class to "unclassified" if not set
         [ -z "$class" ] && class="unclassified"
@@ -301,13 +312,15 @@ compose_calculate_levels() {
         return 1
     fi
 
-    local services=$(compose_get_services "$compose_file")
+    local services
+    services=$(compose_get_services "$compose_file")
     declare -A service_levels
     local max_level=0
 
     # Calculate level for each service
     for service in $services; do
-        local level=$(_compose_calculate_service_level "$service" "$compose_file" "" 0)
+        local level
+        level=$(_compose_calculate_service_level "$service" "$compose_file" "" 0)
         service_levels["$service"]=$level
         [ $level -gt $max_level ] && max_level=$level
     done
@@ -360,13 +373,16 @@ _compose_calculate_service_level() {
     fi
 
     # Cycle detection
-    if [[ " $path " =~ " $service " ]]; then
-        log_warn "Circular dependency detected: $path -> $service"
-        echo "0"
-        return
-    fi
+    case " $path " in
+        *" $service "*)
+            log_warn "Circular dependency detected: $path -> $service"
+            echo "0"
+            return
+            ;;
+    esac
 
-    local deps=$(compose_get_dependencies "$service" "$compose_file")
+    local deps
+    deps=$(compose_get_dependencies "$service" "$compose_file")
 
     if [ "$deps" = "none" ] || [ -z "$deps" ]; then
         echo "0"
@@ -379,7 +395,8 @@ _compose_calculate_service_level() {
 
     for dep in "${DEP_ARRAY[@]}"; do
         dep=$(echo "$dep" | xargs)  # Trim whitespace
-        local dep_level=$(_compose_calculate_service_level "$dep" "$compose_file" "$path $service" $((depth + 1)))
+        local dep_level
+        dep_level=$(_compose_calculate_service_level "$dep" "$compose_file" "$path $service" $((depth + 1)))
         [ $dep_level -gt $max_dep_level ] && max_dep_level=$dep_level
     done
 
@@ -429,19 +446,27 @@ compose_print_stats() {
         return 1
     fi
 
-    local all_services=$(compose_get_services "$compose_file")
-    local service_count=$(echo "$all_services" | wc -w)
+    local all_services
+    all_services=$(compose_get_services "$compose_file")
+    local service_count
+    service_count=$(echo "$all_services" | wc -w)
 
-    local core_services=$(compose_get_services_by_class "core" "$compose_file" 2>/dev/null || echo "")
-    local core_count=$(echo "$core_services" | wc -w | tr -d ' ')
+    local core_services
+    core_services=$(compose_get_services_by_class "core" "$compose_file" 2>/dev/null || echo "")
+    local core_count
+    core_count=$(echo "$core_services" | wc -w | tr -d ' ')
     [ -z "$core_services" ] && core_count=0
 
-    local stretch_services=$(compose_get_services_by_class "stretch" "$compose_file" 2>/dev/null || echo "")
-    local stretch_count=$(echo "$stretch_services" | wc -w | tr -d ' ')
+    local stretch_services
+    stretch_services=$(compose_get_services_by_class "stretch" "$compose_file" 2>/dev/null || echo "")
+    local stretch_count
+    stretch_count=$(echo "$stretch_services" | wc -w | tr -d ' ')
     [ -z "$stretch_services" ] && stretch_count=0
 
-    local optional_services=$(compose_get_services_by_class "optional" "$compose_file" 2>/dev/null || echo "")
-    local optional_count=$(echo "$optional_services" | wc -w | tr -d ' ')
+    local optional_services
+    optional_services=$(compose_get_services_by_class "optional" "$compose_file" 2>/dev/null || echo "")
+    local optional_count
+    optional_count=$(echo "$optional_services" | wc -w | tr -d ' ')
     [ -z "$optional_services" ] && optional_count=0
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -458,7 +483,8 @@ compose_print_stats() {
     echo ""
     echo "  All Services:"
     for service in $all_services; do
-        local class=$(compose_get_label "$service" "dive.service.class" "$compose_file" 2>/dev/null || echo "unclassified")
+        local class
+        class=$(compose_get_label "$service" "dive.service.class" "$compose_file" 2>/dev/null || echo "unclassified")
         printf "    • %-20s [%s]\n" "$service" "$class"
     done
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -495,7 +521,8 @@ export -f compose_print_stats
 ##
 compose_get_spoke_services() {
     local instance_code="${1:?instance code required}"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
 
     if [ ! -f "$compose_file" ]; then
@@ -506,7 +533,8 @@ compose_get_spoke_services() {
     # Get all services and strip instance suffix
     # Service names in spoke: postgres-fra, mongodb-fra, etc.
     # We return: postgres, mongodb, etc. (for compatibility with existing code)
-    local services=$(compose_get_services "$compose_file")
+    local services
+    services=$(compose_get_services "$compose_file")
 
     # Strip instance suffix from each service name
     local clean_services=""
@@ -532,7 +560,8 @@ compose_get_spoke_services() {
 compose_get_spoke_service_class() {
     local instance_code="${1:?instance code required}"
     local service="${2:?service name required}"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
 
     if [ ! -f "$compose_file" ]; then
@@ -560,11 +589,13 @@ compose_get_spoke_services_by_class() {
     local instance_code="${1:?instance code required}"
     local class="${2:?service class required}"
 
-    local all_services=$(compose_get_spoke_services "$instance_code")
+    local all_services
+    all_services=$(compose_get_spoke_services "$instance_code")
     local filtered_services=""
 
     for service in $all_services; do
-        local service_class=$(compose_get_spoke_service_class "$instance_code" "$service")
+        local service_class
+        service_class=$(compose_get_spoke_service_class "$instance_code" "$service")
         if [ "$service_class" = "$class" ]; then
             filtered_services="$filtered_services $service"
         fi
@@ -586,7 +617,8 @@ compose_get_spoke_services_by_class() {
 compose_get_spoke_dependencies() {
     local instance_code="${1:?instance code required}"
     local service="${2:?service name required}"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
 
     if [ ! -f "$compose_file" ]; then
@@ -596,7 +628,8 @@ compose_get_spoke_dependencies() {
 
     # Spoke services have instance suffix
     local service_with_suffix="${service}-${code_lower}"
-    local deps=$(compose_get_dependencies "$service_with_suffix" "$compose_file")
+    local deps
+    deps=$(compose_get_dependencies "$service_with_suffix" "$compose_file")
 
     # Strip instance suffix from dependencies
     if [ "$deps" != "none" ]; then
@@ -636,7 +669,8 @@ compose_get_spoke_dependencies() {
 ##
 compose_calculate_spoke_dependency_levels() {
     local instance_code="${1:?instance code required}"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
 
     if [ ! -f "$compose_file" ]; then
@@ -645,7 +679,8 @@ compose_calculate_spoke_dependency_levels() {
     fi
 
     # Use existing compose parser function but adapt for spoke naming
-    local all_services=$(compose_get_spoke_services "$instance_code")
+    local all_services
+    all_services=$(compose_get_spoke_services "$instance_code")
 
     declare -A levels
     declare -A visited
@@ -664,7 +699,8 @@ compose_calculate_spoke_dependency_levels() {
         visited[$svc]=1
 
         # Get dependencies
-        local deps=$(compose_get_spoke_dependencies "$instance_code" "$svc")
+        local deps
+        deps=$(compose_get_spoke_dependencies "$instance_code" "$svc")
 
         if [ "$deps" = "none" ]; then
             levels[$svc]=0
@@ -676,7 +712,8 @@ compose_calculate_spoke_dependency_levels() {
         local max_level=0
         IFS=',' read -ra DEP_ARRAY <<< "$deps"
         for dep in "${DEP_ARRAY[@]}"; do
-            local dep_level=$(calculate_level "$dep")
+            local dep_level
+            dep_level=$(calculate_level "$dep")
             if [ "$dep_level" -ge "$max_level" ]; then
                 max_level=$((dep_level))
             fi

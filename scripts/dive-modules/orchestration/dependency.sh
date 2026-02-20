@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Orchestration Dependency Graph & Context
 # =============================================================================
@@ -15,9 +16,9 @@ orch_detect_circular_dependencies() {
 
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
         # Check if already visited
-        if [[ " $visited_services " =~ " $service " ]]; then
-            continue
-        fi
+        case " $visited_services " in
+            *" $service "*) continue ;;
+        esac
 
         # Check this service and its dependencies
         # Capture cycle path from stderr if cycle detected
@@ -32,7 +33,8 @@ orch_detect_circular_dependencies() {
             log_error "Dependency cycle: $cycle_result"
 
             # Parse and display the cycle clearly
-            local cycle_services=($cycle_result)
+            local -a cycle_services=()
+            read -r -a cycle_services <<<"$cycle_result"
             log_error ""
             log_error "  Cycle visualization:"
             local prev=""
@@ -70,7 +72,7 @@ orch_print_dependency_graph() {
 
     case "$format" in
         mermaid)
-            echo "```mermaid"
+            echo '```mermaid'
             echo "graph TD"
             for service in "${!SERVICE_DEPENDENCIES[@]}"; do
                 local deps="${SERVICE_DEPENDENCIES[$service]}"
@@ -84,7 +86,7 @@ orch_print_dependency_graph() {
                     done
                 fi
             done
-            echo "```"
+            echo '```'
             ;;
         text|*)
             echo "=== Service Dependency Graph ==="
@@ -95,7 +97,8 @@ orch_print_dependency_graph() {
             declare -A service_levels
 
             for service in "${!SERVICE_DEPENDENCIES[@]}"; do
-                local level=$(orch_calculate_dependency_level "$service")
+                local level
+                level=$(orch_calculate_dependency_level "$service")
                 service_levels["$service"]=$level
                 [ $level -gt $max_level ] && max_level=$level
             done
@@ -132,7 +135,8 @@ orch_get_services_at_level() {
     local services=""
 
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
-        local level=$(orch_calculate_dependency_level "$service")
+        local level
+        level=$(orch_calculate_dependency_level "$service")
         if [ "$level" -eq "$target_level" ]; then
             services="$services $service"
         fi
@@ -151,7 +155,8 @@ orch_get_max_dependency_level() {
     local max_level=0
 
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
-        local level=$(orch_calculate_dependency_level "$service")
+        local level
+        level=$(orch_calculate_dependency_level "$service")
         [ $level -gt $max_level ] && max_level=$level
     done
 
@@ -174,11 +179,13 @@ _orch_check_cycle() {
     local path="$2"
 
     # Check if service is in current path (cycle!)
-    if [[ " $path " =~ " $service " ]]; then
+    case " $path " in
+        *" $service "*)
         # Cycle detected - output the cycle path
         echo "$path $service" >&2
         return 1  # Cycle detected
-    fi
+        ;;
+    esac
 
     # Add to path
     local new_path="$path $service"
@@ -261,7 +268,8 @@ _orch_calc_level() {
         dep=$(echo "$dep" | xargs)
 
         # Recurse to get dependency's level
-        local dep_level=$(_orch_calc_level "$dep" "$calculated")
+        local dep_level
+        dep_level=$(_orch_calc_level "$dep" "$calculated")
         calculated="$calculated $dep:$dep_level"
 
         if [ "$dep_level" -gt "$max_dep_level" ]; then
@@ -364,7 +372,8 @@ declare -a ORCHESTRATION_ERRORS=()
 orch_acquire_deployment_lock() {
     local instance_code="$1"
     local timeout="${2:-30}"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     # Ensure ORCH_CONTEXT exists (in case module was sourced in subshell)
     if ! declare -p ORCH_CONTEXT &>/dev/null; then
@@ -411,7 +420,8 @@ orch_acquire_deployment_lock() {
     # RESILIENCE FIX (2026-02-07): Check for stale deployment states BEFORE acquiring lock
     # If state shows in-progress but no lock exists, auto-recover
     if [ "$code_upper" != "USA" ] && type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
-        local current_state=$(orch_db_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+        local current_state
+        current_state=$(orch_db_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
         case "$current_state" in
             INITIALIZING|DEPLOYING|CONFIGURING|VERIFYING)
                 # Check if there's an actual lock (another process is deploying)
@@ -466,7 +476,8 @@ orch_acquire_deployment_lock() {
             if orch_db_check_connection 2>/dev/null; then
                 log_error "Failed to acquire deployment lock for $instance_code (timeout)"
                 # Show current database lock holder
-                local db_locks=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "SELECT instance_code, acquired_at, acquired_by FROM deployment_locks WHERE instance_code = '$(lower "$instance_code")';" 2>/dev/null | head -1)
+                local db_locks
+                db_locks=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "SELECT instance_code, acquired_at, acquired_by FROM deployment_locks WHERE instance_code = '$(lower "$instance_code")';" 2>/dev/null | head -1)
                 if [ -n "$db_locks" ]; then
                     log_error "Current lock holder:"
                     echo "$db_locks" | tr '|' '\n' | xargs -I {} echo "  {}"
@@ -581,7 +592,7 @@ orch_with_deployment_lock() {
     fi
 
     # Set up cleanup trap
-    trap "orch_release_deployment_lock '$instance_code'" EXIT ERR INT TERM
+    trap 'orch_release_deployment_lock "$instance_code"' EXIT ERR INT TERM
 
     # Execute function
     local exit_code=0
@@ -603,3 +614,6 @@ orch_with_deployment_lock() {
 #   $1 - Instance code
 #   $2 - Instance name
 ##
+
+# sc2034-anchor
+: "${ORCHESTRATION_ERRORS:-}" "${SERVICE_MAX_TIMEOUTS:-}" "${SERVICE_MIN_TIMEOUTS:-}" "${SERVICE_TIMEOUTS:-}"

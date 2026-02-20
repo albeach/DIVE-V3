@@ -8,6 +8,14 @@
 
 [ -n "${DIVE_NUKE_CLEANUP_LOADED:-}" ] && return 0
 
+# Globals are populated by deploy-nuke.sh before invoking cleanup helpers.
+dive_volumes="${dive_volumes:-}"
+dive_networks="${dive_networks:-}"
+target_type="${target_type:-}"
+target_instance="${target_instance:-}"
+deep_clean="${deep_clean:-false}"
+reset_spokes="${reset_spokes:-false}"
+
 _nuke_remove_volumes() {
     local removed_volumes=0
 
@@ -27,7 +35,8 @@ _nuke_remove_volumes() {
             done
             ;;
         spoke)
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             for v in $(docker volume ls -q --filter "label=com.docker.compose.project=dive-spoke-${instance_lower}" 2>/dev/null); do
                 if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
                     removed_volumes=$((removed_volumes + 1))
@@ -43,7 +52,8 @@ _nuke_remove_volumes() {
                 done
             done
             for v in $(docker volume ls -q --filter "label=com.docker.compose.project" 2>/dev/null); do
-                local project_label=$(docker volume inspect --format '{{index .Labels "com.docker.compose.project"}}' "$v" 2>/dev/null)
+                local project_label
+                project_label=$(docker volume inspect --format '{{index .Labels "com.docker.compose.project"}}' "$v" 2>/dev/null)
                 if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
                     if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
                         removed_volumes=$((removed_volumes + 1))
@@ -99,7 +109,8 @@ _nuke_remove_networks() {
             done
             ;;
         spoke)
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             # First, find ALL networks for this spoke (by name pattern - not just labeled ones)
             for n in $(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E "dive-spoke-${instance_lower}|dive_spoke_${instance_lower}"); do
                 # Disconnect ALL containers from this network (forcefully)
@@ -132,7 +143,8 @@ _nuke_remove_networks() {
                 done
             done
             for n in $(docker network ls -q --filter "label=com.docker.compose.project" 2>/dev/null); do
-                local project_label=$(docker network inspect --format '{{index .Labels "com.docker.compose.project"}}' "$n" 2>/dev/null)
+                local project_label
+                project_label=$(docker network inspect --format '{{index .Labels "com.docker.compose.project"}}' "$n" 2>/dev/null)
                 if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
                     for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
                         ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
@@ -165,7 +177,8 @@ _nuke_remove_images() {
     case "$target_type" in
         spoke)
             # For spoke targeting, only remove images for that spoke
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-spoke-${instance_lower}" | awk '{print $1}'); do
                 if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
                     removed_images=$((removed_images + 1))
@@ -227,7 +240,8 @@ _nuke_cleanup_state() {
     if [ "$reset_spokes" = true ]; then
         log_verbose "  Clearing spoke registrations..."
         if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             local spoke_dir="${DIVE_ROOT}/instances/${instance_lower}"
             rm -f "$spoke_dir/.federation-registered"
             log_verbose "  Cleared registration for ${target_instance^^}"
@@ -237,7 +251,8 @@ _nuke_cleanup_state() {
             else
                 for spoke_dir in "${DIVE_ROOT}/instances"/*; do
                     if [ -d "$spoke_dir" ]; then
-                        local instance_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
+                        local instance_code
+                        instance_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
                         rm -f "$spoke_dir/.federation-registered"
                         log_verbose "  Cleared registration for $instance_code"
                     fi
@@ -270,7 +285,8 @@ _nuke_cleanup_state() {
 
             # BEST PRACTICE: Deep clean spoke-specific workspace state and locks
             if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
-                local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+                local instance_lower
+                instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
                 if [ -d "${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${instance_lower}" ]; then
                     log_verbose "    Cleaning Terraform workspace for ${target_instance^^}..."
                     # Always remove lock files (critical for re-deployment)
@@ -316,7 +332,8 @@ _nuke_cleanup_state() {
     if [ "$target_type" = "all" ]; then
         log_verbose "  Cleaning spoke instance directories (SSOT)..."
         for spoke_dir in "${DIVE_ROOT}/instances"/*; do
-            local dirname=$(basename "$spoke_dir")
+            local dirname
+            dirname=$(basename "$spoke_dir")
             # Preserve hub and shared directories
             if [[ "$dirname" != "hub" && "$dirname" != "shared" && "$dirname" != "usa" ]]; then
                 log_verbose "    Removing ${dirname}/..."
@@ -332,7 +349,8 @@ _nuke_cleanup_state() {
         done
         log_verbose "  Spoke instance directories cleaned"
     elif [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
-        local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        local instance_lower
+        instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
         local spoke_instance_dir="${DIVE_ROOT}/instances/${instance_lower}"
         if [ -d "$spoke_instance_dir" ]; then
             log_verbose "  Removing instance directory: ${instance_lower}/"
@@ -391,7 +409,8 @@ _nuke_cleanup_state() {
     fi
 
     if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
-        local cert_instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        local cert_instance_lower
+        cert_instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
         local spoke_cert_dir="${DIVE_ROOT}/instances/${cert_instance_lower}/certs"
         if [ -d "$spoke_cert_dir" ]; then
             rm -rf "$spoke_cert_dir" 2>/dev/null || true

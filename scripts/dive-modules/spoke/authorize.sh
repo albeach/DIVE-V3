@@ -77,8 +77,10 @@ spoke_authorize() {
         return 1
     fi
 
-    local code_upper=$(upper "$code")
-    local code_lower=$(lower "$code")
+    local code_upper
+    code_upper=$(upper "$code")
+    local code_lower
+    code_lower=$(lower "$code")
 
     # GUARDRAIL: Prevent USA from being authorized as a spoke
     if [ "$code_upper" = "USA" ]; then
@@ -102,7 +104,8 @@ spoke_authorize() {
     # Generate authorization code (UUID-based)
     local auth_code
     auth_code=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16)
-    local authorized_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local authorized_at
+    authorized_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     local authorized_by="${USER:-$(whoami)}"
     local expires_at
     if date --version >/dev/null 2>&1; then
@@ -234,7 +237,8 @@ spoke_authorize() {
 ##
 spoke_verify_authorization() {
     local code="${1:?Instance code required}"
-    local code_lower=$(lower "$code")
+    local code_lower
+    code_lower=$(lower "$code")
 
     local vault_addr="${VAULT_ADDR:-https://127.0.0.1:8200}"
     local vault_token="${VAULT_TOKEN:-}"
@@ -316,7 +320,8 @@ spoke_verify_authorization() {
 ##
 spoke_revoke_authorization() {
     local code="${1:?Instance code required}"
-    local code_lower=$(lower "$code")
+    local code_lower
+    code_lower=$(lower "$code")
 
     local vault_addr="${VAULT_ADDR:-https://127.0.0.1:8200}"
     local vault_token="${VAULT_TOKEN:-}"

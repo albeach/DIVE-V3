@@ -25,8 +25,10 @@
 ##
 spoke_federation_register_in_hub() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Registering $code_upper in Hub Terraform configuration..."
 
@@ -45,9 +47,12 @@ spoke_federation_register_in_hub() {
     local hub_auto_tfvars="${DIVE_ROOT}/terraform/hub/hub.auto.tfvars"
 
     # Extract spoke details from SSOT (spoke_config_get)
-    local spoke_name=$(spoke_config_get "$instance_code" "identity.name" "$code_upper")
-    local spoke_keycloak_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
-    local spoke_frontend_port=$(spoke_config_get "$instance_code" "ports.frontend" "3000")
+    local spoke_name
+    spoke_name=$(spoke_config_get "$instance_code" "identity.name" "$code_upper")
+    local spoke_keycloak_port
+    spoke_keycloak_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
+    local spoke_frontend_port
+    spoke_frontend_port=$(spoke_config_get "$instance_code" "ports.frontend" "3000")
 
     # Build complete URLs as atomic strings (no variable expansion that could introduce newlines)
     local idp_url="https://localhost:${spoke_keycloak_port}"
@@ -281,7 +286,8 @@ PYTHON_EOF
     local client_id="dive-v3-broker-${code_lower}"
 
     # Check if IdP exists and try to import it
-    local idp_exists=$(docker exec dive-hub-keycloak curl -sf \
+    local idp_exists
+    idp_exists=$(docker exec dive-hub-keycloak curl -sf \
         -H "Authorization: Bearer $(docker exec dive-hub-keycloak curl -sf \
             -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
             -d "grant_type=password" -d "username=admin" \
@@ -297,7 +303,8 @@ PYTHON_EOF
     fi
 
     # Check if client exists and try to import it
-    local client_uuid=$(docker exec dive-hub-keycloak curl -sf \
+    local client_uuid
+    client_uuid=$(docker exec dive-hub-keycloak curl -sf \
         -H "Authorization: Bearer $(docker exec dive-hub-keycloak curl -sf \
             -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
             -d "grant_type=password" -d "username=admin" \
@@ -332,7 +339,7 @@ PYTHON_EOF
         fi
     fi
 
-    cd - &>/dev/null
+    cd - &>/dev/null || return 1
     return 0
 }
 
@@ -355,8 +362,10 @@ PYTHON_EOF
 ##
 spoke_federation_create_bidirectional() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Creating bidirectional federation (Hub→Spoke)..."
 
@@ -559,8 +568,10 @@ except: pass
 ##
 spoke_federation_verify() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying federation for $code_upper..."
 

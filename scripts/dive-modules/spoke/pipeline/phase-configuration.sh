@@ -39,6 +39,7 @@ fi
 if [ -z "${SPOKE_FEDERATION_LOADED:-}" ]; then
     _spoke_fed_path="${BASH_SOURCE[0]%/*}/spoke-federation.sh"
     if [ -f "$_spoke_fed_path" ]; then
+        # shellcheck source=./spoke-federation.sh
         source "$_spoke_fed_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh"
@@ -65,8 +66,10 @@ spoke_phase_configuration() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
@@ -115,7 +118,8 @@ spoke_phase_configuration() {
     # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
-    local PHASE_START=$(date +%s)
+    local PHASE_START
+    PHASE_START=$(date +%s)
 
     log_info "Configuration phase for $code_upper"
 
@@ -408,7 +412,8 @@ spoke_phase_configuration() {
     fi
 
     # Calculate and log phase duration
-    local PHASE_END=$(date +%s)
+    local PHASE_END
+    PHASE_END=$(date +%s)
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
 
     # Mark phase complete (checkpoint system)
@@ -437,8 +442,10 @@ spoke_phase_configuration() {
 ##
 spoke_config_register_in_hub_mongodb() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${spoke_dir:-${DIVE_ROOT}/instances/${code_lower}}"
 
     log_verbose "Registering spoke in Hub MongoDB spoke registry..."
@@ -489,13 +496,20 @@ spoke_config_register_in_hub_mongodb() {
     fi
 
     # Get spoke configuration from SSOT (spoke_config_get)
-    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
-    local instance_name=$(spoke_config_get "$instance_code" "identity.name")
-    local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
-    local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
-    local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
-    local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
-    local contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
+    local spoke_id
+    spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_name
+    instance_name=$(spoke_config_get "$instance_code" "identity.name")
+    local base_url
+    base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
+    local api_url
+    api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
+    local idp_url
+    idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
+    local idp_public_url
+    idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
+    local contact_email
+    contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
 
     # Fallback to NATO database for name if config doesn't have it
     if [ -z "$instance_name" ] || [ "$instance_name" = "null" ]; then
@@ -563,7 +577,8 @@ PARTNER
         auth_code_field="\"authCode\": \"${SPOKE_AUTH_CODE}\","
     fi
 
-    local payload=$(cat <<EOF
+    local payload
+    payload=$(cat <<EOF
 {
   "instanceCode": "$code_upper",
   "name": "$instance_name",
@@ -598,8 +613,10 @@ EOF
         log_success "✓ Spoke registered in Hub MongoDB"
 
         # Extract spokeId and status from response
-        local registered_spoke_id=$(echo "$response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
-        local spoke_status=$(echo "$response" | jq -r '.spoke.status // empty' 2>/dev/null)
+        local registered_spoke_id
+        registered_spoke_id=$(echo "$response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
+        local spoke_status
+        spoke_status=$(echo "$response" | jq -r '.spoke.status // empty' 2>/dev/null)
 
         log_verbose "Spoke ID: $registered_spoke_id"
         log_verbose "Status: $spoke_status"
@@ -609,7 +626,8 @@ EOF
             log_success "✓ Spoke auto-approved (development mode)"
 
             # Extract token from auto-approval response
-            local spoke_token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
+            local spoke_token
+            spoke_token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
 
             # BEST PRACTICE FALLBACK: If token missing (e.g. re-registration after nuke — Hub returns
             # existing approved spoke but token may not be in register response), fetch token from
@@ -658,7 +676,8 @@ EOF
                 log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
 
                 # Extract OPAL client token from registration response (for remote policy sync)
-                local opal_token=$(echo "$response" | jq -r '.opalToken.token // empty' 2>/dev/null)
+                local opal_token
+                opal_token=$(echo "$response" | jq -r '.opalToken.token // empty' 2>/dev/null)
                 if [ -n "$opal_token" ]; then
                     if grep -q "^SPOKE_OPAL_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
                         sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$spoke_dir/.env"
@@ -725,7 +744,8 @@ EOF
                             # Wait for backend to be healthy
                             local wait_count=0
                             while [ $wait_count -lt 30 ]; do
-                                local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
+                                local health
+                                health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
                                 if [ "$health" = "healthy" ]; then
                                     log_success "✓ Spoke backend healthy"
                                     break
@@ -793,13 +813,15 @@ EOF
             # Spoke suspended - federation verification failed
             if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
                 log_warn "Spoke suspended during registration (federation verification failed)"
-                local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
+                local error_msg
+                error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
                 log_warn "Reason: $error_msg"
                 log_warn "Federation skipped - continuing deployment"
                 return 0
             else
                 log_error "Spoke suspended during registration - federation verification failed"
-                local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
+                local error_msg
+                error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
                 log_error "Reason: $error_msg"
                 log_error "Impact: Spoke cannot perform federated operations"
                 log_error "Fix: Verify federation certificates and Hub connectivity"
@@ -863,7 +885,8 @@ spoke_config_approve_and_get_token() {
 
     if echo "$approve_response" | jq -e '.success' >/dev/null 2>&1; then
         # Extract token
-        local spoke_token=$(echo "$approve_response" | jq -r '.hubApiToken.token // empty')
+        local spoke_token
+        spoke_token=$(echo "$approve_response" | jq -r '.hubApiToken.token // empty')
 
         if [ -n "$spoke_token" ]; then
             # Update .env with SPOKE_TOKEN
@@ -910,8 +933,10 @@ spoke_config_approve_and_get_token() {
 ##
 spoke_config_register_in_registries() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Registering $code_upper in federation and KAS registries..."
 

@@ -62,15 +62,18 @@ schedule_backup() {
     case "$schedule_type" in
         daily)
             # Create cron job for daily backups at 2 AM
-            local cron_job="0 2 * * * $SCRIPT_DIR/backup-restore.sh backup --name daily-$(date +\\%Y\\%m\\%d)"
+            local cron_job
+            cron_job="0 2 * * * $SCRIPT_DIR/backup-restore.sh backup --name daily-$(date +\\%Y\\%m\\%d)"
             ;;
         weekly)
             # Create cron job for weekly backups (Sunday at 2 AM)
-            local cron_job="0 2 * * 0 $SCRIPT_DIR/backup-restore.sh backup --name weekly-$(date +\\%Y\\%m\\%d)"
+            local cron_job
+            cron_job="0 2 * * 0 $SCRIPT_DIR/backup-restore.sh backup --name weekly-$(date +\\%Y\\%m\\%d)"
             ;;
         monthly)
             # Create cron job for monthly backups (1st of month at 2 AM)
-            local cron_job="0 2 1 * * $SCRIPT_DIR/backup-restore.sh backup --name monthly-$(date +\\%Y\\%m\\%d)"
+            local cron_job
+            cron_job="0 2 1 * * $SCRIPT_DIR/backup-restore.sh backup --name monthly-$(date +\\%Y\\%m\\%d)"
             ;;
         *)
             log_error "Unknown schedule type: $schedule_type"
@@ -287,7 +290,7 @@ backup_configuration() {
     if [ -d "/certs" ]; then
         mkdir -p "$config_backup_dir/certs"
         # Only copy public certificates, not private keys
-        find /certs -name "*.pem" -o -name "*.crt" -o -name "*.pub" | xargs -I {} cp {} "$config_backup_dir/certs/" 2>/dev/null || true
+        find /certs \( -name "*.pem" -o -name "*.crt" -o -name "*.pub" \) -type f -exec cp {} "$config_backup_dir/certs/" \; 2>/dev/null || true
     fi
 
     # Backup environment variables (sanitized)
@@ -345,11 +348,13 @@ compress_backup() {
     tar -czf "$archive_name" "$BACKUP_NAME"
 
     # Calculate size
-    local size=$(du -sh "$archive_path" | cut -f1)
+    local size
+    size=$(du -sh "$archive_path" | cut -f1)
     log_success "Backup compressed: $archive_path ($size)"
 
     # Encrypt if enabled
-    local final_archive=$(encrypt_backup "$archive_path")
+    local final_archive
+    final_archive=$(encrypt_backup "$archive_path")
 
     # Remove uncompressed directory
     rm -rf "$BACKUP_DIR"
@@ -397,7 +402,8 @@ perform_backup() {
     backup_redis
     backup_configuration
 
-    local archive_path=$(compress_backup)
+    local archive_path
+    archive_path=$(compress_backup)
     cleanup_old_backups
 
     log_success "Backup completed successfully!"
@@ -432,7 +438,8 @@ extract_backup() {
     tar -xzf "$archive_path" -C "$extract_dir"
 
     # Find the extracted backup directory
-    local backup_dir=$(find "$extract_dir" -name "dive-v3-backup-*" -type d | head -1)
+    local backup_dir
+    backup_dir=$(find "$extract_dir" -name "dive-v3-backup-*" -type d | head -1)
 
     if [ -z "$backup_dir" ]; then
         log_error "Could not find backup directory in archive"
@@ -569,9 +576,12 @@ list_backups() {
     echo "Backup Name                     | Created               | Size      | Age"
     echo "------------------------------- | --------------------- | --------- | ----"
     while IFS= read -r -d '' backup; do
-        local name=$(basename "$backup" .tar.gz)
-        local created=$(stat -c %y "$backup" 2>/dev/null | cut -d'.' -f1 || stat -f %Sm "$backup" | cut -d' ' -f1-2)
-        local size=$(du -sh "$backup" | cut -f1)
+        local name
+        name=$(basename "$backup" .tar.gz)
+        local created
+        created=$(stat -c %y "$backup" 2>/dev/null | cut -d'.' -f1 || stat -f %Sm "$backup" | cut -d' ' -f1-2)
+        local size
+        size=$(du -sh "$backup" | cut -f1)
         local age_days=$(( ($(date +%s) - $(stat -c %Y "$backup" 2>/dev/null || stat -f %m "$backup")) / 86400 ))
         printf "%-30s | %-21s | %-9s | %d days\n" "$name" "$created" "$size" "$age_days"
         count=$((count + 1))
@@ -614,7 +624,8 @@ perform_restore() {
     fi
 
     validate_environment
-    local backup_dir=$(extract_backup "$archive_path")
+    local backup_dir
+    backup_dir=$(extract_backup "$archive_path")
 
     # Perform restores
     restore_postgresql "$backup_dir"
@@ -761,4 +772,3 @@ main() {
 
 # Run main function
 main "$@"
-

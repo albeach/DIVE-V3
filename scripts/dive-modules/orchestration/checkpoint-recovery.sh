@@ -7,6 +7,13 @@
 
 [ -n "${DIVE_ORCH_CHECKPOINT_RECOVERY_LOADED:-}" ] && return 0
 
+if ! declare -p ORCH_CONTEXT &>/dev/null; then
+    declare -gA ORCH_CONTEXT=()
+fi
+: "${ORCH_CONTEXT[errors_critical]:=0}"
+: "${ORCH_CONTEXT[errors_high]:=0}"
+: "${ORCH_CONTEXT[start_time]:=$(date +%s)}"
+
 # =============================================================================
 # REAL-TIME OBSERVABILITY & METRICS (Phase 3)
 # =============================================================================
@@ -67,7 +74,7 @@ orch_start_metrics_collection() {
         # Disable exit on error for background process
         set +e
 
-        local collection_pid=$$
+        local _collection_pid=$$
         local metrics_file="${DIVE_ROOT}/logs/orchestration-metrics-${instance_code}.json"
 
         # Ensure logs directory exists
@@ -149,7 +156,8 @@ orch_start_metrics_collection() {
 orch_collect_current_metrics() {
     local instance_code="$1"
 
-    local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     local deployment_duration=0
 
     local key_start="${instance_code}_start_time"
@@ -158,9 +166,12 @@ orch_collect_current_metrics() {
     fi
 
     # Container metrics
-    local container_count=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null | wc -l | tr -d ' ')
-    local healthy_containers=$(orch_count_healthy_containers "$instance_code")
-    local total_memory=$(orch_get_instance_memory_usage "$instance_code")
+    local container_count
+    container_count=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null | wc -l | tr -d ' ')
+    local healthy_containers
+    healthy_containers=$(orch_count_healthy_containers "$instance_code")
+    local total_memory
+    total_memory=$(orch_get_instance_memory_usage "$instance_code")
 
     # Error metrics
     local error_rate=0
@@ -169,10 +180,12 @@ orch_collect_current_metrics() {
     fi
 
     # Network metrics
-    local network_status=$(orch_check_network_status "$instance_code")
+    local network_status
+    network_status=$(orch_check_network_status "$instance_code")
 
     # Predictive metrics
-    local failure_probability=$(orch_calculate_failure_probability "$instance_code")
+    local failure_probability
+    failure_probability=$(orch_calculate_failure_probability "$instance_code")
 
     cat << EOF
 {
@@ -210,10 +223,12 @@ orch_count_healthy_containers() {
     local instance_code="$1"
 
     local healthy=0
-    local containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true)
+    local containers
+    containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true)
 
     for container in $containers; do
-        local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
+        local health_status
+        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
         if [ "$health_status" = "healthy" ]; then
             ((healthy++))
         fi
@@ -236,10 +251,12 @@ orch_get_instance_memory_usage() {
 
     # Get memory usage for all containers in instance
     local total_memory=0
-    local containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true)
+    local containers
+    containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null || true)
 
     for container in $containers; do
-        local mem_usage=$(docker stats --no-stream --format "table {{.MemUsage}}" "$container" 2>/dev/null | tail -1 | sed 's/[^0-9]*\([0-9]*\)MiB.*/\1/' || echo "0")
+        local mem_usage
+        mem_usage=$(docker stats --no-stream --format "table {{.MemUsage}}" "$container" 2>/dev/null | tail -1 | sed 's/[^0-9]*\([0-9]*\)MiB.*/\1/' || echo "0")
         total_memory=$((total_memory + mem_usage))
     done
 
@@ -313,7 +330,8 @@ orch_calculate_failure_probability() {
     fi
 
     # Factor 2: Circuit breakers open (>2 open = high risk)
-    local open_circuits=$(orch_count_open_circuit_breakers)
+    local open_circuits
+    open_circuits=$(orch_count_open_circuit_breakers)
     if [ "$open_circuits" -gt 2 ]; then
         probability=$((probability + 30))
     elif [ "$open_circuits" -gt 0 ]; then
@@ -321,7 +339,8 @@ orch_calculate_failure_probability() {
     fi
 
     # Factor 3: Network issues
-    local network_status=$(orch_check_network_status "$instance_code")
+    local network_status
+    network_status=$(orch_check_network_status "$instance_code")
     if [ "$network_status" = "DISCONNECTED" ]; then
         probability=$((probability + 20))
     elif [ "$network_status" = "INSTANCE_ONLY" ]; then
@@ -329,8 +348,10 @@ orch_calculate_failure_probability() {
     fi
 
     # Factor 4: Container health
-    local total_containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null | wc -l | tr -d ' ')
-    local healthy_containers=$(orch_count_healthy_containers "$instance_code")
+    local total_containers
+    total_containers=$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null | wc -l | tr -d ' ')
+    local healthy_containers
+    healthy_containers=$(orch_count_healthy_containers "$instance_code")
 
     if [ "$total_containers" -gt 0 ]; then
         local health_ratio=$((healthy_containers * 100 / total_containers))
@@ -464,7 +485,8 @@ orch_cleanup_old_data() {
         if stat -f %m . >/dev/null 2>&1; then
             # macOS: use -f %m
             find "${DIVE_ROOT}/.dive-checkpoints" -type d -name "*" 2>/dev/null | while read -r dir; do
-                local mtime=$(stat -f %m "$dir" 2>/dev/null || echo 0)
+                local mtime
+                mtime=$(stat -f %m "$dir" 2>/dev/null || echo 0)
                 if [ "$mtime" -lt "$cutoff_time" ]; then
                     rm -rf "$dir" 2>/dev/null || true
                 fi
@@ -482,7 +504,8 @@ orch_cleanup_old_data() {
         if stat -f %m . >/dev/null 2>&1; then
             # macOS
             find "${DIVE_ROOT}/logs" -name "orchestration-metrics-*.json" 2>/dev/null | while read -r file; do
-                local mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+                local mtime
+                mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
                 if [ "$mtime" -lt "$cutoff_time" ]; then
                     rm -f "$file" 2>/dev/null || true
                 fi
@@ -500,7 +523,8 @@ orch_cleanup_old_data() {
         if stat -f %m . >/dev/null 2>&1; then
             # macOS
             find "${DIVE_ROOT}/logs" -name "orchestration-dashboard-*.html" 2>/dev/null | while read -r file; do
-                local mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+                local mtime
+                mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
                 if [ "$mtime" -lt "$cutoff_time" ]; then
                     rm -f "$file" 2>/dev/null || true
                 fi
@@ -519,3 +543,6 @@ orch_cleanup_old_data() {
 # =============================================================================
 
 export DIVE_ORCH_CHECKPOINT_RECOVERY_LOADED=1
+
+# sc2034-anchor
+: "${PERFORMANCE_METRICS:-}" "${PREDICTIVE_METRICS:-}"

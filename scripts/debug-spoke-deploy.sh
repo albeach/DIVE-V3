@@ -27,7 +27,10 @@ if [ -d "$DIVE_ROOT/instances/$CODE_LOWER" ]; then
     echo "✅ Directory exists: $DIVE_ROOT/instances/$CODE_LOWER"
     echo ""
     echo "Files:"
-    ls -lh "$DIVE_ROOT/instances/$CODE_LOWER" | grep -E "^-" | awk '{print "  " $9 " (" $5 ")"}'
+    for instance_file in "$DIVE_ROOT/instances/$CODE_LOWER"/*; do
+        [ -f "$instance_file" ] || continue
+        echo "  $(basename "$instance_file") ($(du -h "$instance_file" | awk '{print $1}'))"
+    done
 else
     echo "❌ Directory missing: $DIVE_ROOT/instances/$CODE_LOWER"
     exit 1
@@ -158,6 +161,7 @@ echo ""
 # 10. Check spoke IdP configuration for USA
 echo "=== 10. SPOKE IdP CONFIGURATION (usa-idp) ==="
 if docker ps --filter "name=$KC_CONTAINER" --format "{{.Names}}" | grep -q "$KC_CONTAINER"; then
+    # shellcheck source=/dev/null
     source "$DIVE_ROOT/instances/$CODE_LOWER/.env" 2>/dev/null || true
     if [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
         docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
@@ -183,5 +187,3 @@ echo ""
 echo "╔════════════════════════════════════════════════════════════════════╗"
 echo "║                        DEBUG REPORT COMPLETE                        ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
-
-

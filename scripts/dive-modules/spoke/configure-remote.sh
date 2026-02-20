@@ -51,6 +51,7 @@ for _mod in \
     "${CONFIGURE_DIR}/pipeline/spoke-federation-extended.sh" \
     "${CONFIGURE_DIR}/pipeline/phase-configuration.sh" \
     "${CONFIGURE_DIR}/pipeline/phase-configuration-secondary.sh"; do
+    # shellcheck source=/dev/null
     [ -f "$_mod" ] && source "$_mod"
 done
 unset _mod
@@ -78,8 +79,10 @@ HUB_REALM="dive-v3-broker-usa"
 ##
 spoke_configure_remote() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if [ "$code_upper" = "USA" ]; then
         log_error "Cannot configure USA — Hub is configured via hub deploy"
@@ -243,12 +246,12 @@ _configure_remote_terraform() {
     # Override KEYCLOAK_REALM to master (Terraform provider authenticates via master)
     export KEYCLOAK_REALM="master"
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     # Init Terraform
     terraform init -input=false >/dev/null 2>&1 || {
         log_error "Terraform init failed"
-        cd - >/dev/null
+        cd - >/dev/null || return 1
         return 1
     }
 
@@ -277,7 +280,7 @@ _configure_remote_terraform() {
         done
 
     local tf_exit=${PIPESTATUS[0]}
-    cd - >/dev/null
+    cd - >/dev/null || return 1
 
     return $tf_exit
 }
@@ -434,7 +437,7 @@ IDPEOF
 
     if [ -n "$client_uuid" ]; then
         # Client exists (likely from Terraform) — ensure redirect URIs include Hub broker endpoint
-        local spoke_broker_uri="${spoke_idp_url}/realms/${spoke_realm}/broker/${idp_alias}/endpoint"
+        local _spoke_broker_uri="${spoke_idp_url}/realms/${spoke_realm}/broker/${idp_alias}/endpoint"
         local hub_broker_uri="${hub_idp_url}/realms/${HUB_REALM}/broker/${code_lower}-idp/endpoint"
 
         # Get current redirectUris and add broker endpoints

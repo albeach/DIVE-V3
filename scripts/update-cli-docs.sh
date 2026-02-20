@@ -105,9 +105,11 @@ update_file() {
 
         if grep -qF "$old_pattern" "$file"; then
             # Portable sed (works on macOS and Linux)
-            local tmpfile=$(mktemp)
+            local tmpfile
+            tmpfile=$(mktemp)
             sed "s|${old_pattern}|${new_pattern}|g" "$file" > "$tmpfile" && mv "$tmpfile" "$file"
-            local count=$(grep -cF "$new_pattern" "$file" 2>/dev/null || echo 0)
+            local count
+            count=$(grep -cF "$new_pattern" "$file" 2>/dev/null || echo 0)
             if [ $count -gt 0 ]; then
                 changes=$((changes + count))
             fi
@@ -146,3 +148,6 @@ echo ""
 echo -e "${BLUE}To restore if needed:${NC}"
 echo -e "  for f in *.md.backup; do mv \"\$f\" \"\${f%.backup}\"; done"
 echo ""
+
+# sc2034-anchor
+: "${RED:-}"

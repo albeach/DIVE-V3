@@ -47,8 +47,10 @@ spoke_kas_init() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     echo -e "${BOLD}Initialize Spoke KAS - ${code_upper}${NC}"
     echo ""
@@ -141,7 +143,8 @@ spoke_kas_status() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Load KAS module for status function
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/kas.sh" ]; then
@@ -163,7 +166,8 @@ spoke_kas_health() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Load KAS module for health function
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/kas.sh" ]; then
@@ -185,8 +189,10 @@ spoke_kas_register() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local kas_id="${code_lower}-kas"
 
     echo -e "${BOLD}Register Spoke KAS - ${code_upper}${NC}"
@@ -282,7 +288,8 @@ EOF
 )
 
     # Add to registry using jq
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     jq --argjson entry "$new_entry" '.kasServers += [$entry]' "$registry_file" > "$temp_file"
 
     if [ $? -eq 0 ] && [ -s "$temp_file" ]; then
@@ -324,8 +331,10 @@ spoke_kas_unregister() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local kas_id="${code_lower}-kas"
 
     echo -e "${BOLD}Unregister Spoke KAS - ${code_upper}${NC}"
@@ -354,7 +363,8 @@ spoke_kas_unregister() {
     log_info "Removing $kas_id from registry..."
 
     # Remove from registry and trust matrix
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     jq --arg kasId "$kas_id" '
         .kasServers = [.kasServers[] | select(.kasId != $kasId)] |
         .federationTrust.trustMatrix = (.federationTrust.trustMatrix |
@@ -386,7 +396,8 @@ spoke_kas_logs() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local container_name="dive-spoke-${code_lower}-kas"
 
     if [ "$follow" = "-f" ] || [ "$follow" = "--follow" ]; then
@@ -420,8 +431,10 @@ spoke_kas_register_mongodb() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local kas_id="${code_lower}-kas"
 
     echo -e "${BOLD}Register Spoke KAS in MongoDB - ${code_upper}${NC}"
@@ -479,7 +492,8 @@ spoke_kas_register_mongodb() {
     local max_wait=60
     local elapsed=0
     while [ $elapsed -lt $max_wait ]; do
-        local health_status=$(docker inspect "$backend_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        local health_status
+        health_status=$(docker inspect "$backend_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
         if [ "$health_status" = "healthy" ]; then
             log_verbose "✓ Backend is healthy, proceeding with registration"
@@ -690,8 +704,10 @@ spoke_kas_sync_from_hub() {
         return 1
     fi
 
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_info "Syncing Hub KAS registry to $code_upper MongoDB..."
 
@@ -710,7 +726,8 @@ spoke_kas_sync_from_hub() {
     fi
 
     # Extract KAS instances from Hub (should be usa-kas and any other registered spokes)
-    local kas_count=$(echo "$hub_registry" | jq -r '.kasServers | length' 2>/dev/null || echo "0")
+    local kas_count
+    kas_count=$(echo "$hub_registry" | jq -r '.kasServers | length' 2>/dev/null || echo "0")
     
     if [ "$kas_count" = "0" ]; then
         log_warn "No KAS instances found in Hub registry"
@@ -722,10 +739,14 @@ spoke_kas_sync_from_hub() {
     # Register each Hub KAS instance in Spoke MongoDB
     local registered_count=0
     for i in $(seq 0 $((kas_count - 1))); do
-        local kas_id=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasId" 2>/dev/null)
-        local kas_url=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasUrl" 2>/dev/null)
-        local organization=$(echo "$hub_registry" | jq -r ".kasServers[$i].organization" 2>/dev/null)
-        local country_code=$(echo "$hub_registry" | jq -r ".kasServers[$i].countryCode" 2>/dev/null)
+        local kas_id
+        kas_id=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasId" 2>/dev/null)
+        local kas_url
+        kas_url=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasUrl" 2>/dev/null)
+        local organization
+        organization=$(echo "$hub_registry" | jq -r ".kasServers[$i].organization" 2>/dev/null)
+        local country_code
+        country_code=$(echo "$hub_registry" | jq -r ".kasServers[$i].countryCode" 2>/dev/null)
 
         # Skip if this is the spoke's own KAS (already registered locally)
         if [ "$kas_id" = "${code_lower}-kas" ]; then
@@ -736,7 +757,8 @@ spoke_kas_sync_from_hub() {
         log_verbose "Registering Hub KAS in Spoke: $kas_id ($organization)"
 
         # Build registration payload (simplified - Hub instances are pre-validated)
-        local payload=$(cat << EOF
+        local payload
+        payload=$(cat << EOF
 {
   "kasId": "$kas_id",
   "organization": "$organization",

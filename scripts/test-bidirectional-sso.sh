@@ -21,10 +21,14 @@ NC='\033[0m'
 test_bidirectional_sso() {
     local source_spoke="${1:-ALB}"
     local target_spoke="${2:-FRA}"
-    local source_lower=$(lower "$source_spoke")
-    local target_lower=$(lower "$target_spoke")
-    local source_upper=$(upper "$source_spoke")
-    local target_upper=$(upper "$target_spoke")
+    local source_lower
+    source_lower=$(lower "$source_spoke")
+    local target_lower
+    target_lower=$(lower "$target_spoke")
+    local source_upper
+    source_upper=$(upper "$source_spoke")
+    local target_upper
+    target_upper=$(upper "$target_spoke")
 
     echo "🔄 Testing Bidirectional SSO: $source_upper ↔ $target_upper"
     echo "=================================================="
@@ -48,7 +52,8 @@ test_bidirectional_sso() {
     # Test 1: Source user can authenticate locally
     ((tests_total++))
     echo -n "[$source_upper→$target_upper] Source user authentication: "
-    local source_token=$(curl -sk --max-time 5 -X POST \
+    local source_token
+    source_token=$(curl -sk --max-time 5 -X POST \
         "https://localhost:${source_kc_port}/realms/dive-v3-broker-${source_lower}/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "client_id=dive-v3-broker-${source_lower}&client_secret=dive-v3-broker-${source_lower}-secret&username=testuser-${source_lower}-1&password=testuser-${source_lower}-1&grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
@@ -63,7 +68,8 @@ test_bidirectional_sso() {
     # Test 2: Source user can access target protected resource
     ((tests_total++))
     echo -n "[$source_upper→$target_upper] Cross-spoke resource access: "
-    local cross_access=$(curl -sk --max-time 5 \
+    local cross_access
+    cross_access=$(curl -sk --max-time 5 \
         -H "Authorization: Bearer $source_token" \
         "https://localhost:${target_port}/api/auth/session" 2>/dev/null | jq -r '.user.name // empty')
 
@@ -77,7 +83,8 @@ test_bidirectional_sso() {
     # Test 3: Target user can authenticate locally
     ((tests_total++))
     echo -n "[$target_upper→$source_upper] Target user authentication: "
-    local target_token=$(curl -sk --max-time 5 -X POST \
+    local target_token
+    target_token=$(curl -sk --max-time 5 -X POST \
         "https://localhost:${target_kc_port}/realms/dive-v3-broker-${target_lower}/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "client_id=dive-v3-broker-${target_lower}&client_secret=dive-v3-broker-${target_lower}-secret&username=testuser-${target_lower}-1&password=testuser-${target_lower}-1&grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
@@ -92,7 +99,8 @@ test_bidirectional_sso() {
     # Test 4: Target user can access source protected resource
     ((tests_total++))
     echo -n "[$target_upper→$source_upper] Cross-spoke resource access: "
-    local reverse_access=$(curl -sk --max-time 5 \
+    local reverse_access
+    reverse_access=$(curl -sk --max-time 5 \
         -H "Authorization: Bearer $target_token" \
         "https://localhost:${source_port}/api/auth/session" 2>/dev/null | jq -r '.user.name // empty')
 
@@ -106,17 +114,20 @@ test_bidirectional_sso() {
     # Test 5: Check Hub IdP configuration
     ((tests_total++))
     echo -n "[$source_upper↔$target_upper] Hub federation configuration: "
-    local hub_token=$(curl -sk --max-time 5 -X POST \
+    local hub_token
+    hub_token=$(curl -sk --max-time 5 -X POST \
         "https://localhost:8443/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "client_id=admin-cli&username=admin&password=KeycloakAdminSecure123!&grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
 
     if [ -n "$hub_token" ]; then
-        local source_idp=$(curl -sk --max-time 5 \
+        local source_idp
+        source_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
             "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${source_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 
-        local target_idp=$(curl -sk --max-time 5 \
+        local target_idp
+        target_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
             "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${target_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 

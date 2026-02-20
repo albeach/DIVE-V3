@@ -31,7 +31,8 @@ echo ""
 safe_remove() {
     local path="$1"
     if [[ -e "$path" ]]; then
-        local size=$(du -sh "$path" 2>/dev/null | cut -f1 || echo "unknown")
+        local size
+        size=$(du -sh "$path" 2>/dev/null | cut -f1 || echo "unknown")
         echo "   Removing: $path ($size)"
         rm -rf "$path"
         echo "   ✅ Removed"

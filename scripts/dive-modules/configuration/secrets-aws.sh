@@ -286,7 +286,7 @@ migrate_instance_secrets_from_gcp() {
     log_step "Migrating all secrets for instance: $instance_code"
     
     # Core secrets
-    local secrets=(
+    local secret_list=(
         "keycloak-admin-password"
         "mongo-password"
         "postgres-password"
@@ -295,7 +295,7 @@ migrate_instance_secrets_from_gcp() {
         "auth-secret"
     )
     
-    for secret in "${secrets[@]}"; do
+    for secret in "${secret_list[@]}"; do
         migrate_secret_from_gcp "$secret" "$instance_code" || log_warn "Failed to migrate $secret"
     done
     

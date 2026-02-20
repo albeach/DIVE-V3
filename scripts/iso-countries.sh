@@ -332,7 +332,8 @@ get_iso_country_offset() {
     local sum=0
     for (( i=0; i<${#code}; i++ )); do
         local char="${code:$i:1}"
-        local ascii=$(printf '%d' "'$char")
+        local ascii
+        ascii=$(printf '%d' "'$char")
         sum=$((sum + ascii))
     done
 
@@ -359,7 +360,8 @@ get_iso_country_ports() {
         return 1
     fi
 
-    local offset=$(get_iso_country_offset "$code")
+    local offset
+    offset=$(get_iso_country_offset "$code")
 
     cat << EOF
 SPOKE_PORT_OFFSET=$offset
@@ -384,7 +386,8 @@ get_custom_test_ports() {
         return 1
     fi
 
-    local offset=$(get_custom_test_offset "$code")
+    local offset
+    offset=$(get_custom_test_offset "$code")
 
     cat << EOF
 SPOKE_PORT_OFFSET=$offset
@@ -409,8 +412,10 @@ list_iso_countries() {
     echo "ISO 3166-1 Alpha-3 Countries (${#ISO_COUNTRIES[@]} total):"
     echo ""
     for code in $(echo "${!ISO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do
-        local name=$(get_iso_country_name "$code")
-        local flag=$(get_iso_country_flag "$code")
+        local name
+        name=$(get_iso_country_name "$code")
+        local flag
+        flag=$(get_iso_country_flag "$code")
         printf "  %-4s %s  %s\n" "$code" "$flag" "$name"
     done
 }
@@ -420,9 +425,12 @@ list_custom_test_codes() {
     echo "Custom Test Codes (${#CUSTOM_TEST_CODES[@]} available):"
     echo ""
     for code in $(echo "${!CUSTOM_TEST_CODES[@]}" | tr ' ' '\n' | sort); do
-        local name=$(get_custom_test_name "$code")
-        local flag=$(get_custom_test_flag "$code")
-        local offset=$(get_custom_test_offset "$code")
+        local name
+        name=$(get_custom_test_name "$code")
+        local flag
+        flag=$(get_custom_test_flag "$code")
+        local offset
+        offset=$(get_custom_test_offset "$code")
         printf "  %-4s %s  %-25s (offset: %d)\n" "$code" "$flag" "$name" "$offset"
     done
 }

@@ -39,6 +39,7 @@ export SPOKE_COMPOSE_GENERATOR_LOADED=1
 _compose_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _nato_db="${_compose_script_dir}/../../../nato-countries.sh"
 if [ -f "$_nato_db" ]; then
+    # shellcheck source=../../../nato-countries.sh
     source "$_nato_db"
 fi
 unset _compose_script_dir _nato_db
@@ -97,8 +98,10 @@ spoke_compose_generate() {
     local instance_code="$1"
     local target_dir="${2:-}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Set default target directory
     if [ -z "$target_dir" ]; then
@@ -277,7 +280,8 @@ spoke_compose_get_ports() {
     local hash_value
     hash_value=$(echo -n "$code_upper" | od -A n -t d1 | awk '{sum=0; for(i=1;i<=NF;i++) sum+=$i; print sum % 100}')
 
-    local port_offset=$(spoke_get_port_offset)
+    local port_offset
+    port_offset=$(spoke_get_port_offset)
     local base_offset=$((port_offset + hash_value * 10))
 
     cat << EOF
@@ -364,7 +368,8 @@ spoke_compose_get_instance_name() {
         # NATO_COUNTRIES format: "CountryName|flag|color1|color2|timezone|year|code"
         # Extract only the country name (first field)
         local full_entry="${NATO_COUNTRIES[$code_upper]}"
-        local country_name=$(echo "$full_entry" | cut -d'|' -f1)
+        local country_name
+        country_name=$(echo "$full_entry" | cut -d'|' -f1)
         echo "$country_name"
         return
     fi
@@ -501,7 +506,7 @@ spoke_compose_validate() {
     if command -v docker &>/dev/null; then
         local dir
         dir=$(dirname "$file_path")
-        cd "$dir"
+        cd "$dir" || return 1
 
         if ! docker compose config >/dev/null 2>&1; then
             log_error "Invalid docker compose syntax"
@@ -529,7 +534,8 @@ spoke_compose_validate() {
 ##
 spoke_compose_check_drift() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local compose_file="$spoke_dir/docker-compose.yml"
 
@@ -566,7 +572,8 @@ spoke_compose_check_drift() {
 ##
 spoke_compose_update() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Updating compose file for $(upper "$instance_code")"
@@ -596,3 +603,6 @@ export -f spoke_compose_check_drift
 export -f spoke_compose_update
 
 log_verbose "Compose generator module loaded (9 functions)"
+
+# sc2034-anchor
+: "${DEFAULT_KEYCLOAK_HTTP_PORT:-}" "${DEFAULT_OPAL_OPA_PORT:-}"

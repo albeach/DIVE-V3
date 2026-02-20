@@ -23,6 +23,7 @@ if [ -z "${SPOKE_FEDERATION_LOADED:-}" ]; then
     if [ -f "$_spoke_fed_path" ]; then
         # CRITICAL FIX (2026-01-18): Don't hide errors with 2>/dev/null
         # We need to see what's failing during module load
+        # shellcheck source=./pipeline/spoke-federation.sh
         if ! source "$_spoke_fed_path"; then
             log_error "CRITICAL: Failed to load spoke-federation module from: $_spoke_fed_path"
             log_error "Bidirectional federation auto-configuration will not work"
@@ -69,7 +70,8 @@ spoke_register() {
     shift  # Remove CODE from arguments
 
     ensure_dive_root
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local poll_mode=false
     local poll_timeout=600  # 10 minutes default
@@ -106,11 +108,16 @@ spoke_register() {
     echo ""
 
     # Parse config from spoke_config_get (SSOT)
-    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
-    local instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
-    local name=$(spoke_config_get "$instance_code" "identity.name")
-    local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
-    local contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
+    local spoke_id
+    spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_code_config
+    instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
+    local name
+    name=$(spoke_config_get "$instance_code" "identity.name")
+    local hub_url
+    hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+    local contact_email
+    contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
 
     # Override hub URL from environment
     hub_url="${HUB_API_URL:-$hub_url}"
@@ -185,23 +192,29 @@ spoke_register() {
     # Read CSR for submission (base64-encoded for JSON safety)
     if [ -f "$certs_dir/spoke.csr" ]; then
         csr_pem=$(base64 < "$certs_dir/spoke.csr" | tr -d '\n')
-        local csr_fingerprint=$(openssl req -in "$certs_dir/spoke.csr" -noout -pubkey 2>/dev/null | openssl sha256 | awk '{print $2}' | cut -c1-16)
+        local csr_fingerprint
+        csr_fingerprint=$(openssl req -in "$certs_dir/spoke.csr" -noout -pubkey 2>/dev/null | openssl sha256 | awk '{print $2}' | cut -c1-16)
         echo "  CSR Fingerprint: ${csr_fingerprint}..."
     fi
 
     # Read certificate if exists (base64-encoded for JSON safety)
     if [ -f "$certs_dir/spoke.crt" ]; then
         cert_pem=$(base64 < "$certs_dir/spoke.crt" | tr -d '\n')
-        local cert_fingerprint=$(openssl x509 -in "$certs_dir/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | cut -c1-23)
+        local cert_fingerprint
+        cert_fingerprint=$(openssl x509 -in "$certs_dir/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | cut -c1-23)
         echo "  Cert Fingerprint: ${cert_fingerprint}..."
     fi
     echo ""
 
     # Build registration request
-    local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
-    local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
-    local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
-    local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
+    local base_url
+    base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
+    local api_url
+    api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
+    local idp_url
+    idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
+    local idp_public_url
+    idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
 
     # IMPORTANT: Do NOT convert idpPublicUrl to host.docker.internal!
     # The idpPublicUrl is used for BROWSER redirects (authorizationUrl, issuer, logoutUrl)
@@ -223,7 +236,8 @@ spoke_register() {
     # Get spoke's Keycloak admin password to include in registration
     # This allows Hub to create reverse IdP (hub-idp in spoke Keycloak)
     local keycloak_password=""
-    local code_upper=$(upper "$instance_code_config")
+    local code_upper
+    code_upper=$(upper "$instance_code_config")
     local keycloak_container="dive-spoke-${code_lower}-keycloak"
 
     # Priority order:
@@ -344,7 +358,8 @@ EOF
         return 0
     fi
 
-    local response=$(curl -s -X POST "$hub_url/api/federation/register" \
+    local response
+    response=$(curl -s -X POST "$hub_url/api/federation/register" \
         -H "Content-Type: application/json" \
         -k \
         -d "$request_body" 2>&1)
@@ -353,8 +368,10 @@ EOF
         log_success "Registration request submitted!"
         echo ""
 
-        local returned_spoke_id=$(echo "$response" | grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        local status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local returned_spoke_id
+        returned_spoke_id=$(echo "$response" | grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local status
+        status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
         echo -e "${BOLD}Registration Details:${NC}"
         echo "  Spoke ID:  $returned_spoke_id"
@@ -370,8 +387,10 @@ EOF
         # Check if auto-approved (development mode)
         if [ "$status" = "approved" ]; then
             # Extract token if provided (auto-approval includes token)
-            local token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
-            local federation_alias=$(echo "$response" | jq -r '.spoke.federationIdPAlias // empty' 2>/dev/null)
+            local token
+            token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
+            local federation_alias
+            federation_alias=$(echo "$response" | jq -r '.spoke.federationIdPAlias // empty' 2>/dev/null)
 
             log_success "Spoke auto-approved with bidirectional federation!"
             echo ""
@@ -420,12 +439,14 @@ EOF
 
             while [ $waited -lt $max_wait ]; do
                 # Check if Hub OPA has spoke's issuer in trusted_issuers
-                local opa_issuers=$(curl -sk "${hub_api}/opal/data/trusted_issuers" 2>/dev/null)
+                local opa_issuers
+                opa_issuers=$(curl -sk "${hub_api}/opal/data/trusted_issuers" 2>/dev/null)
 
                 if echo "$opa_issuers" | jq -e "to_entries[] | select(.key | contains(\"$spoke_issuer_pattern\"))" &>/dev/null; then
                     # Also verify federation matrix includes spoke
                     local hub_code="${INSTANCE_CODE:-USA}"
-                    local fed_matrix=$(curl -sk "${hub_api}/opal/data/federation_matrix" 2>/dev/null)
+                    local fed_matrix
+                    fed_matrix=$(curl -sk "${hub_api}/opal/data/federation_matrix" 2>/dev/null)
 
                     if echo "$fed_matrix" | jq -e ".${hub_code}[] | select(. == \"${code_upper}\")" &>/dev/null; then
                         sync_verified=true
@@ -540,7 +561,8 @@ spoke_configure_federation_after_approval() {
         return 1
     fi
 
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     # Check if auto-config was disabled due to module loading failure
     if [ "$SPOKE_FEDERATION_AUTO_CONFIG_DISABLED" = "true" ]; then
@@ -596,7 +618,8 @@ _spoke_poll_for_approval() {
 
     while [ $elapsed -lt $timeout ]; do
         # Check registration status
-        local response=$(curl -s -k "$hub_url/api/federation/registration/$spoke_id/status" 2>/dev/null)
+        local response
+        response=$(curl -s -k "$hub_url/api/federation/registration/$spoke_id/status" 2>/dev/null)
 
         if [ -z "$response" ]; then
             echo "  [$elapsed s] Hub not responding, retrying..."
@@ -605,7 +628,8 @@ _spoke_poll_for_approval() {
             continue
         fi
 
-        local status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local status
+        status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
         case "$status" in
             approved)
@@ -613,8 +637,10 @@ _spoke_poll_for_approval() {
                 echo ""
 
                 # Extract token from response
-                local token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-                local expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+                local token
+                token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+                local expires
+                expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
                 if [ -n "$token" ]; then
                     echo -e "${BOLD}Token Configuration:${NC}"
@@ -664,7 +690,8 @@ _spoke_configure_token() {
     local expires="$3"
 
     local env_file="$spoke_dir/.env"
-    local code_lower=$(basename "$spoke_dir")
+    local code_lower
+    code_lower=$(basename "$spoke_dir")
 
     log_step "Configuring Hub API token..."
 
@@ -707,7 +734,8 @@ _spoke_configure_token() {
     # Check if OPAL client is running and restart if needed
     local compose_file="$spoke_dir/docker-compose.yml"
     if [ -f "$compose_file" ]; then
-        local opal_container=$(docker ps --filter "name=opal-client" --filter "name=$code_lower" -q 2>/dev/null | head -1)
+        local opal_container
+        opal_container=$(docker ps --filter "name=opal-client" --filter "name=$code_lower" -q 2>/dev/null | head -1)
         if [ -n "$opal_container" ]; then
             log_step "Restarting OPAL client to apply new token..."
             docker restart "$opal_container" >/dev/null 2>&1
@@ -732,7 +760,8 @@ _spoke_configure_token() {
 spoke_opal_token() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     print_header
     echo -e "${BOLD}OPAL Token Provisioning${NC}"
@@ -753,7 +782,8 @@ spoke_opal_token() {
 spoke_token_refresh() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
@@ -767,11 +797,13 @@ spoke_token_refresh() {
     echo ""
 
     # Get current token info
-    local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+    local hub_url
+    hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
     hub_url="${HUB_API_URL:-$hub_url}"
     hub_url="${hub_url:-${HUB_FALLBACK_URL:-https://hub.${DIVE_DEFAULT_DOMAIN:-dive25.com}}}"
 
-    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local spoke_id
+    spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
 
     # Get current token from .env
     local current_token=""
@@ -792,7 +824,8 @@ spoke_token_refresh() {
     log_step "Requesting token refresh..."
 
     # Use current token to authenticate and get new token
-    local response=$(curl -s -k \
+    local response
+    response=$(curl -s -k \
         -H "Authorization: Bearer $current_token" \
         "$hub_url/api/federation/registration/$spoke_id/status" 2>/dev/null)
 
@@ -801,15 +834,18 @@ spoke_token_refresh() {
         return 1
     fi
 
-    local status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local status
+    status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
     if [ "$status" != "approved" ]; then
         log_error "Spoke status is '$status', cannot refresh token"
         return 1
     fi
 
-    local new_token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-    local expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local new_token
+    new_token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local expires
+    expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
     if [ -n "$new_token" ]; then
         _spoke_configure_token "$spoke_dir" "$new_token" "$expires"

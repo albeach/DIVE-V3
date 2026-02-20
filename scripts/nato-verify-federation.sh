@@ -78,7 +78,8 @@ check_endpoint() {
     local name="$2"
     local timeout="${3:-5}"
 
-    local status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time "$timeout" "$url" 2>/dev/null || echo "000")
+    local status
+    status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time "$timeout" "$url" 2>/dev/null || echo "000")
 
     if [ "$status" = "200" ] || [ "$status" = "204" ]; then
         echo -e "    ${GREEN}✓${NC} $name ($status)"
@@ -97,8 +98,10 @@ check_endpoint() {
 
 verify_spoke() {
     local code="$1"
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
+    local name
+    name=$(get_country_name "$code")
+    local flag
+    flag=$(get_country_flag "$code")
     local code_lower="${code,,}"
 
     echo ""
@@ -272,7 +275,7 @@ echo "════════════════════════�
 if [ ${#COUNTRIES[@]} -eq 0 ]; then
     echo ""
     echo "  Detecting running spokes..."
-    COUNTRIES=($(get_running_spokes))
+    read -r -a COUNTRIES <<<"$(get_running_spokes)"
 
     if [ ${#COUNTRIES[@]} -eq 0 ]; then
         echo -e "  ${YELLOW}No spoke containers detected${NC}"
@@ -346,3 +349,6 @@ echo "    1. Test SSO flow: Open https://localhost:3000 in browser"
 echo "    2. View spoke registry: ./dive hub spokes list"
 echo "    3. Deploy more spokes: ./scripts/nato-batch-deploy.sh <CODES>"
 echo ""
+
+# sc2034-anchor
+: "${ALL:-}" "${DIM:-}" "${PROJECT_ROOT:-}" "${VERBOSE:-}"

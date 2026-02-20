@@ -34,7 +34,8 @@ if [ "$#" -lt 4 ]; then
   echo "  admin-password   - Optional: Admin password (will prompt if not provided)"
   echo ""
   echo "Available nations:"
-  ls -1 "$(dirname "$0")/../keycloak/mapper-templates/nato-nations/" | grep -E '\.json$' | grep -v '_template' | sed 's/.json$//' | sed 's/^/  - /'
+  find "$(dirname "$0")/../keycloak/mapper-templates/nato-nations/" -maxdepth 1 -type f -name '*.json' \
+    ! -name '*_template*' -exec basename {} .json \; | sed 's/^/  - /'
   exit 1
 fi
 
@@ -54,7 +55,7 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
   print_status "$RED" "✗ Template not found: $TEMPLATE_FILE"
   echo ""
   echo "Available nations:"
-  ls -1 "$TEMPLATE_DIR" | grep -E '\.json$' | grep -v '_template' | sed 's/.json$//' | sed 's/^/  - /'
+  find "$TEMPLATE_DIR" -maxdepth 1 -type f -name '*.json' ! -name '*_template*' -exec basename {} .json \; | sed 's/^/  - /'
   exit 1
 fi
 

@@ -9,6 +9,10 @@ on:
     # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
 
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   npm-audit:
     name: NPM Security Audit
@@ -29,9 +33,9 @@ jobs:
       - name: Run npm audit
         working-directory: ./${{ matrix.workspace }}
         run: |
-          # Only audit production dependencies (ignore dev dependencies)
-          npm audit --production --audit-level=high || true
-          npm audit --production --json > audit-report.json || true
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm audit --omit=dev --audit-level=high --json > audit-report.json
       
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -59,14 +63,13 @@ jobs:
           cd kas && npm ci --ignore-scripts && cd ..
 
       - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
         with:
           project: 'DIVE-V3'
           path: '.'
           format: 'HTML'
           out: 'reports'
           args: '--failOnCVSS 7'
-        continue-on-error: true
 
       - name: Upload Results
         if: always()
@@ -87,7 +90,7 @@ jobs:
       
       - name: TruffleHog Secret Scan (pull requests)
         if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
@@ -96,7 +99,7 @@ jobs:
 
       - name: TruffleHog Secret Scan (push diff)
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           path: ./
           base: ${{ github.event.before }}
@@ -105,14 +108,14 @@ jobs:
 
       - name: TruffleHog Secret Scan (push initial full repository)
         if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           path: ./
           extra_args: --debug --only-verified
 
       - name: TruffleHog Secret Scan (scheduled full repository)
         if: github.event_name == 'schedule'
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           path: ./
           extra_args: --debug --only-verified
@@ -143,7 +146,7 @@ jobs:
           docker build -t dive-v3-${{ matrix.service }}:test ./${{ matrix.service }}
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # 0.34.0
         with:
           image-ref: dive-v3-${{ matrix.service }}:test
           format: 'sarif'
@@ -179,17 +182,17 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.0
         with:
           working_directory: terraform
-          soft_fail: true
+          soft_fail: false
 
       - name: Run Checkov
         id: checkov
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@f93e43550d669f41ed6fcfa423a3fcb7484a36cd # v9
         with:
           directory: terraform
           framework: terraform
           output_format: sarif
           output_file_path: checkov-report.sarif
-          soft_fail: true
+          soft_fail: false
           skip_check: CKV2_AWS_23,CKV_AWS_88,CKV_AWS_130
       
       - name: Normalize Checkov SARIF output

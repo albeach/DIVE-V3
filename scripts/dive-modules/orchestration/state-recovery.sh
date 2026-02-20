@@ -50,7 +50,8 @@ fi
 orch_state_validate_consistency() {
     local instance_code="$1"
     local auto_fix="${2:-true}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Validating state consistency for $instance_code..."
 
@@ -61,7 +62,8 @@ orch_state_validate_consistency() {
     fi
 
     # Get state from both sources
-    local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+    local db_state
+    db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
     local file_state=""
 
     if [ -f "${DIVE_ROOT}/.dive-state/${code_lower}.state" ]; then
@@ -145,7 +147,8 @@ orch_state_validate_consistency() {
 orch_state_reconcile() {
     local instance_code="$1"
     local authoritative_state="${2:-}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Determine authoritative state
     if [ -z "$authoritative_state" ]; then
@@ -207,7 +210,8 @@ orch_state_reconcile() {
 orch_state_restore_to_file() {
     local instance_code="$1"
     local db_state="${2:-}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Query database if state not provided
     if [ -z "$db_state" ]; then
@@ -256,7 +260,8 @@ STATE_EOF
 orch_state_restore_to_db() {
     local instance_code="$1"
     local file_state="${2:-}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Read from file if not provided
     if [ -z "$file_state" ]; then
@@ -303,7 +308,8 @@ orch_state_restore_to_db() {
 orch_state_recover() {
     local instance_code="$1"
     local recovery_mode="${2:-auto}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Initiating state recovery for $instance_code (mode: $recovery_mode)"
 
@@ -330,7 +336,8 @@ orch_state_recover() {
             # Check database availability
             if orch_db_check_connection; then
                 # Database available - check both sources
-                local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+                local db_state
+                db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
                 local file_state=""
 
                 if [ -f "${DIVE_ROOT}/.dive-state/${code_lower}.state" ]; then
@@ -431,14 +438,18 @@ orch_state_recover() {
 ##
 orch_state_infer_from_containers() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Inferring state from container status for $instance_code..."
 
     # Count containers
-    local container_count=$(docker ps -a -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | xargs)
-    local running_count=$(docker ps -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | xargs)
-    local healthy_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --filter "health=healthy" -q 2>/dev/null | wc -l | xargs)
+    local container_count
+    container_count=$(docker ps -a -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | xargs)
+    local running_count
+    running_count=$(docker ps -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | xargs)
+    local healthy_count
+    healthy_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --filter "health=healthy" -q 2>/dev/null | wc -l | xargs)
 
     log_verbose "Container analysis: Total=$container_count, Running=$running_count, Healthy=$healthy_count"
 
@@ -503,12 +514,14 @@ orch_state_infer_from_containers() {
 ##
 orch_state_restore_from_db() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Restoring state from database for $instance_code..."
 
     # Query latest state
-    local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+    local db_state
+    db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
 
     if [ -z "$db_state" ]; then
         log_error "No database state found for $instance_code"
@@ -574,13 +587,17 @@ orch_state_cleanup_old() {
             local age_days=0
             if stat -f %m "$marker" >/dev/null 2>&1; then
                 # macOS
-                local file_mtime=$(stat -f %m "$marker")
-                local now=$(date +%s)
+                local file_mtime
+                file_mtime=$(stat -f %m "$marker")
+                local now
+                now=$(date +%s)
                 age_days=$(( ($now - $file_mtime) / 86400 ))
             elif stat -c %Y "$marker" >/dev/null 2>&1; then
                 # Linux
-                local file_mtime=$(stat -c %Y "$marker")
-                local now=$(date +%s)
+                local file_mtime
+                file_mtime=$(stat -c %Y "$marker")
+                local now
+                now=$(date +%s)
                 age_days=$(( ($now - $file_mtime) / 86400 ))
             fi
 
@@ -605,7 +622,8 @@ orch_state_cleanup_old() {
         if [ "$(basename "$state_file")" = ".state" ]; then continue; fi  # Skip system .state file
 
         # Extract timestamp
-        local timestamp=$(grep "^timestamp=" "$state_file" 2>/dev/null | cut -d= -f2)
+        local timestamp
+        timestamp=$(grep "^timestamp=" "$state_file" 2>/dev/null | cut -d= -f2)
         if [ -z "$timestamp" ]; then continue; fi
 
         # Calculate age (date parsing - macOS vs Linux compatible)
@@ -618,12 +636,14 @@ orch_state_cleanup_old() {
             file_epoch=$(date -d "$timestamp" +%s 2>/dev/null)
         fi
 
-        local now_epoch=$(date +%s)
+        local now_epoch
+        now_epoch=$(date +%s)
         local age_days=$(( ($now_epoch - $file_epoch) / 86400 ))
 
         # Archive if older than retention policy
         if [ "$age_days" -ge "$retention_days" ]; then
-            local basename=$(basename "$state_file")
+            local basename
+            basename=$(basename "$state_file")
             log_verbose "Archiving old state file: $basename (age: $age_days days)"
 
             # Compress and move to archive
@@ -646,12 +666,16 @@ orch_state_cleanup_old() {
         # Check file age (fallback to modification time)
         local age_days=0
         if stat -f %m "$fed_file" >/dev/null 2>&1; then
-            local file_mtime=$(stat -f %m "$fed_file")
-            local now=$(date +%s)
+            local file_mtime
+            file_mtime=$(stat -f %m "$fed_file")
+            local now
+            now=$(date +%s)
             age_days=$(( ($now - $file_mtime) / 86400 ))
         elif stat -c %Y "$fed_file" >/dev/null 2>&1; then
-            local file_mtime=$(stat -c %Y "$fed_file")
-            local now=$(date +%s)
+            local file_mtime
+            file_mtime=$(stat -c %Y "$fed_file")
+            local now
+            now=$(date +%s)
             age_days=$(( ($now - $file_mtime) / 86400 ))
         fi
 
@@ -699,7 +723,8 @@ orch_state_cleanup_old() {
 ##
 orch_state_validate_checksum() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local state_file="${DIVE_ROOT}/.dive-state/${code_lower}.state"
 
     if [ ! -f "$state_file" ]; then
@@ -708,7 +733,8 @@ orch_state_validate_checksum() {
     fi
 
     # Extract stored checksum
-    local stored_checksum=$(grep "^checksum=" "$state_file" 2>/dev/null | cut -d= -f2)
+    local stored_checksum
+    stored_checksum=$(grep "^checksum=" "$state_file" 2>/dev/null | cut -d= -f2)
 
     if [ -z "$stored_checksum" ]; then
         log_warn "No checksum found in state file (old format)"
@@ -716,7 +742,8 @@ orch_state_validate_checksum() {
     fi
 
     # Calculate current checksum (exclude checksum line itself)
-    local current_checksum=$(grep -v "^checksum=" "$state_file" | shasum -a 256 | cut -d' ' -f1)
+    local current_checksum
+    current_checksum=$(grep -v "^checksum=" "$state_file" | shasum -a 256 | cut -d' ' -f1)
 
     if [ "$stored_checksum" = "$current_checksum" ]; then
         log_verbose "✓ Checksum valid for $instance_code"

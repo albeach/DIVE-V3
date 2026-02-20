@@ -21,7 +21,7 @@ _create_spoke_docker_compose() {
     local api_url="$7"
     local base_url="$8"
     local idp_url="$9"
-    local tunnel_token="${10}"
+    local _tunnel_token="${10}"
 
     # ==========================================================================
     # Port allocation based on instance code (spoke-in-a-box pattern)
@@ -33,19 +33,23 @@ _create_spoke_docker_compose() {
     local backend_host_port=$SPOKE_BACKEND_PORT
     local keycloak_https_port=$SPOKE_KEYCLOAK_HTTPS_PORT
     local keycloak_http_port=$SPOKE_KEYCLOAK_HTTP_PORT
-    local postgres_host_port=$SPOKE_POSTGRES_PORT
-    local mongodb_host_port=$SPOKE_MONGODB_PORT
-    local redis_host_port=$SPOKE_REDIS_PORT
+    local _postgres_host_port=$SPOKE_POSTGRES_PORT
+    local _mongodb_host_port=$SPOKE_MONGODB_PORT
+    local _redis_host_port=$SPOKE_REDIS_PORT
     local opa_host_port=$SPOKE_OPA_PORT
     local kas_host_port=$SPOKE_KAS_PORT
 
     # ==========================================================================
     # Country-specific theming from NATO countries database
     # ==========================================================================
-    local theme_primary=$(get_country_primary_color "$code_upper")
-    local theme_secondary=$(get_country_secondary_color "$code_upper")
-    local country_timezone=$(get_country_timezone "$code_upper")
-    local country_name=$(get_country_name "$code_upper")
+    local theme_primary
+    theme_primary=$(get_country_primary_color "$code_upper")
+    local theme_secondary
+    theme_secondary=$(get_country_secondary_color "$code_upper")
+    local _country_timezone
+    _country_timezone=$(get_country_timezone "$code_upper")
+    local _country_name
+    _country_name=$(get_country_name "$code_upper")
 
     # Fallback to default colors if country not in database
     if [ -z "$theme_primary" ]; then
@@ -72,8 +76,10 @@ _create_spoke_docker_compose() {
     fi
 
     # Calculate template hash for drift detection
-    local template_hash=$(md5sum "$template_file" | awk '{print $1}')
-    local timestamp=$(date -Iseconds)
+    local template_hash
+    template_hash=$(md5sum "$template_file" | awk '{print $1}')
+    local timestamp
+    timestamp=$(date -Iseconds)
 
     log_info "Generating docker-compose.yml from template (hash: ${template_hash:0:12})"
 
@@ -81,8 +87,10 @@ _create_spoke_docker_compose() {
     cp "$template_file" "$spoke_dir/docker-compose.yml"
 
     # Portable sed for cross-platform compatibility (macOS + Linux)
-    local tmpfile=$(mktemp)
-    local opal_opa_offset=$(echo -n "${code_lower}" | cksum | cut -d' ' -f1)
+    local tmpfile
+    tmpfile=$(mktemp)
+    local opal_opa_offset
+    opal_opa_offset=$(echo -n "${code_lower}" | cksum | cut -d' ' -f1)
     local opal_opa_port=$((9181 + (opal_opa_offset % 100)))
     
     # Replace all placeholders in one go
@@ -198,8 +206,10 @@ _spoke_init_legacy() {
     fi
 
     # Use default values and call internal init
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
 
     # Calculate ports using centralized function (ensures consistency with docker-compose)
@@ -307,8 +317,10 @@ _spoke_init_legacy() {
 spoke_init_keycloak() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -397,7 +409,8 @@ spoke_init_keycloak() {
 
     if [ -z "$realm_exists" ]; then
         echo -e "${CYAN}Creating realm...${NC}"
-        local realm_data=$(cat <<EOF
+        local realm_data
+        realm_data=$(cat <<EOF
 {
     "realm": "${realm_name}",
     "displayName": "DIVE V3 Broker - ${code_upper}",
@@ -441,7 +454,8 @@ EOF
         echo -e "${CYAN}Creating client...${NC}"
 
         # Build redirect URIs
-        local redirect_uris=$(cat <<EOF
+        local redirect_uris
+        redirect_uris=$(cat <<EOF
 [
     "https://localhost:3000",
     "https://localhost:3000/*",
@@ -454,7 +468,8 @@ EOF
 EOF
 )
 
-        local client_data=$(cat <<EOF
+        local client_data
+        client_data=$(cat <<EOF
 {
     "clientId": "${client_id}",
     "name": "DIVE V3 Frontend - ${code_upper}",

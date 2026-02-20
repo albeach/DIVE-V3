@@ -69,7 +69,8 @@ spoke_get_service_deps() {
     local service="$2"
 
     if type compose_get_spoke_dependencies &>/dev/null; then
-        local deps=$(compose_get_spoke_dependencies "$instance_code" "$service")
+        local deps
+        deps=$(compose_get_spoke_dependencies "$instance_code" "$service")
         if [ "$deps" = "none" ]; then
             echo ""
         else
@@ -142,8 +143,10 @@ spoke_containers_start() {
     local instance_code="$1"
     local force_rebuild="${2:-false}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Starting containers for $code_upper"
@@ -158,7 +161,7 @@ spoke_containers_start() {
 
     # Set compose project name
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
-    cd "$spoke_dir"
+    cd "$spoke_dir" || return 1
 
     # Source .env file
     if [ -f "$spoke_dir/.env" ]; then
@@ -172,7 +175,7 @@ spoke_containers_start() {
         log_info "Using optimized parallel tier-based startup (30% faster)"
 
         # Change back to DIVE_ROOT for module execution
-        cd "${DIVE_ROOT}"
+        cd "${DIVE_ROOT}" || return 1
 
         # Use tiered parallel startup
         if orch_start_services_tiered "$instance_code" "docker-compose.yml"; then
@@ -180,7 +183,7 @@ spoke_containers_start() {
             return 0
         else
             log_warn "Parallel tier startup failed, falling back to traditional approach"
-            cd "$spoke_dir"
+            cd "$spoke_dir" || return 1
         fi
     fi
 
@@ -236,7 +239,8 @@ spoke_containers_start() {
     # 3. Reduce overall deployment time by 30-60 seconds
     # =============================================================================
     log_info "Pre-pulling Docker images in parallel..."
-    local pull_start=$(date +%s)
+    local pull_start
+    pull_start=$(date +%s)
 
     # Start pull in background so we can enforce a timeout
     $compose_cmd pull --quiet --ignore-pull-failures 2>/dev/null &
@@ -258,7 +262,8 @@ spoke_containers_start() {
     else
         local pull_exit=0
         wait $pull_pid 2>/dev/null || pull_exit=$?
-        local pull_end=$(date +%s)
+        local pull_end
+        pull_end=$(date +%s)
         local pull_duration=$((pull_end - pull_start))
         if [ $pull_exit -eq 0 ]; then
             log_success "✓ Images pre-pulled in ${pull_duration}s"
@@ -338,7 +343,8 @@ spoke_containers_start() {
 
     while [ $waited -lt $max_wait ]; do
         # Container names are: dive-spoke-fra-postgres, dive-spoke-fra-redis, etc.
-        local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | grep -E '\-(postgres|redis|mongodb|opa)$' | wc -l | tr -d ' ')
+        local running_count
+        running_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | grep -E '\-(postgres|redis|mongodb|opa)$' | wc -l | tr -d ' ')
 
         if [ "$running_count" -ge 4 ]; then
             log_info "Core infrastructure running (${running_count}/4 services) after ${waited}s"
@@ -499,7 +505,8 @@ spoke_containers_start() {
 ##
 spoke_containers_start_created() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local created_containers
     created_containers=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --filter "status=created" --format '{{.Names}}')
@@ -526,7 +533,8 @@ spoke_containers_start_created() {
 ##
 spoke_containers_stop() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Stopping containers for $(upper "$instance_code")"
@@ -534,7 +542,7 @@ spoke_containers_stop() {
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         if ! docker compose down 2>/dev/null; then
             log_verbose "docker compose down failed (containers may not be running)"
         fi
@@ -567,7 +575,8 @@ spoke_containers_clean() {
     local instance_code="$1"
     local remove_volumes="${2:-false}"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Cleaning containers for $(upper "$instance_code")"
@@ -575,7 +584,7 @@ spoke_containers_clean() {
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         if [ "$remove_volumes" = "true" ]; then
             if ! docker compose down -v --remove-orphans 2>/dev/null; then
                 log_verbose "docker compose down with volumes failed"
@@ -615,7 +624,8 @@ spoke_containers_clean() {
 ##
 spoke_containers_clean_database_volumes() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local project_name="dive-spoke-${code_lower}"
 
     log_verbose "Cleaning database volumes for $instance_code"
@@ -659,13 +669,16 @@ spoke_containers_wait_for_healthy() {
     local instance_code="$1"
     local global_timeout="${2:-300}"
 
-    local code_lower=$(lower "$instance_code")
-    local start_time=$(date +%s)
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local start_time
+    start_time=$(date +%s)
 
     log_step "Waiting for services to become healthy..."
 
     # Get services dynamically from compose file
-    local service_order=($(spoke_get_service_order "$instance_code"))
+    local -a service_order=()
+    read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
 
     # CRITICAL FIX (2026-02-19): Get optional services so we don't block on them.
     # OPAL client is "optional" — it often isn't healthy during DEPLOYMENT phase
@@ -678,7 +691,8 @@ spoke_containers_wait_for_healthy() {
     # Wait for each service in order
     for service in "${service_order[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
-        local timeout=$(spoke_get_service_timeout "$service")
+        local timeout
+        timeout=$(spoke_get_service_timeout "$service")
 
         # Check global timeout
         local elapsed=$(($(date +%s) - start_time))
@@ -835,7 +849,8 @@ spoke_containers_check_dependencies() {
 ##
 spoke_containers_status() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local running=0
     local unhealthy=0
@@ -843,7 +858,8 @@ spoke_containers_status() {
     local total=0
 
     # Get services dynamically from compose file
-    local service_order=($(spoke_get_service_order "$instance_code"))
+    local -a service_order=()
+    read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
 
     for service in "${service_order[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
@@ -882,7 +898,8 @@ spoke_containers_status() {
 ##
 spoke_containers_list() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo ""
     echo "Containers for $(upper "$instance_code"):"
@@ -907,13 +924,14 @@ spoke_containers_logs() {
     local service="${2:-}"
     local tail_lines="${3:-50}"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
-        cd "$spoke_dir"
+        cd "$spoke_dir" || return 1
         if [ -n "$service" ]; then
             docker compose logs --tail="$tail_lines" "${service}-${code_lower}" 2>/dev/null || \
                 docker compose logs --tail="$tail_lines" "$service" 2>/dev/null
@@ -925,7 +943,8 @@ spoke_containers_logs() {
             docker logs --tail="$tail_lines" "dive-spoke-${code_lower}-${service}" 2>/dev/null
         else
             # Get services dynamically from compose file
-            local service_order=($(spoke_get_service_order "$instance_code"))
+            local -a service_order=()
+            read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
 
             for svc in "${service_order[@]}"; do
                 echo "=== $svc ==="
@@ -951,13 +970,14 @@ spoke_containers_restart_service() {
     local instance_code="$1"
     local service="$2"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Restarting $service"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
-    cd "$spoke_dir"
+    cd "$spoke_dir" || return 1
 
     docker compose restart "${service}-${code_lower}" 2>/dev/null || \
         docker compose restart "$service" 2>/dev/null || \
@@ -974,13 +994,14 @@ spoke_containers_restart_service() {
 ##
 spoke_containers_force_recreate() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Force recreating containers for $(upper "$instance_code")"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
-    cd "$spoke_dir"
+    cd "$spoke_dir" || return 1
 
     # Stop existing
     if ! docker compose down 2>/dev/null; then
@@ -1012,11 +1033,13 @@ spoke_containers_wait_for_services() {
     local instance_code="$1"
     local services="$2"
     local timeout="${3:-60}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Waiting up to ${timeout}s for services to become healthy: $services"
 
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local last_progress=0
     while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
         local elapsed=$(($(date +%s) - start_time))
@@ -1052,3 +1075,6 @@ spoke_containers_wait_for_services() {
     log_warn "Services did not become healthy within ${timeout}s: $services"
     return 1
 }
+
+# sc2034-anchor
+: "${SPOKE_SERVICE_TIMEOUTS:-}"

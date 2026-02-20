@@ -4,7 +4,7 @@
 # Purpose: Remove optional items based on usage analysis
 
 WORKSPACE_ROOT="/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3"
-cd "$WORKSPACE_ROOT"
+cd "$WORKSPACE_ROOT" || exit 1
 
 echo "🗑️  DIVE V3 Optional Cleanup - Phase 3"
 echo "========================================="
@@ -18,7 +18,8 @@ mkdir -p "$ARCHIVE_DIR"
 archive_and_remove() {
     local item="$1"
     local description="$2"
-    local size=$(du -sh "$item" 2>/dev/null | cut -f1)
+    local size
+    size=$(du -sh "$item" 2>/dev/null | cut -f1)
     
     if [[ -e "$item" ]]; then
         echo "📦 Archiving: $item ($size) - $description"

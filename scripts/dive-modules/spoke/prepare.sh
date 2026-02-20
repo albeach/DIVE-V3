@@ -60,6 +60,7 @@ for _mod in \
     "${PREPARE_DIR}/pipeline/spoke-secrets.sh" \
     "${PREPARE_DIR}/pipeline/spoke-caddy.sh" \
     "${PREPARE_DIR}/pipeline/phase-configuration.sh"; do
+    # shellcheck source=/dev/null
     [ -f "$_mod" ] && source "$_mod"
 done
 unset _mod
@@ -112,8 +113,10 @@ spoke_prepare() {
         esac
     done
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local package_dir="${spoke_dir}/package"
 
@@ -556,7 +559,8 @@ _spoke_ship_package() {
 ##
 _spoke_start_remote() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_info "Starting spoke $code_upper on remote EC2..."
 

@@ -1,5 +1,6 @@
 #!/bin/bash
-export DIVE_ROOT="$(pwd)"
+DIVE_ROOT="$(pwd)"
+export DIVE_ROOT
 source scripts/dive-modules/common.sh
 source scripts/dive-modules/spoke/spoke-deploy.sh
 

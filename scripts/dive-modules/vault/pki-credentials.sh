@@ -54,8 +54,8 @@ _vault_refresh_secret_id() {
     fi
 
     # Get new SecretID accessor for metadata lookup
-    local new_accessor
-    new_accessor=$(vault write -field=secret_id_accessor -f "auth/approle/role/${role_name}/secret-id" 2>/dev/null || true)
+    local _new_accessor
+    _new_accessor=$(vault write -field=secret_id_accessor -f "auth/approle/role/${role_name}/secret-id" 2>/dev/null || true)
 
     # Update spoke .env
     if [ -f "$spoke_env" ]; then

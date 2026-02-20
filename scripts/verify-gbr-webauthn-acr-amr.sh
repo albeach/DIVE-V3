@@ -203,13 +203,13 @@ else
     echo "================================================================="
     echo ""
     
-    if [[ " ${ISSUES[@]} " =~ " STALE_SESSION " ]]; then
+    if printf '%s\n' "${ISSUES[@]}" | grep -qx "STALE_SESSION"; then
         echo "1️⃣  Clear all sessions for $USERNAME:"
         echo "   docker exec $KC_CONTAINER /opt/keycloak/bin/kcadm.sh delete users/$USER_ID/sessions -r $REALM"
         echo ""
     fi
     
-    if [[ " ${ISSUES[@]} " =~ " NO_WEBAUTHN_IN_FLOW " ]]; then
+    if printf '%s\n' "${ISSUES[@]}" | grep -qx "NO_WEBAUTHN_IN_FLOW"; then
         echo "2️⃣  Re-apply Terraform to configure WebAuthn flow:"
         echo "   cd terraform/spoke-gbr && terraform apply"
         echo ""

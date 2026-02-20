@@ -97,7 +97,7 @@ fi
 log_success "Current Vault is running and unsealed"
 
 # Verify Shamir keys parse correctly
-UNSEAL_KEYS=($(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}'))
+mapfile -t UNSEAL_KEYS < <(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}')
 if [ ${#UNSEAL_KEYS[@]} -lt 3 ]; then
     fail "Need at least 3 unseal keys in .vault-init.txt, found ${#UNSEAL_KEYS[@]}"
 fi

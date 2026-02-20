@@ -31,7 +31,8 @@ is_tunnel_running() {
 
     # Check PID file first
     if [ -f "${pid_file}" ]; then
-        local pid=$(cat "${pid_file}")
+        local pid
+        pid=$(cat "${pid_file}")
         if ps -p "${pid}" > /dev/null 2>&1; then
             return 0
         fi

@@ -463,7 +463,8 @@ module_vault_db_test() {
 ##
 _vault_db_provision_spoke() {
     local code="$1"
-    local code_upper=$(upper "$code")
+    local code_upper
+    code_upper=$(upper "$code")
 
     log_info "Creating database roles for ${code_upper}..."
 

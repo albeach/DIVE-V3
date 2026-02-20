@@ -69,7 +69,7 @@ terraform_init() {
 
     log_info "Initializing Terraform in $tf_dir..."
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     # ==========================================================================
     # CRITICAL FIX: Non-interactive Terraform init
@@ -88,7 +88,7 @@ terraform_init() {
         -no-color \
         >/dev/null 2>&1
     local result=$?
-    cd - >/dev/null
+    cd - >/dev/null || return 1
 
     if [ $result -eq 0 ]; then
         log_success "Terraform initialized"
@@ -116,7 +116,7 @@ terraform_plan() {
 
     log_info "Running Terraform plan..."
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     local cmd="terraform plan"
     [ -n "$var_file" ] && [ -f "$var_file" ] && cmd="$cmd -var-file=$var_file"
@@ -124,7 +124,7 @@ terraform_plan() {
     $cmd "$@"
     local result=$?
 
-    cd - >/dev/null
+    cd - >/dev/null || return 1
     return $result
 }
 
@@ -146,17 +146,19 @@ terraform_apply() {
     log_info "Applying Terraform configuration (this may take 5-10 minutes)..."
     log_info "Progress: Creating Keycloak realm and resources..."
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     local cmd="terraform apply -auto-approve -parallelism=20 -compact-warnings -no-color"
     [ -n "$var_file" ] && [ -f "$var_file" ] && cmd="$cmd -var-file=$var_file"
 
     # Execute with progress monitoring
-    log_verbose "Command: $cmd $@"
+    log_verbose "Command: $cmd $*"
 
     # Create temp file for output
-    local tmp_output=$(mktemp)
-    local start_time=$(date +%s)
+    local tmp_output
+    tmp_output=$(mktemp)
+    local start_time
+    start_time=$(date +%s)
 
     # ==========================================================================
     # CRITICAL FIX: Add timeout for Terraform apply (600s = 10 minutes)
@@ -194,7 +196,8 @@ terraform_apply() {
     local result=$?
 
     if [ $result -eq 0 ]; then
-        local end_time=$(date +%s)
+        local end_time
+        end_time=$(date +%s)
         local duration=$((end_time - start_time))
         log_success "Terraform apply complete in ${duration}s"
 
@@ -204,14 +207,14 @@ terraform_apply() {
         fi
 
         rm -f "$tmp_output"
-        cd - >/dev/null
+        cd - >/dev/null || return 1
         return 0
     else
         log_error "Terraform apply failed"
         log_error "Output saved to: $tmp_output"
         log_verbose "Recent output:"
         tail -20 "$tmp_output" 2>/dev/null || true
-        cd - >/dev/null
+        cd - >/dev/null || return 1
         return $result
     fi
 }
@@ -231,7 +234,7 @@ terraform_destroy() {
 
     log_warn "Destroying Terraform resources..."
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     local cmd="terraform destroy -auto-approve"
     [ -n "$var_file" ] && [ -f "$var_file" ] && cmd="$cmd -var-file=$var_file"
@@ -239,7 +242,7 @@ terraform_destroy() {
     $cmd
     local result=$?
 
-    cd - >/dev/null
+    cd - >/dev/null || return 1
     return $result
 }
 
@@ -254,7 +257,7 @@ terraform_output() {
     local tf_dir="$1"
     local output_name="${2:-}"
 
-    cd "$tf_dir"
+    cd "$tf_dir" || return 1
 
     if [ -n "$output_name" ]; then
         terraform output -raw "$output_name" 2>/dev/null
@@ -262,7 +265,7 @@ terraform_output() {
         terraform output -json 2>/dev/null
     fi
 
-    cd - >/dev/null
+    cd - >/dev/null || return 1
 }
 
 # =============================================================================
@@ -309,8 +312,10 @@ terraform_plan_hub() {
 ##
 terraform_apply_spoke() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Applying Spoke Terraform configuration for $code_upper..."
 
@@ -348,7 +353,8 @@ terraform_apply_spoke() {
         # CRITICAL: Detect and handle Terraform state drift
         # If Terraform state is empty but resources exist in Keycloak, we have orphaned resources
         # This happens after deployment rollbacks that stop containers but leave Keycloak data
-        local state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
+        local state_count
+        state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
         if [ "$state_count" = "0" ]; then
             log_verbose "Terraform state is empty, checking for orphaned Keycloak realm..."
 
@@ -502,8 +508,10 @@ terraform_apply_spoke() {
 ##
 terraform_plan_spoke() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if [ ! -d "$TF_SPOKE_DIR" ]; then
         log_warn "Spoke Terraform directory not found"
@@ -539,7 +547,8 @@ terraform_plan_spoke() {
 terraform_spoke() {
     local action="${1:-help}"
     local instance_code="${2:-}"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     case "$action" in
         init)

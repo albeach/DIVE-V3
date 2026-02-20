@@ -5,7 +5,7 @@
 # Commands: deploy, reset, nuke
 # =============================================================================
 
-# shellcheck source=common.sh disable=SC1091
+# shellcheck source=./common.sh
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -90,7 +90,7 @@ cmd_deploy() {
     cd "$DIVE_ROOT" || exit 1
 
     # Load status module for cmd_validate
-    # shellcheck source=status.sh disable=SC1091
+    # shellcheck source=./status.sh
     source "$(dirname "${BASH_SOURCE[0]}")/status.sh"
 
     # Execute deployment
@@ -185,7 +185,7 @@ cmd_deploy() {
         # This includes COI key initialization, user seeding, and ZTDF resources
         local hub_seed_script="${DIVE_ROOT}/scripts/dive-modules/hub/seed.sh"
         if [ -f "$hub_seed_script" ]; then
-            # shellcheck source=hub/seed.sh disable=SC1091
+            # shellcheck source=./hub/seed.sh
             source "$hub_seed_script"
             hub_seed 5000 || log_warn "Seeding may have issues (check logs)"
         else
@@ -193,7 +193,7 @@ cmd_deploy() {
         fi
     else
         # Use cmd_seed for non-hub deployments (spokes use their own pipeline)
-        # shellcheck source=db.sh disable=SC1091
+        # shellcheck source=./db.sh
         source "$(dirname "${BASH_SOURCE[0]}")/db.sh"
         cmd_seed 5000 "$INSTANCE" || log_warn "Seeding may have issues (check logs)"
     fi
@@ -262,11 +262,25 @@ checkpoint_create() {
 
     # Prune old checkpoints (keep last 3)
     local count=0
-    # shellcheck disable=SC2012
-    for old_checkpoint in $(ls -t "${CHECKPOINT_DIR}" 2>/dev/null | grep -v '^latest$' | tail -n +4); do
-        rm -rf "${CHECKPOINT_DIR}/${old_checkpoint}"
-        count=$((count + 1))
-    done
+    local -a checkpoint_dirs=()
+    local checkpoint_path checkpoint_name
+    while IFS= read -r checkpoint_name; do
+        [ -n "$checkpoint_name" ] && checkpoint_dirs+=("$checkpoint_name")
+    done < <(
+        for checkpoint_path in "${CHECKPOINT_DIR}"/*/; do
+            [ -d "$checkpoint_path" ] || continue
+            basename "$checkpoint_path"
+        done | grep -v '^latest$' | sort -r
+    )
+    if [ ${#checkpoint_dirs[@]} -gt 3 ]; then
+        local idx old_checkpoint
+        for ((idx=3; idx<${#checkpoint_dirs[@]}; idx++)); do
+            old_checkpoint="${checkpoint_dirs[$idx]}"
+            [ -z "$old_checkpoint" ] && continue
+            rm -rf -- "${CHECKPOINT_DIR:?}/${old_checkpoint:?}"
+            count=$((count + 1))
+        done
+    fi
     [ $count -gt 0 ] && log_verbose "Pruned ${count} old checkpoint(s)"
 
     log_success "Checkpoint created: ${name}"
@@ -285,7 +299,8 @@ checkpoint_list() {
 
     for checkpoint in "${CHECKPOINT_DIR}"/*/; do
         [ ! -d "$checkpoint" ] && continue
-        local name=$(basename "$checkpoint")
+        local name
+        name=$(basename "$checkpoint")
         local timestamp=""
         [ -f "${checkpoint}/timestamp" ] && timestamp=$(cat "${checkpoint}/timestamp")
 
@@ -362,7 +377,7 @@ cmd_rollback() {
 
     # Restart services
     log_verbose "Starting containers..."
-    # shellcheck source=core.sh disable=SC1091
+    # shellcheck source=./core.sh
     source "$(dirname "${BASH_SOURCE[0]}")/core.sh"
     cmd_up
 

@@ -806,7 +806,8 @@ module_vault_test_rotation_full() {
     local original_value
     original_value=$(vault kv get -field=password "$secret_path" 2>/dev/null)
     if [ -n "$original_value" ]; then
-        local test_value="rotation-full-test-$(date +%s)"
+        local test_value
+        test_value="rotation-full-test-$(date +%s)"
         if vault kv put "$secret_path" password="$test_value" >/dev/null 2>&1; then
             local readback
             readback=$(vault kv get -field=password "$secret_path" 2>/dev/null)

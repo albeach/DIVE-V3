@@ -448,7 +448,7 @@ dns_setup() {
         elif is_interactive; then
             echo "  Available zones:"
             local i=1
-            while IFS=' ' read -r zid zname; do
+            while IFS=' ' read -r _zid zname; do
                 echo "    ${i}) ${zname}"
                 i=$((i + 1))
             done <<< "$zones"
@@ -625,7 +625,7 @@ dns_status() {
 
     # Group by instance prefix
     local current_prefix=""
-    echo "$records" | sort -k2 | while IFS=' ' read -r rid fqdn content ttl; do
+    echo "$records" | sort -k2 | while IFS=' ' read -r _rid fqdn content ttl; do
         # Only show DIVE-related records (matching {code}-{svc}.{domain} pattern)
         local prefix
         prefix=$(echo "$fqdn" | sed "s/\.\(.*\)$//" | sed 's/-[^-]*$//')
@@ -684,7 +684,7 @@ dns_records() {
     printf "  ${BOLD}%-42s %-16s %s${NC}\n" "FQDN" "IP" "TTL"
     echo "  $(printf '─%.0s' {1..70})"
 
-    echo "$records" | sort -k2 | while IFS=' ' read -r rid fqdn content ttl; do
+    echo "$records" | sort -k2 | while IFS=' ' read -r _rid fqdn content ttl; do
         printf "  %-42s %-16s %s\n" "$fqdn" "$content" "${ttl}s"
     done
 

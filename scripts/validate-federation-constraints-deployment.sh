@@ -243,3 +243,6 @@ else
   echo "Please fix failed checks before deploying."
   exit 1
 fi
+
+# sc2034-anchor
+: "${ADMIN_TOKEN:-}"

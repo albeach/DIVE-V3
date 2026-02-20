@@ -61,7 +61,7 @@ FILES_TO_UPDATE=$(find "$PROJECT_ROOT" -type f \( \
   -not -path "*/coverage/*" \
   -not -path "*/backups/*" \
   -not -path "*/archived/*" \
-  | xargs grep -l "dive-v3-broker-usa[^-]" 2>/dev/null || true)
+  -exec grep -l "dive-v3-broker-usa[^-]" {} + 2>/dev/null || true)
 
 FILE_COUNT=$(echo "$FILES_TO_UPDATE" | wc -l | tr -d ' ')
 
@@ -112,7 +112,8 @@ UPDATED_COUNT=0
 echo "$FILES_TO_UPDATE" | while read -r file; do
     if [ -f "$file" ]; then
         # Portable sed using temporary file (works on macOS + Linux)
-        local tmpfile=$(mktemp)
+        tmpfile
+        tmpfile=$(mktemp)
         
         # Migration 1: dive-v3-broker-usa → dive-v3-broker-usa (but NOT dive-v3-broker-usa, dive-v3-broker-fra, etc.)
         if grep -q "dive-v3-broker-usa[^-]" "$file"; then
@@ -143,7 +144,7 @@ REMAINING=$(find "$PROJECT_ROOT" -type f \( \
   -not -path "*/.git/*" \
   -not -path "*/backups/*" \
   -not -path "*/archived/*" \
-  | xargs grep -l "dive-v3-broker-usa[^-]" 2>/dev/null | wc -l | tr -d ' ')
+  -exec grep -l "dive-v3-broker-usa[^-]" {} + 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$REMAINING" = "0" ]; then
     log_success "✓ All files migrated successfully!"
@@ -166,3 +167,5 @@ echo "║    4. Verify SSO: ./dive test sso bgr                        ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
+# sc2034-anchor
+: "${CYAN:-}" "${UPDATED_COUNT:-}"

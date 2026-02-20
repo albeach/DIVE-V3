@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090  # Dynamic source paths are intentional in test harness
 # =============================================================================
 # DIVE V3 - CLI Modules Unit Tests
 # =============================================================================
@@ -11,6 +10,7 @@
 
 # Test framework
 if [ -z "$DIVE_TEST_FRAMEWORK_LOADED" ]; then
+    # shellcheck source=./test-framework.sh
     source "$(dirname "${BASH_SOURCE[0]}")/test-framework.sh"
 fi
 
@@ -442,6 +442,7 @@ test_cli_config_validator() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/configuration/config-validator.sh
     source "$validator"
 
     # Verify config_validate function exists
@@ -510,6 +511,7 @@ test_cli_deploy_summary() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/utilities/deployment-summary.sh
     source "$summary"
 
     # Verify functions exist
@@ -562,6 +564,7 @@ test_cli_setup_wizard() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/configuration/setup-wizard.sh
     source "$wizard"
 
     # Verify cmd_setup function exists
@@ -598,6 +601,7 @@ test_cli_error_recovery() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/orchestration/error-recovery.sh
     source "$recovery"
 
     # Verify functions exist
@@ -656,6 +660,7 @@ test_cli_config_manager() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/configuration/config-manager.sh
     source "$manager"
 
     # Verify functions exist
@@ -727,6 +732,7 @@ test_cli_profiles() {
         return 1
     fi
 
+    # shellcheck source=./dive-modules/configuration/profiles.sh
     source "$profiles"
 
     # Verify functions exist

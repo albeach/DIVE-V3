@@ -185,7 +185,7 @@ done
 ALL_HOSTNAMES=("${HOSTNAMES[@]}")
 
 # Remove duplicates and empty entries
-UNIQUE_HOSTNAMES=($(printf '%s\n' "${ALL_HOSTNAMES[@]}" | sort -u | grep -v '^$'))
+mapfile -t UNIQUE_HOSTNAMES < <(printf '%s\n' "${ALL_HOSTNAMES[@]}" | sort -u | grep -v '^$')
 
 echo -e "${GREEN}✓ Found ${#UNIQUE_HOSTNAMES[@]} unique hostnames${NC}"
 echo ""

@@ -282,7 +282,8 @@ get_federation_secret() {
 ##
 secrets_load_for_instance() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Loading secrets for ${code_lower} (provider: $SECRETS_PROVIDER)..."
 
@@ -296,7 +297,8 @@ secrets_load_for_instance() {
     fi
 
     # Load secrets into environment with consistent _<COUNTRY_CODE> suffix
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local _kc_pass _pg_pass _mg_pass _rd_pass _auth _kc_client _opal
 
     _kc_pass=$(get_keycloak_admin_password "$instance_code")
@@ -367,7 +369,8 @@ EOF
 ##
 secrets_ensure() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Ensuring secrets exist for $instance_code (provider: $SECRETS_PROVIDER)..."
 
@@ -395,7 +398,8 @@ secrets_ensure() {
             log_info "Creating secret: ${SECRET_PREFIX}-${secret}-${code_lower}"
 
             # Generate secure random password
-            local password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            local password
+            password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
             set_secret "$secret" "$password" "$instance_code"
             ((created++))
         fi
@@ -420,7 +424,8 @@ secrets_ensure() {
 secrets_rotate() {
     local instance_code="$1"
     local secret_type="${2:-all}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Rotating secrets for $instance_code (type: $secret_type, provider: $SECRETS_PROVIDER)..."
 
@@ -444,7 +449,8 @@ secrets_rotate() {
         log_info "Rotating: ${SECRET_PREFIX}-${secret}-${code_lower}"
 
         # Generate new password
-        local new_password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        local new_password
+        new_password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
         set_secret "$secret" "$new_password" "$instance_code"
     done
 
@@ -462,7 +468,8 @@ secrets_rotate() {
 ##
 secrets_verify() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Verifying secrets for $instance_code (provider: $SECRETS_PROVIDER)..."
 
@@ -551,7 +558,8 @@ _secrets_update_env_var() {
     local var_value="$3"
 
     if grep -q "^${var_name}=" "$env_file"; then
-        local tmpfile=$(mktemp)
+        local tmpfile
+        tmpfile=$(mktemp)
         sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file" > "$tmpfile" && mv "$tmpfile" "$env_file"
     else
         echo "${var_name}=${var_value}" >> "$env_file"
@@ -571,8 +579,10 @@ _secrets_update_env_var() {
 ##
 sync_container_secrets_to_env() {
     local instance_code="${1:?Instance code required}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     ensure_dive_root
 

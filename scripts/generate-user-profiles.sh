@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Script to generate all NATO nation user profile templates
 
-cd "$(dirname "$0")/../keycloak/user-profile-templates"
+cd "$(dirname "$0")/../keycloak/user-profile-templates" || exit 1
 
 # Function to create a user profile template
 create_user_profile() {

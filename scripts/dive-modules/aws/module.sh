@@ -793,3 +793,6 @@ export -f aws_setup_iam
 export -f module_aws
 
 log_verbose "AWS module loaded (region: $AWS_REGION, env: $ENVIRONMENT)"
+
+# sc2034-anchor
+: "${AWS_SG_HUB_NAME:-}" "${AWS_SG_SPOKE_NAME:-}" "${AWS_TAG_PREFIX:-}"

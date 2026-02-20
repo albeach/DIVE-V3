@@ -65,7 +65,7 @@ sync_hub_secrets() {
 
     if [ "$FEDERATION_JSON" != "{}" ] && [ "$FEDERATION_JSON" != "null" ]; then
         echo "$FEDERATION_JSON" | jq -r '.value | to_entries[] | "\(.key):\(.value.client_id):\(.value.client_secret)"' 2>/dev/null | \
-        while IFS=: read -r spoke_code client_id client_secret; do
+        while IFS=: read -r spoke_code _client_id client_secret; do
             if [ -n "$client_secret" ] && [ "$client_secret" != "null" ]; then
                 log_info "Syncing federation secret for ${spoke_code}..."
 
@@ -88,7 +88,8 @@ sync_hub_secrets() {
 
 sync_spoke_secrets() {
     local SPOKE_CODE=$1
-    local spoke_lower=$(echo "$SPOKE_CODE" | tr '[:upper:]' '[:lower:]')
+    local spoke_lower
+    spoke_lower=$(echo "$SPOKE_CODE" | tr '[:upper:]' '[:lower:]')
 
     log_info "Syncing Spoke ${SPOKE_CODE} secrets from Terraform..."
 
@@ -135,7 +136,8 @@ sync_spoke_secrets() {
 
 validate_secrets() {
     local INSTANCE=$1
-    local instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
+    local instance_lower
+    instance_lower=$(echo "$INSTANCE" | tr '[:upper:]' '[:lower:]')
 
     log_info "Validating secret sync for ${INSTANCE}..."
 

@@ -177,3 +177,6 @@ case "${1:-}" in
         usage
         ;;
 esac
+
+# sc2034-anchor
+: "${RED:-}"

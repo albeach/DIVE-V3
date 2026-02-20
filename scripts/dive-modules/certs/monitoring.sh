@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Certificate Monitoring, Metrics & Runbooks
 # =============================================================================
@@ -109,13 +110,15 @@ _cert_metrics_export() {
         fi
 
         if [ -n "$vault_token" ]; then
-            local cacert_flag
-            cacert_flag=$(_vault_curl_cacert_flag 2>/dev/null || true)
+            local -a cacert_args=()
+            local _cacert_arg
+            while IFS= read -r _cacert_arg; do
+                [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+            done < <(_vault_curl_cacert_flag 2>/dev/null || true)
 
             # Root CA
             local root_ca_pem
-            # shellcheck disable=SC2086
-            root_ca_pem=$(curl -sL $cacert_flag -H "X-Vault-Token: ${vault_token}" \
+            root_ca_pem=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: ${vault_token}" \
                 "${vault_addr}/v1/pki/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
             if [ -n "$root_ca_pem" ]; then
                 local root_expiry
@@ -133,8 +136,7 @@ _cert_metrics_export() {
 
             # Intermediate CA
             local int_ca_pem
-            # shellcheck disable=SC2086
-            int_ca_pem=$(curl -sL $cacert_flag -H "X-Vault-Token: ${vault_token}" \
+            int_ca_pem=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: ${vault_token}" \
                 "${vault_addr}/v1/pki_int/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
             if [ -n "$int_ca_pem" ]; then
                 local int_expiry
@@ -227,17 +229,19 @@ cert_status_report() {
 
     if [ -n "$vault_token" ]; then
         echo -e "  ${BOLD}CA Certificates:${NC}"
-        local cacert_flag
-        cacert_flag=$(_vault_curl_cacert_flag 2>/dev/null || true)
+        local -a cacert_args=()
+        local _cacert_arg
+        while IFS= read -r _cacert_arg; do
+            [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+        done < <(_vault_curl_cacert_flag 2>/dev/null || true)
 
         # Root CA
         local root_pem
-        # shellcheck disable=SC2086
-        root_pem=$(curl -sL $cacert_flag -H "X-Vault-Token: ${vault_token}" \
+        root_pem=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: ${vault_token}" \
             "${vault_addr}/v1/pki/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
         if [ -n "$root_pem" ]; then
-            local root_days root_expiry_str
-            root_expiry_str=$(echo "$root_pem" | openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//')
+            local root_days _root_expiry_str
+            _root_expiry_str=$(echo "$root_pem" | openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//')
             local tmp_root
             tmp_root=$(mktemp)
             echo "$root_pem" > "$tmp_root"
@@ -253,8 +257,7 @@ cert_status_report() {
 
         # Intermediate CA
         local int_pem
-        # shellcheck disable=SC2086
-        int_pem=$(curl -sL $cacert_flag -H "X-Vault-Token: ${vault_token}" \
+        int_pem=$(curl -sL "${cacert_args[@]}" -H "X-Vault-Token: ${vault_token}" \
             "${vault_addr}/v1/pki_int/cert/ca" 2>/dev/null | jq -r '.data.certificate // empty' 2>/dev/null)
         if [ -n "$int_pem" ]; then
             local int_days
@@ -540,4 +543,3 @@ RUNBOOK
             ;;
     esac
 }
-

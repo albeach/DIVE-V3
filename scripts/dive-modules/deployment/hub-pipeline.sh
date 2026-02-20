@@ -11,7 +11,8 @@
 hub_pipeline_execute() {
     local pipeline_mode="${1:-deploy}"
     local instance_code="USA"
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
 
     log_info "Starting Hub pipeline: $instance_code ($pipeline_mode mode)"
 
@@ -139,6 +140,7 @@ _hub_pipeline_execute_internal() {
         # Auto-source validator if available
         local _validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
         if [ -f "$_validator" ]; then
+            # shellcheck source=../configuration/config-validator.sh
             source "$_validator"
             if ! config_validate "hub"; then
                 log_error "Hub deployment aborted: configuration validation failed"
@@ -152,6 +154,7 @@ _hub_pipeline_execute_internal() {
     # =========================================================================
     if ! type deployment_pre_summary_hub &>/dev/null; then
         local _summary="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-summary.sh"
+        # shellcheck source=../utilities/deployment-summary.sh
         [ -f "$_summary" ] && source "$_summary"
     fi
     if type deployment_pre_summary_hub &>/dev/null; then
@@ -204,7 +207,8 @@ _hub_pipeline_execute_internal() {
     # =========================================================================
     # Finalize
     # =========================================================================
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     if [ $phase_result -eq 0 ]; then
@@ -341,7 +345,8 @@ _hub_run_phase_with_circuit_breaker() {
     fi
 
     log_step "Phase: $phase_name"
-    local phase_start=$(date +%s)
+    local phase_start
+    phase_start=$(date +%s)
 
     # Initialize circuit breaker
     if type orch_circuit_breaker_init &>/dev/null; then
@@ -366,7 +371,8 @@ _hub_run_phase_with_circuit_breaker() {
         fi
     fi
 
-    local phase_end=$(date +%s)
+    local phase_end
+    phase_end=$(date +%s)
     local phase_duration=$((phase_end - phase_start))
 
     if [ $phase_result -eq 0 ]; then

@@ -50,12 +50,12 @@ generate_hub_certificate() {
     log_info "Generating Hub certificates..."
 
     if command -v mkcert >/dev/null 2>&1; then
-        cd "$certs_dir"
+        cd "$certs_dir" || return 1
         mkcert -cert-file certificate.pem -key-file key.pem \
             localhost "*.localhost" "hub.dive.local" "keycloak" \
             127.0.0.1 ::1 \
             >/dev/null 2>&1
-        cd - >/dev/null
+        cd - >/dev/null || return 1
     else
         generate_self_signed_cert "$certs_dir" "dive-hub"
     fi
@@ -105,13 +105,15 @@ rotate_certificates() {
     if [ "$instance_type" = "hub" ]; then
         certs_dir="${CERTS_DIR}/hub"
     else
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         certs_dir="${DIVE_ROOT}/instances/${code_lower}/certs"
     fi
 
     # Backup existing certificates
     if [ -f "${certs_dir}/certificate.pem" ]; then
-        local backup_dir="${certs_dir}/backup_$(date +%Y%m%d_%H%M%S)"
+        local backup_dir
+        backup_dir="${certs_dir}/backup_$(date +%Y%m%d_%H%M%S)"
         mkdir -p "$backup_dir"
         cp "${certs_dir}/certificate.pem" "${backup_dir}/"
         cp "${certs_dir}/key.pem" "${backup_dir}/"
@@ -150,7 +152,8 @@ validate_certificate() {
     fi
 
     # Check certificate validity
-    local expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+    local expiry
+    expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
 
     if [ -z "$expiry" ]; then
         log_error "Invalid certificate file: $cert_file"
@@ -158,8 +161,10 @@ validate_certificate() {
     fi
 
     # Check if expired
-    local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null)
-    local now_epoch=$(date +%s)
+    local expiry_epoch
+    expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null)
+    local now_epoch
+    now_epoch=$(date +%s)
 
     if [ "$expiry_epoch" -lt "$now_epoch" ]; then
         log_error "Certificate expired: $cert_file"
@@ -194,7 +199,8 @@ validate_instance_certificates() {
     if [ "$instance_type" = "hub" ]; then
         certs_dir="${CERTS_DIR}/hub"
     else
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         certs_dir="${DIVE_ROOT}/instances/${code_lower}/certs"
     fi
 
@@ -236,7 +242,8 @@ check_certificate_expiry() {
             [ -f "$cert_file" ] || continue
             [[ "$cert_file" == *"key.pem" ]] && continue
 
-            local expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+            local expiry
+            expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
             printf "  %-30s %s\n" "$(basename "$cert_file")" "$expiry"
         done
         echo ""
@@ -246,14 +253,16 @@ check_certificate_expiry() {
     for spoke_dir in "${DIVE_ROOT}/instances"/*/; do
         [ -d "${spoke_dir}certs" ] || continue
 
-        local code=$(basename "$spoke_dir")
+        local code
+        code=$(basename "$spoke_dir")
         echo "Spoke $(upper "$code"):"
 
         for cert_file in "${spoke_dir}certs"/*.pem; do
             [ -f "$cert_file" ] || continue
             [[ "$cert_file" == *"key.pem" ]] && continue
 
-            local expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+            local expiry
+            expiry=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
             printf "  %-30s %s\n" "$(basename "$cert_file")" "$expiry"
         done
         echo ""

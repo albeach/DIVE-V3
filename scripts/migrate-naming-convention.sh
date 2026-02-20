@@ -144,7 +144,7 @@ for instance_code in "${INSTANCES_TO_MIGRATE[@]}"; do
     fi
 
     # Get standardized names
-    expected_realm=$(get_realm_name "$instance_code")
+    _expected_realm=$(get_realm_name "$instance_code")
     expected_client_id=$(get_client_id "$instance_code")
 
     # Check current client ID in docker-compose

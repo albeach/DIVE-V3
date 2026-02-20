@@ -73,11 +73,13 @@ revoke_certificate_by_serial() {
 
     log_info "Revoking certificate serial=$serial..."
 
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
     local response
-    # shellcheck disable=SC2086
-    response=$(curl -sL $cacert_flag -X POST \
+    response=$(curl -sL "${cacert_args[@]}" -X POST \
         -H "X-Vault-Token: $vault_token" \
         -H "Content-Type: application/json" \
         -d "{\"serial_number\": \"$serial\"}" \
@@ -126,11 +128,13 @@ rotate_crl() {
         return 1
     fi
 
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
     local response
-    # shellcheck disable=SC2086
-    response=$(curl -sL $cacert_flag -X GET \
+    response=$(curl -sL "${cacert_args[@]}" -X GET \
         -H "X-Vault-Token: $vault_token" \
         "${vault_addr}/v1/pki_int/crl/rotate" 2>/dev/null)
 
@@ -263,11 +267,13 @@ _distribute_crl() {
     local vault_addr="${VAULT_CLI_ADDR:-${VAULT_ADDR:-https://localhost:8200}}"
 
     # Fetch CRL in PEM format from Vault
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
     local crl_pem
-    # shellcheck disable=SC2086
-    crl_pem=$(curl -sL $cacert_flag "${vault_addr}/v1/pki_int/crl/pem" 2>/dev/null)
+    crl_pem=$(curl -sL "${cacert_args[@]}" "${vault_addr}/v1/pki_int/crl/pem" 2>/dev/null)
 
     if [ -z "$crl_pem" ] || ! echo "$crl_pem" | grep -q "BEGIN X509 CRL"; then
         log_verbose "CRL not available or empty (Vault may not have issued/revoked any certificates yet)"
@@ -328,11 +334,13 @@ show_crl_status() {
     fi
 
     # Fetch CRL info
-    local cacert_flag
-    cacert_flag=$(_vault_curl_cacert_flag)
+    local -a cacert_args=()
+    local _cacert_arg
+    while IFS= read -r _cacert_arg; do
+        [ -n "$_cacert_arg" ] && cacert_args+=("$_cacert_arg")
+    done < <(_vault_curl_cacert_flag)
     local crl_pem
-    # shellcheck disable=SC2086
-    crl_pem=$(curl -sL $cacert_flag "${vault_addr}/v1/pki_int/crl/pem" 2>/dev/null)
+    crl_pem=$(curl -sL "${cacert_args[@]}" "${vault_addr}/v1/pki_int/crl/pem" 2>/dev/null)
 
     if [ -z "$crl_pem" ] || ! echo "$crl_pem" | grep -q "BEGIN X509 CRL"; then
         echo "  CRL: Not yet generated (no certificates revoked)"
@@ -687,4 +695,3 @@ _emergency_rotate_spoke() {
         return 1
     fi
 }
-

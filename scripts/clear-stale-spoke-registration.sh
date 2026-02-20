@@ -30,7 +30,8 @@ log_error() { echo -e "${RED}❌ ${NC}$*"; }
 
 clear_spoke_registration() {
     local instance_code="$1"
-    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_lower
+    code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
     local config_file="${INSTANCES_DIR}/${code_lower}/config.json"
 
     if [ ! -f "$config_file" ]; then
@@ -44,7 +45,8 @@ clear_spoke_registration() {
         return 0
     fi
 
-    local old_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    local old_id
+    old_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
 
     # Remove registeredSpokeId using jq (preferred) or sed (fallback)
     if command -v jq &> /dev/null; then

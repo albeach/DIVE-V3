@@ -19,13 +19,13 @@ VAULT_CACERT="${VAULT_CACERT:-${DIVE_ROOT:-}/certs/vault/node1/ca.pem}"
 # For localhost connections, use --insecure (no MITM risk, avoids CA mismatch
 # issues during bootstrap→Vault PKI cert rotation transitions)
 _vault_curl_flags() {
-    local flags=""
+    local -a flags=()
     if [[ "${VAULT_ADDR:-}" =~ (localhost|127\.0\.0\.1) ]]; then
-        flags="--insecure"
+        flags+=(--insecure)
     elif [ -n "$VAULT_CACERT" ] && [ -f "$VAULT_CACERT" ]; then
-        flags="--cacert $VAULT_CACERT"
+        flags+=(--cacert "$VAULT_CACERT")
     fi
-    echo "$flags"
+    printf '%s\n' "${flags[@]}"
 }
 
 ##
@@ -45,8 +45,12 @@ vault_is_authenticated() {
     fi
 
     # Test token validity (standbyok=true for HA clusters where node may be standby)
-    # shellcheck disable=SC2046
-    curl -sfL $(_vault_curl_flags) -H "X-Vault-Token: $VAULT_TOKEN" \
+    local -a vault_curl_args=()
+    local _vault_curl_arg
+    while IFS= read -r _vault_curl_arg; do
+        [ -n "$_vault_curl_arg" ] && vault_curl_args+=("$_vault_curl_arg")
+    done < <(_vault_curl_flags)
+    curl -sfL "${vault_curl_args[@]}" -H "X-Vault-Token: $VAULT_TOKEN" \
         "${VAULT_ADDR}/v1/sys/health?standbyok=true" >/dev/null 2>&1
 }
 
@@ -61,8 +65,12 @@ vault_approle_login() {
     local secret_id="$2"
 
     local response
-    # shellcheck disable=SC2046
-    response=$(curl -sf $(_vault_curl_flags) -X POST \
+    local -a vault_curl_args=()
+    local _vault_curl_arg
+    while IFS= read -r _vault_curl_arg; do
+        [ -n "$_vault_curl_arg" ] && vault_curl_args+=("$_vault_curl_arg")
+    done < <(_vault_curl_flags)
+    response=$(curl -sf "${vault_curl_args[@]}" -X POST \
         -d "{\"role_id\":\"$role_id\",\"secret_id\":\"$secret_id\"}" \
         "${VAULT_ADDR}/v1/auth/approle/login")
 
@@ -101,8 +109,12 @@ vault_get_secret() {
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
     local response
-    # shellcheck disable=SC2046
-    response=$(curl -sfL $(_vault_curl_flags) -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
+    local -a vault_curl_args=()
+    local _vault_curl_arg
+    while IFS= read -r _vault_curl_arg; do
+        [ -n "$_vault_curl_arg" ] && vault_curl_args+=("$_vault_curl_arg")
+    done < <(_vault_curl_flags)
+    response=$(curl -sfL "${vault_curl_args[@]}" -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
 
     if [ -n "$response" ]; then
         echo "$response" | jq -r ".data.data.${field} // empty"
@@ -131,8 +143,12 @@ vault_set_secret() {
     local full_path="dive-v3/${category}/data/${path}"
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
-    # shellcheck disable=SC2046
-    curl -sfL $(_vault_curl_flags) -X POST \
+    local -a vault_curl_args=()
+    local _vault_curl_arg
+    while IFS= read -r _vault_curl_arg; do
+        [ -n "$_vault_curl_arg" ] && vault_curl_args+=("$_vault_curl_arg")
+    done < <(_vault_curl_flags)
+    curl -sfL "${vault_curl_args[@]}" -X POST \
         -H "X-Vault-Token: $VAULT_TOKEN" \
         -d "{\"data\":$value}" \
         "${api_path}" >/dev/null 2>&1
@@ -261,7 +277,8 @@ get_secret() {
             # Map legacy secret names to Vault paths
             local category path field
             # Vault paths are lowercase (usa/, deu/, etc.)
-            local vault_instance=$(lower "${instance_code:-shared}")
+            local vault_instance
+            vault_instance=$(lower "${instance_code:-shared}")
 
             case "$secret_name" in
                 keycloak-admin-password|keycloak)
@@ -338,7 +355,8 @@ set_secret() {
         vault)
             # Map legacy secret names to Vault paths (same as get_secret)
             local category path
-            local vault_instance=$(lower "${instance_code:-shared}")
+            local vault_instance
+            vault_instance=$(lower "${instance_code:-shared}")
 
             case "$secret_name" in
                 keycloak-admin-password|keycloak|postgres-password|postgres|mongo-password|mongodb|redis-password|redis)

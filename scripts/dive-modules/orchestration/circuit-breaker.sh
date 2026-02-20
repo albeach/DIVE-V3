@@ -67,7 +67,8 @@ orch_is_circuit_open() {
 
     local state="${CIRCUIT_BREAKERS[$operation]}"
     local last_failure="${CIRCUIT_LAST_FAILURE_TIME[$operation]}"
-    local now=$(date +%s)
+    local now
+    now=$(date +%s)
 
     case "$state" in
         "$CIRCUIT_OPEN")
@@ -215,7 +216,8 @@ orch_execute_with_smart_retry() {
 
         if [ $attempt -le $max_attempts ]; then
             # Calculate context-aware delay
-            local delay=$(orch_calculate_retry_delay "$operation" $attempt $base_delay)
+            local delay
+            delay=$(orch_calculate_retry_delay "$operation" $attempt $base_delay)
 
             log_warn "Operation $operation failed (attempt $((attempt-1))), retrying in ${delay}s..."
             sleep $delay
@@ -282,7 +284,7 @@ orch_calculate_retry_delay() {
 orch_calculate_dynamic_timeout() {
     local service="$1"
     local instance_code="${2:-}"
-    local force_recalc="${3:-false}"
+    local _force_recalc="${3:-false}"
 
     local static_timeout="${SERVICE_TIMEOUTS[$service]:-60}"
 
