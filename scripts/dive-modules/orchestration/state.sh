@@ -287,8 +287,29 @@ orch_db_set_state() {
     local new_state="$2"
     local reason="${3:-}"
     local metadata="${4:-null}"
+
+    # Input validation: instance_code must be 2-5 alphanumeric chars (country codes, "usa", "hub")
+    if [[ ! "$instance_code" =~ ^[a-zA-Z]{2,5}$ ]]; then
+        log_error "Invalid instance_code: '$instance_code' (must be 2-5 alpha characters)"
+        return 1
+    fi
+
+    # Input validation: new_state must be a recognized state
+    case ",$VALID_STATES," in
+        *" $new_state "*)
+            ;;
+        *)
+            log_error "Invalid state: '$new_state' (valid: $VALID_STATES)"
+            return 1
+            ;;
+    esac
+
     local code_lower
     code_lower=$(lower "$instance_code")
+
+    # Sanitize SQL inputs — escape single quotes
+    local safe_code_lower="${code_lower//\'/\'\'}"
+    local safe_new_state="${new_state//\'/\'\'}"
 
     # ==========================================================================
     # ADR-001: Database-Only Mode (ORCH_DB_ONLY_MODE=true)
@@ -299,9 +320,20 @@ orch_db_set_state() {
     if [ "$ORCH_DB_ONLY_MODE" = "true" ]; then
         # REMOTE MODE: No Hub PostgreSQL — use file-only state
         if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+            # Validate state transition even in remote/file mode
+            local prev_file_state="UNKNOWN"
             local state_dir="${DIVE_ROOT}/.dive-state"
+            local state_file="${state_dir}/${code_lower}.state"
+            if [ -f "$state_file" ]; then
+                prev_file_state=$(tail -1 "$state_file" | cut -d'|' -f1)
+                prev_file_state="${prev_file_state:-UNKNOWN}"
+            fi
+            if ! orch_validate_state_transition "$prev_file_state" "$new_state"; then
+                log_error "State transition blocked (remote mode): $prev_file_state → $new_state"
+                return 1
+            fi
             mkdir -p "$state_dir"
-            echo "${new_state}|$(date -u +%Y-%m-%dT%H:%M:%SZ)|${reason}" >> "${state_dir}/${code_lower}.state"
+            echo "${new_state}|$(date -u +%Y-%m-%dT%H:%M:%SZ)|${reason}" >> "$state_file"
             log_verbose "State → $new_state for $instance_code (file-only, remote mode)"
             return 0
         fi
@@ -329,9 +361,9 @@ orch_db_set_state() {
             fi
         fi
 
-        # Get previous state from database
+        # Get previous state from database (using sanitized input)
         local prev_state
-        prev_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+        prev_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$safe_code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
         prev_state="${prev_state:-UNKNOWN}"
 
         # ==========================================================================
@@ -344,12 +376,13 @@ orch_db_set_state() {
             log_error "State transition blocked: $prev_state → $new_state"
             log_error "Valid transitions from $prev_state: $valid_targets"
 
-            # Record invalid transition attempt
+            # Record invalid transition attempt (using sanitized inputs)
+            local safe_prev="${prev_state//\'/\'\'}"
             orch_db_exec "
 INSERT INTO orchestration_errors (instance_code, error_code, severity, component, message, remediation)
-VALUES ('$code_lower', 'INVALID_STATE_TRANSITION', 2, 'state-machine',
-        'Invalid transition: $prev_state → $new_state',
-        'Use one of: $valid_targets');" >/dev/null 2>&1 || true
+VALUES ('$safe_code_lower', 'INVALID_STATE_TRANSITION', 2, 'state-machine',
+        'Invalid transition: $safe_prev → $safe_new_state',
+        'Use one of: ${valid_targets//\'/\'\'}');" >/dev/null 2>&1 || true
 
             return 1
         fi
@@ -364,13 +397,14 @@ VALUES ('$code_lower', 'INVALID_STATE_TRANSITION', 2, 'state-machine',
             fi
         fi
 
-        # Execute atomic transaction
+        # Execute atomic transaction (all values sanitized)
+        local safe_prev="${prev_state//\'/\'\'}"
         local sql_transaction="BEGIN;
 INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by)
-VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', $metadata_sql, 'system');
+VALUES ('$safe_code_lower', '$safe_new_state', '$safe_prev', '$escaped_reason', $metadata_sql, 'system');
 
 INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by)
-VALUES ('$code_lower', '$prev_state', '$new_state', $metadata_sql, 'system');
+VALUES ('$safe_code_lower', '$safe_prev', '$safe_new_state', $metadata_sql, 'system');
 COMMIT;"
 
         local sql_result
@@ -381,8 +415,8 @@ COMMIT;"
         # Only check for actual ERROR messages from PostgreSQL
         if [ $exit_code -eq 0 ] && [[ ! "$sql_result" =~ ERROR ]]; then
             log_verbose "✓ State persisted: $instance_code → $new_state (DB-only)"
-            # Record metric (non-blocking)
-            orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
+            # Record metric (non-blocking, using sanitized input)
+            orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$safe_code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             return 0
         elif [ $exit_code -eq 0 ]; then
             # Exit code 0 but output contains text - check if it's just BEGIN/COMMIT
@@ -430,6 +464,14 @@ COMMIT;"
 ##
 orch_db_get_state() {
     local instance_code="$1"
+
+    # Input validation
+    if [[ ! "$instance_code" =~ ^[a-zA-Z]{2,5}$ ]]; then
+        log_error "Invalid instance_code: '$instance_code'"
+        echo "ERROR"
+        return 1
+    fi
+
     local code_lower
     code_lower=$(lower "$instance_code")
 
@@ -470,8 +512,9 @@ orch_db_get_state() {
         fi
     fi
 
+    local safe_code="${code_lower//\'/\'\'}"
     local state
-    state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+    state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$safe_code' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
 
     if [ -n "$state" ] && [ "$state" != "" ]; then
         echo "$state"
@@ -505,14 +548,18 @@ orch_db_record_step() {
         return 0 # Non-blocking - database optional
     fi
 
-    local escaped_error="${error_message//\'/\'\'}"
+    # Sanitize all SQL inputs
+    local safe_code="${code_lower//\'/\'\'}"
+    local safe_step="${step_name//\'/\'\'}"
+    local safe_status="${status//\'/\'\'}"
+    local safe_error="${error_message//\'/\'\'}"
 
     # Use simpler INSERT without ON CONFLICT (started_at makes it unique each time)
     orch_db_exec "
 INSERT INTO deployment_steps (instance_code, step_name, status, started_at, completed_at, error_message)
-VALUES ('$code_lower', '$step_name', '$status', NOW(),
-        CASE WHEN '$status' IN ('COMPLETED', 'FAILED', 'SKIPPED') THEN NOW() ELSE NULL END,
-        '$escaped_error');
+VALUES ('$safe_code', '$safe_step', '$safe_status', NOW(),
+        CASE WHEN '$safe_status' IN ('COMPLETED', 'FAILED', 'SKIPPED') THEN NOW() ELSE NULL END,
+        '$safe_error');
 " >/dev/null 2>&1
 
     log_verbose "✓ Step logged: $step_name -> $status"

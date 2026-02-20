@@ -87,7 +87,7 @@ cmd_deploy() {
     fi
 
     ensure_dive_root
-    cd "$DIVE_ROOT" || exit 1
+    cd "$DIVE_ROOT" || return 1
 
     # Load status module for cmd_validate
     # shellcheck source=./status.sh
@@ -167,7 +167,7 @@ cmd_deploy() {
         tf_dir="${DIVE_ROOT}/terraform/pilot"
     fi
 
-    cd "$tf_dir" || exit 1
+    cd "$tf_dir" || return 1
     [ ! -d ".terraform" ] && terraform init -upgrade
     # Ensure Keycloak admin credentials are available to the provider
     export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
@@ -177,7 +177,7 @@ cmd_deploy() {
         return 1
     fi
     terraform apply -var-file="${target}.tfvars" -auto-approve
-    cd "${DIVE_ROOT}" || exit 1
+    cd "${DIVE_ROOT}" || return 1
 
     log_step "Step 9: Seeding database..."
     if [ "$target" = "hub" ]; then

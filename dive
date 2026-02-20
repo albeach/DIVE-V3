@@ -64,15 +64,15 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --dry-run|-n)
-            DRY_RUN=true
+            export DRY_RUN=true
             shift
             ;;
         --verbose|-v)
-            VERBOSE=true
+            export VERBOSE=true
             shift
             ;;
         --quiet|-q)
-            QUIET=true
+            export QUIET=true
             shift
             ;;
         --non-interactive|--yes|-y)
