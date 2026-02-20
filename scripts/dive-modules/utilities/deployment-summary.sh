@@ -71,7 +71,7 @@ deployment_pre_summary_hub() {
     fi
 
     echo ""
-    echo "  Pipeline: 13 phases (Vault → Database → Services → Keycloak → KAS → Seed)"
+    echo "  Pipeline: Pre-validation + 13 phases (Vault → Database → Build → Services → Keycloak → KAS → Seed)"
     echo ""
     echo "==============================================================================="
     echo ""
@@ -158,7 +158,7 @@ deployment_pre_summary_spoke() {
     fi
 
     echo ""
-    echo "  Pipeline: 6 phases (Preflight → Init → Deploy → Config → Seed → Verify)"
+    echo "  Pipeline: Pre-validation + 6 phases (Preflight → Init → Deploy → Config → Seed → Verify)"
     echo ""
     echo "==============================================================================="
     echo ""
