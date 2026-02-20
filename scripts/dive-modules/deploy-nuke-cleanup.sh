@@ -419,6 +419,33 @@ _nuke_cleanup_state() {
     fi
 
     # =========================================================================
+    # DEPLOYMENT STATE CLEANUP (Phase 6: State Machine Hardening)
+    # =========================================================================
+    # Clean heartbeat files, checkpoint data, timing data, and log references.
+    # The pipeline_state_cleanup function handles all deployment-specific state.
+    log_verbose "  Cleaning deployment state (heartbeat, checkpoints, timing)..."
+    local _preserve_logs_arg=""
+    if [ "${preserve_logs:-false}" = "true" ]; then
+        _preserve_logs_arg="preserve-logs"
+    fi
+
+    if type pipeline_state_cleanup &>/dev/null; then
+        case "$target_type" in
+            all)
+                pipeline_state_cleanup "all" "all" "$_preserve_logs_arg"
+                ;;
+            hub)
+                pipeline_state_cleanup "USA" "hub" "$_preserve_logs_arg"
+                ;;
+            spoke)
+                if [ -n "$target_instance" ]; then
+                    pipeline_state_cleanup "$target_instance" "spoke" "$_preserve_logs_arg"
+                fi
+                ;;
+        esac
+    fi
+
+    # =========================================================================
     # CLEAN SLATE: Additional cleanup for full reset (target_type=all)
     # =========================================================================
     if [ "$target_type" = "all" ]; then
@@ -430,10 +457,16 @@ _nuke_cleanup_state() {
             log_verbose "    ✓ Orchestration database removed (.dive-orch.db)"
         fi
 
-        # State directory (file-based state)
+        # State directory (file-based state) — only remove if logs not preserved
         if [ -d "${DIVE_ROOT}/.dive-state" ]; then
-            rm -rf "${DIVE_ROOT}/.dive-state"
-            log_verbose "    ✓ State directory removed (.dive-state/)"
+            if [ "${preserve_logs:-false}" = "true" ]; then
+                # Preserve logs but clean everything else
+                find "${DIVE_ROOT}/.dive-state" -mindepth 1 -maxdepth 1 -not -name "logs" -exec rm -rf {} + 2>/dev/null || true
+                log_verbose "    ✓ State directory cleaned (logs preserved)"
+            else
+                rm -rf "${DIVE_ROOT}/.dive-state"
+                log_verbose "    ✓ State directory removed (.dive-state/)"
+            fi
         fi
 
         # Legacy state files
