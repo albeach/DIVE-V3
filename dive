@@ -592,7 +592,7 @@ case "$COMMAND" in
         ;;
 
     # Bootstrap (auto-install dependencies)
-    bootstrap|setup)
+    bootstrap)
         source "${MODULES_DIR}/bootstrap.sh"
         cmd_bootstrap "$@"
         ;;
