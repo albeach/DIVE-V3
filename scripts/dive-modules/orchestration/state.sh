@@ -181,7 +181,7 @@ unset VALID_TRANSITIONS 2>/dev/null || true
 declare -gA VALID_TRANSITIONS=(
     [UNKNOWN]="INITIALIZING,FAILED"
     [INITIALIZING]="DEPLOYING,FAILED,CLEANUP"
-    [DEPLOYING]="CONFIGURING,PARTIAL,FAILED,ROLLING_BACK"
+    [DEPLOYING]="DEPLOYING,CONFIGURING,PARTIAL,FAILED,ROLLING_BACK"
     [CONFIGURING]="VERIFYING,PARTIAL,FAILED,ROLLING_BACK"
     [VERIFYING]="COMPLETE,PARTIAL,FAILED,ROLLING_BACK"
     [PARTIAL]="CONFIGURING,FAILED,ROLLING_BACK,CLEANUP"
@@ -448,6 +448,66 @@ COMMIT;"
     #   - set_deployment_state_enhanced: File-based function no longer called
     #
     # All state is now in PostgreSQL only. Fail-fast if database unavailable.
+}
+
+##
+# Record phase metadata without triggering a state transition
+#
+# Records phase name + completion status into the deployment_states metadata
+# column. Used to track individual phase progress within a deployment lifecycle.
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name (e.g., VAULT_BOOTSTRAP, MONGODB_INIT)
+#   $3 - Phase status (e.g., "complete", "failed", "skipped")
+##
+orch_db_update_phase_metadata() {
+    local instance_code="$1"
+    local phase_name="$2"
+    local phase_status="${3:-complete}"
+
+    # Input validation
+    if [[ ! "$instance_code" =~ ^[a-zA-Z]{2,5}$ ]]; then
+        return 1
+    fi
+
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    # Sanitize inputs
+    local safe_code="${code_lower//\'/\'\'}"
+    local safe_phase="${phase_name//\'/\'\'}"
+    local safe_status="${phase_status//\'/\'\'}"
+
+    # REMOTE MODE: Record to file
+    if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        local state_dir="${DIVE_ROOT}/.dive-state"
+        local meta_file="${state_dir}/${code_lower}.phases"
+        mkdir -p "$state_dir"
+        echo "${safe_phase}|${safe_status}|$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$meta_file"
+        return 0
+    fi
+
+    # DATABASE MODE: Update latest deployment_states row's metadata with phase info
+    if ! orch_db_check_connection 2>/dev/null; then
+        log_verbose "Cannot record phase metadata — database unavailable"
+        return 0
+    fi
+
+    # Append phase info to metadata JSONB (create if null)
+    orch_db_exec "
+UPDATE deployment_states
+SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+    'phase_${safe_phase}', jsonb_build_object('status', '${safe_status}', 'timestamp', NOW()::text)
+)
+WHERE id = (
+    SELECT id FROM deployment_states
+    WHERE instance_code = '${safe_code}'
+    ORDER BY timestamp DESC LIMIT 1
+);" >/dev/null 2>&1 || true
+
+    log_verbose "Phase metadata recorded: $instance_code/$phase_name → $phase_status"
+    return 0
 }
 
 ##

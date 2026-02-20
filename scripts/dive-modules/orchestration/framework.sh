@@ -160,14 +160,45 @@ orch_execute_phase() {
 
     log_info "Starting phase: $phase_name"
 
-    # Set deployment state (use orch_db_set_state — the canonical state management function)
+    # Map phase names to valid deployment states (phase names are NOT valid states)
+    # Pattern: same mapping used in spoke-pipeline.sh lines 696-726
     if type orch_db_set_state &>/dev/null; then
-        orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "$phase_name" 2>/dev/null || true
+        case "$phase_name" in
+            "PREFLIGHT")
+                # Preflight is validation only — don't change deployment state
+                ;;
+            "INITIALIZATION")
+                orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "INITIALIZING" "" \
+                    "{\"phase\":\"$phase_name\"}"
+                ;;
+            "DEPLOYMENT")
+                orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "DEPLOYING" "" \
+                    "{\"phase\":\"$phase_name\"}"
+                ;;
+            "CONFIGURATION")
+                orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "CONFIGURING" "" \
+                    "{\"phase\":\"$phase_name\"}"
+                ;;
+            "VERIFICATION")
+                orch_db_set_state "${ORCH_CONTEXT[instance_code]}" "VERIFYING" "" \
+                    "{\"phase\":\"$phase_name\"}"
+                ;;
+            "COMPLETION")
+                # Don't transition here — orch_execute_deployment sets COMPLETE after all phases
+                ;;
+            *)
+                log_warn "Unknown phase '$phase_name' — skipping state update"
+                ;;
+        esac
     fi
 
     # Execute phase function
     if $phase_function; then
         log_success "Phase $phase_name completed successfully"
+        # Record phase completion metadata (non-blocking)
+        if type orch_db_update_phase_metadata &>/dev/null; then
+            orch_db_update_phase_metadata "${ORCH_CONTEXT[instance_code]}" "$phase_name" "complete"
+        fi
         return 0
     else
         orch_record_error "PHASE_FAIL" \
