@@ -132,6 +132,60 @@ jobs:
         run: docker compose -f docker-compose.hub.yml config --quiet
       - name: Validate docker-compose.pilot.yml
         run: docker compose -f docker-compose.pilot.yml config --quiet
+  changes:
+    name: Detect Changed Domains
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      backend_changed: ${{ steps.detect.outputs.backend_changed }}
+      frontend_changed: ${{ steps.detect.outputs.frontend_changed }}
+      policies_changed: ${{ steps.detect.outputs.policies_changed }}
+      k8s_changed: ${{ steps.detect.outputs.k8s_changed }}
+      deploy_changed: ${{ steps.detect.outputs.deploy_changed }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed paths
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          backend_changed=false
+          frontend_changed=false
+          policies_changed=false
+          k8s_changed=false
+          deploy_changed=false
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+            while IFS= read -r file; do
+              case "$file" in
+                backend/*) backend_changed=true ;;
+                frontend/*) frontend_changed=true ;;
+                policies/*) policies_changed=true ;;
+                k8s/*) k8s_changed=true ;;
+                terraform/*|scripts/*|instances/*|docker-compose*.yml) deploy_changed=true ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          else
+            backend_changed=true
+            frontend_changed=true
+            policies_changed=true
+            k8s_changed=true
+            deploy_changed=true
+          fi
+
+          echo "backend_changed=$backend_changed" >> "$GITHUB_OUTPUT"
+          echo "frontend_changed=$frontend_changed" >> "$GITHUB_OUTPUT"
+          echo "policies_changed=$policies_changed" >> "$GITHUB_OUTPUT"
+          echo "k8s_changed=$k8s_changed" >> "$GITHUB_OUTPUT"
+          echo "deploy_changed=$deploy_changed" >> "$GITHUB_OUTPUT"
   # Terraform validation
   terraform-validate:
     name: Terraform - Validation
@@ -161,7 +215,8 @@ jobs:
     name: Quick Checks (TypeScript, Linting)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint-shell, lint-compose, terraform-validate]
+    needs: [changes, lint-shell, lint-compose, terraform-validate]
+    if: needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.frontend_changed == 'true'
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -199,7 +254,8 @@ jobs:
     name: Backend - Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [quick-checks]
+    needs: [changes, quick-checks]
+    if: needs.changes.outputs.backend_changed == 'true'
     services:
       mongodb:
         image: mongo:7.0
@@ -257,7 +313,8 @@ jobs:
     name: Frontend - Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [quick-checks]
+    needs: [changes, quick-checks]
+    if: needs.changes.outputs.frontend_changed == 'true'
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -293,7 +350,8 @@ jobs:
     name: OPA - Policy Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [quick-checks]
+    needs: [changes]
+    if: needs.changes.outputs.policies_changed == 'true'
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -312,7 +370,8 @@ jobs:
     name: Kubernetes - Manifest Validation
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    needs: [quick-checks]
+    needs: [changes]
+    if: needs.changes.outputs.k8s_changed == 'true'
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -338,7 +397,8 @@ jobs:
     name: Deploy Dry Run
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint-compose, terraform-validate, backend-tests, frontend-tests, opa-tests, k8s-validation]
+    needs: [changes, lint-compose, terraform-validate, backend-tests, frontend-tests, opa-tests, k8s-validation]
+    if: needs.changes.outputs.deploy_changed == 'true'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -358,7 +418,7 @@ jobs:
     name: PR Test Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [secrets-lint, lint-shell, lint-compose, terraform-validate, quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation, deploy-dry-run]
+    needs: [changes, secrets-lint, lint-shell, lint-compose, terraform-validate, quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation, deploy-dry-run]
     if: always()
     steps:
       - name: Generate Summary
@@ -391,7 +451,7 @@ jobs:
                 "${{ needs.lint-shell.result }}" == "success" && \
                 "${{ needs.lint-compose.result }}" == "success" && \
                 "${{ needs.terraform-validate.result }}" == "success" && \
-                "${{ needs.quick-checks.result }}" == "success" && \
+                ("${{ needs.quick-checks.result }}" == "success" || "${{ needs.quick-checks.result }}" == "skipped") && \
                 ("${{ needs.backend-tests.result }}" == "success" || "${{ needs.backend-tests.result }}" == "skipped") && \
                 ("${{ needs.frontend-tests.result }}" == "success" || "${{ needs.frontend-tests.result }}" == "skipped") && \
                 ("${{ needs.opa-tests.result }}" == "success" || "${{ needs.opa-tests.result }}" == "skipped") && \
