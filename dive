@@ -300,6 +300,12 @@ case "$COMMAND" in
         module_config "$@"
         ;;
 
+    # DNS management (Cloudflare)
+    dns)
+        source "${MODULES_DIR}/configuration/dns.sh"
+        module_dns "$@"
+        ;;
+
     # Hub commands (deployment/hub.sh - Phase 3 enhanced spoke management)
     hub)
         source "${MODULES_DIR}/deployment/hub.sh"

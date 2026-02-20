@@ -185,10 +185,19 @@ spoke_caddy_create_dns() {
         return 0
     fi
 
-    local cf_token="${CLOUDFLARE_API_TOKEN:-}"
-    if [ -z "$cf_token" ]; then
-        # Try to read from .env.hub
-        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    # Source shared DNS helpers (dns.sh provides _dns_get_token, _dns_create_or_update)
+    local _dns_module="${DIVE_ROOT}/scripts/dive-modules/configuration/dns.sh"
+    if [ -f "$_dns_module" ]; then
+        source "$_dns_module"
+    fi
+
+    # Resolve Cloudflare token via shared helper or inline fallback
+    local cf_token=""
+    if type _dns_get_token &>/dev/null; then
+        cf_token=$(_dns_get_token 2>/dev/null) || true
+    else
+        cf_token="${CLOUDFLARE_API_TOKEN:-}"
+        if [ -z "$cf_token" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
             cf_token=$(grep "^CLOUDFLARE_API_TOKEN=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
         fi
     fi
@@ -199,42 +208,48 @@ spoke_caddy_create_dns() {
         return 0
     fi
 
-    # Cloudflare zone ID for dive25.com
-    local zone_id="53200276d1d66a21b6c881ecd1c05414"
+    local zone_id="${CLOUDFLARE_ZONE_ID:-53200276d1d66a21b6c881ecd1c05414}"
 
     local subdomains=("${_env_prefix}-${code_lower}-app" "${_env_prefix}-${code_lower}-api" "${_env_prefix}-${code_lower}-idp")
 
     for sub in "${subdomains[@]}"; do
         local fqdn="${sub}.${_base_domain}"
 
-        # Check if record exists
-        local existing
-        existing=$(curl -s --max-time 10 \
-            -H "Authorization: Bearer ${cf_token}" \
-            -H "Content-Type: application/json" \
-            "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${fqdn}&type=A" 2>/dev/null)
-
-        local record_id
-        record_id=$(echo "$existing" | jq -r '.result[0].id // empty' 2>/dev/null)
-
-        if [ -n "$record_id" ]; then
-            # Update existing record
-            curl -s --max-time 10 -X PUT \
-                -H "Authorization: Bearer ${cf_token}" \
-                -H "Content-Type: application/json" \
-                "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
-                -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${public_ip}\",\"ttl\":300,\"proxied\":false}" \
-                >/dev/null 2>&1
-            log_verbose "DNS updated: ${fqdn} → ${public_ip}"
+        if type _dns_create_or_update &>/dev/null; then
+            # Use shared DNS helper from dns.sh
+            _dns_create_or_update "$cf_token" "$zone_id" "$fqdn" "$public_ip" || {
+                log_warn "Failed to set DNS for ${fqdn}"
+                continue
+            }
+            log_verbose "DNS set: ${fqdn} → ${public_ip}"
         else
-            # Create new record
-            curl -s --max-time 10 -X POST \
+            # Inline fallback if dns.sh not available
+            local existing
+            existing=$(curl -s --max-time 10 \
                 -H "Authorization: Bearer ${cf_token}" \
                 -H "Content-Type: application/json" \
-                "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-                -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${public_ip}\",\"ttl\":300,\"proxied\":false}" \
-                >/dev/null 2>&1
-            log_verbose "DNS created: ${fqdn} → ${public_ip}"
+                "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${fqdn}&type=A" 2>/dev/null)
+
+            local record_id
+            record_id=$(echo "$existing" | jq -r '.result[0].id // empty' 2>/dev/null)
+
+            if [ -n "$record_id" ]; then
+                curl -s --max-time 10 -X PUT \
+                    -H "Authorization: Bearer ${cf_token}" \
+                    -H "Content-Type: application/json" \
+                    "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
+                    -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${public_ip}\",\"ttl\":300,\"proxied\":false}" \
+                    >/dev/null 2>&1
+                log_verbose "DNS updated: ${fqdn} → ${public_ip}"
+            else
+                curl -s --max-time 10 -X POST \
+                    -H "Authorization: Bearer ${cf_token}" \
+                    -H "Content-Type: application/json" \
+                    "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+                    -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${public_ip}\",\"ttl\":300,\"proxied\":false}" \
+                    >/dev/null 2>&1
+                log_verbose "DNS created: ${fqdn} → ${public_ip}"
+            fi
         fi
     done
 

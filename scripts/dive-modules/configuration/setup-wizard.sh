@@ -157,13 +157,84 @@ _setup_step_cloudflare() {
     echo "  Step 5/6: Cloudflare DNS (optional)"
     echo "  ------------------------------------"
     echo "  Auto-manage DNS records via Cloudflare API."
-    echo "  Leave empty to skip — you can add DNS records manually."
+    echo "  Leave empty to skip — you can run ./dive dns setup later."
+    echo ""
+    echo "  To create a scoped token:"
+    echo "    1. Go to https://dash.cloudflare.com/profile/api-tokens"
+    echo "    2. Create Token → Edit zone DNS template"
+    echo "    3. Zone Resources: Include → Specific zone → your domain"
     echo ""
 
     local token
     read -r -p "  Cloudflare API Token (or press Enter to skip): " token
-    if [ -n "$token" ]; then
-        _setup_add "CLOUDFLARE_API_TOKEN" "$token"
+    if [ -z "$token" ]; then
+        return 0
+    fi
+
+    # Validate token via Cloudflare API
+    # Source DNS module for validation helpers
+    local _dns_module="${DIVE_ROOT}/scripts/dive-modules/configuration/dns.sh"
+    if [ -f "$_dns_module" ]; then
+        source "$_dns_module"
+    fi
+
+    if type _dns_validate_token &>/dev/null; then
+        echo ""
+        echo "  Validating token..."
+        if _dns_validate_token "$token" >/dev/null 2>&1; then
+            echo "  Token is valid."
+        else
+            echo "  Warning: Token validation failed. Saving anyway — you can re-run ./dive dns setup."
+        fi
+    fi
+
+    _setup_add "CLOUDFLARE_API_TOKEN" "$token"
+
+    # Try to auto-discover zone
+    if type _dns_list_zones &>/dev/null; then
+        echo ""
+        echo "  Discovering Cloudflare zones..."
+        local zones_output
+        zones_output=$(_dns_list_zones "$token" 2>/dev/null) || true
+
+        if [ -n "$zones_output" ]; then
+            local zone_count
+            zone_count=$(echo "$zones_output" | wc -l | tr -d ' ')
+            echo "  Found ${zone_count} zone(s):"
+            echo ""
+
+            local i=1
+            while IFS=' ' read -r zid zname; do
+                echo "    ${i}) ${zname} (${zid})"
+                i=$((i + 1))
+            done <<< "$zones_output"
+            echo ""
+
+            if [ "$zone_count" -eq 1 ]; then
+                local auto_zone_id
+                auto_zone_id=$(echo "$zones_output" | head -1 | cut -d' ' -f1)
+                local auto_zone_name
+                auto_zone_name=$(echo "$zones_output" | head -1 | cut -d' ' -f2-)
+                echo "  Auto-selecting: ${auto_zone_name}"
+                _setup_add "CLOUDFLARE_ZONE_ID" "$auto_zone_id"
+            else
+                local choice
+                read -r -p "  Select zone number [1]: " choice
+                choice="${choice:-1}"
+                local selected_line
+                selected_line=$(echo "$zones_output" | sed -n "${choice}p")
+                if [ -n "$selected_line" ]; then
+                    local sel_id
+                    sel_id=$(echo "$selected_line" | cut -d' ' -f1)
+                    local sel_name
+                    sel_name=$(echo "$selected_line" | cut -d' ' -f2-)
+                    echo "  Selected: ${sel_name}"
+                    _setup_add "CLOUDFLARE_ZONE_ID" "$sel_id"
+                fi
+            fi
+        else
+            echo "  Could not discover zones — you can set CLOUDFLARE_ZONE_ID later via ./dive dns setup"
+        fi
     fi
 }
 
