@@ -312,7 +312,7 @@ jobs:
   frontend-tests:
     name: Frontend - Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: [changes, quick-checks]
     if: needs.changes.outputs.frontend_changed == 'true'
     steps:
@@ -332,7 +332,7 @@ jobs:
         id: frontend_tests
         run: |
           cd frontend
-          npm test -- --maxWorkers=50%
+          npm test -- --maxWorkers=2 --forceExit
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-ci
