@@ -134,6 +134,7 @@ spoke_deploy() {
     export SPOKE_AUTH_CODE=""
     export DIVE_SKIP_PHASES=""
     export DIVE_ONLY_PHASE=""
+    export DIVE_FROM_PHASE=""
     local spoke_resume_mode=false
 
     # Parse options (handle both --key value and positional args)
@@ -179,6 +180,18 @@ spoke_deploy() {
                     return 1
                 fi
                 ;;
+            --from-phase)
+                local next=$((i + 1))
+                DIVE_FROM_PHASE="${!next:-}"
+                if [ -n "$DIVE_FROM_PHASE" ]; then
+                    DIVE_FROM_PHASE=$(echo "$DIVE_FROM_PHASE" | tr '[:lower:]' '[:upper:]')
+                    skip_next=true
+                else
+                    log_error "--from-phase requires a phase name"
+                    log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
+                    return 1
+                fi
+                ;;
             --skip-federation)
                 export SKIP_FEDERATION=true
                 log_warn "Federation setup will be skipped (--skip-federation flag)"
@@ -202,9 +215,13 @@ spoke_deploy() {
         esac
     done
 
-    # Validate: --skip-phase and --only-phase are mutually exclusive
-    if [ -n "$DIVE_SKIP_PHASES" ] && [ -n "$DIVE_ONLY_PHASE" ]; then
-        log_error "--skip-phase and --only-phase are mutually exclusive"
+    # Validate: --skip-phase, --only-phase, --from-phase are mutually exclusive
+    local _flag_count=0
+    [ -n "$DIVE_SKIP_PHASES" ] && _flag_count=$((_flag_count + 1))
+    [ -n "$DIVE_ONLY_PHASE" ] && _flag_count=$((_flag_count + 1))
+    [ -n "$DIVE_FROM_PHASE" ] && _flag_count=$((_flag_count + 1))
+    if [ $_flag_count -gt 1 ]; then
+        log_error "--skip-phase, --only-phase, and --from-phase are mutually exclusive"
         return 1
     fi
 
@@ -214,6 +231,9 @@ spoke_deploy() {
     fi
     if [ -n "$DIVE_ONLY_PHASE" ]; then
         log_info "Running only phase: $DIVE_ONLY_PHASE"
+    fi
+    if [ -n "$DIVE_FROM_PHASE" ]; then
+        log_info "Starting from phase: $DIVE_FROM_PHASE"
     fi
 
     # Validate instance code
@@ -233,6 +253,7 @@ spoke_deploy() {
         echo "  --auth-code <UUID>     Pre-authorized federation code (from Hub: ./dive spoke authorize)"
         echo "  --force                Clean and redeploy"
         echo "  --resume               Resume from last checkpoint"
+        echo "  --from-phase <PHASE>   Start from specified phase (skip earlier phases)"
         echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
         echo "  --only-phase <PHASE>   Run only the specified phase"
         echo "  --skip-federation      Skip federation setup (standalone mode)"

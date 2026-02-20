@@ -268,6 +268,16 @@ module_spoke() {
             fi
             ;;
 
+        # === Phase Status Display ===
+        phases)
+            if type -t spoke_phases &>/dev/null; then
+                spoke_phases "$@"
+            else
+                log_error "spoke_phases not available - spoke-pipeline.sh not loaded"
+                return 1
+            fi
+            ;;
+
         # === Status & Verification (delegate to operations.sh/status.sh) ===
         status)
             if type -t spoke_status &>/dev/null; then
@@ -396,6 +406,7 @@ Commands:
   setup-wizard                Interactive spoke setup wizard
   up <CODE>                   Start spoke services (local)
   down <CODE>                 Stop spoke services
+  phases <CODE>               Show pipeline phase status
   status [CODE]               Show spoke status
   verify <CODE>               Verify spoke deployment
   verify-all                  Verify all provisioned spokes
@@ -432,6 +443,10 @@ Standalone Mode (no federation):
 Options:
   --auth-code <UUID>          Pre-authorized federation code (from Hub)
   --force                     Force deployment even if already deployed
+  --resume                    Resume from last checkpoint
+  --from-phase <PHASE>        Start from specified phase (skip earlier)
+  --skip-phase <PHASE>        Skip specified phase (can be repeated)
+  --only-phase <PHASE>        Run only the specified phase
   --skip-federation           Skip federation setup
   --domain <base>             Custom domain (e.g. gbr.mod.uk)
   --dry-run                   Generate package without shipping (prepare only)

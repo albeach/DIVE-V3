@@ -88,9 +88,19 @@ hub_pipeline_execute() {
         lock_acquired=true
     fi
 
+    # Install SIGINT handler for graceful interrupt
+    if type pipeline_install_sigint_handler &>/dev/null; then
+        pipeline_install_sigint_handler "$instance_code"
+    fi
+
     # Execute pipeline with guaranteed lock cleanup
     local pipeline_result=0
     _hub_pipeline_execute_internal "$instance_code" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
+
+    # Uninstall SIGINT handler
+    if type pipeline_uninstall_sigint_handler &>/dev/null; then
+        pipeline_uninstall_sigint_handler
+    fi
 
     # Always release lock
     if [ "$lock_acquired" = true ] && type deployment_release_lock &>/dev/null; then
@@ -334,6 +344,15 @@ _hub_run_phase_with_circuit_breaker() {
 
     local circuit_name="hub_phase_${phase_name}"
 
+    # Check if pipeline was interrupted
+    if pipeline_check_sigint 2>/dev/null; then
+        log_warn "Skipping $phase_name (pipeline interrupted)"
+        return 1
+    fi
+
+    # Track current phase for SIGINT handler
+    export _PIPELINE_CURRENT_PHASE="$phase_name"
+
     # Check if phase should be skipped (resume mode + already complete)
     if [ "$resume_mode" = "true" ]; then
         if type hub_checkpoint_is_complete &>/dev/null; then
@@ -464,6 +483,20 @@ _hub_should_skip_phase() {
         return 1
     fi
 
+    # --from-phase: skip all phases before the specified phase
+    if [ -n "${DIVE_FROM_PHASE:-}" ]; then
+        if [ "${_DIVE_FROM_PHASE_REACHED:-false}" = "false" ]; then
+            if [ "$phase_name" = "$DIVE_FROM_PHASE" ]; then
+                # Reached the target phase — run it and all subsequent
+                export _DIVE_FROM_PHASE_REACHED=true
+                return 1
+            fi
+            log_info "Skipping $phase_name (--from-phase ${DIVE_FROM_PHASE})"
+            return 0
+        fi
+        return 1
+    fi
+
     # --skip-phase: check if this phase is in the skip list
     if [ -n "${DIVE_SKIP_PHASES:-}" ]; then
         local skip_phase
@@ -503,6 +536,9 @@ _hub_execute_registered_phases() {
 
     local _phase_count
     _phase_count=$(pipeline_get_phase_count)
+
+    # Reset --from-phase tracking state
+    export _DIVE_FROM_PHASE_REACHED=false
 
     local i
     for (( i = 0; i < _phase_count; i++ )); do
@@ -659,6 +695,7 @@ hub_deploy() {
     local resume_mode=false
     export DIVE_SKIP_PHASES=""
     export DIVE_ONLY_PHASE=""
+    export DIVE_FROM_PHASE=""
     export DIVE_FORCE_BUILD="false"
 
     # Parse arguments
@@ -694,15 +731,29 @@ hub_deploy() {
                     return 1
                 fi
                 ;;
+            --from-phase)
+                if [ -n "${2:-}" ]; then
+                    DIVE_FROM_PHASE=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+                    shift 2
+                else
+                    log_error "--from-phase requires a phase name"
+                    log_info "Valid phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
+                    return 1
+                fi
+                ;;
             *)
                 shift
                 ;;
         esac
     done
 
-    # Validate: --skip-phase and --only-phase are mutually exclusive
-    if [ -n "$DIVE_SKIP_PHASES" ] && [ -n "$DIVE_ONLY_PHASE" ]; then
-        log_error "--skip-phase and --only-phase are mutually exclusive"
+    # Validate: --skip-phase, --only-phase, --from-phase are mutually exclusive
+    local _flag_count=0
+    [ -n "$DIVE_SKIP_PHASES" ] && _flag_count=$((_flag_count + 1))
+    [ -n "$DIVE_ONLY_PHASE" ] && _flag_count=$((_flag_count + 1))
+    [ -n "$DIVE_FROM_PHASE" ] && _flag_count=$((_flag_count + 1))
+    if [ $_flag_count -gt 1 ]; then
+        log_error "--skip-phase, --only-phase, and --from-phase are mutually exclusive"
         return 1
     fi
 
@@ -712,6 +763,9 @@ hub_deploy() {
     fi
     if [ -n "$DIVE_ONLY_PHASE" ]; then
         log_info "Running only phase: $DIVE_ONLY_PHASE"
+    fi
+    if [ -n "$DIVE_FROM_PHASE" ]; then
+        log_info "Starting from phase: $DIVE_FROM_PHASE"
     fi
 
     # Execute orchestrated pipeline
@@ -728,6 +782,134 @@ hub_deploy() {
 
     hub_pipeline_execute "$mode"
     return $?
+}
+
+# =============================================================================
+# PHASE STATUS DISPLAY
+# =============================================================================
+
+##
+# Display the status of all hub pipeline phases
+#
+# Shows each phase with its status (pending/complete/failed),
+# completion timestamp, duration, and which phase would resume next.
+##
+hub_phases() {
+    echo ""
+    echo "==============================================================================="
+    echo "  Hub Pipeline Phases"
+    echo "==============================================================================="
+    echo ""
+
+    # Define ordered phases with display labels
+    local -a phase_names=(
+        VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION MONGODB_INIT
+        BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG REALM_VERIFY
+        KAS_REGISTER SEEDING KAS_INIT
+    )
+    local -a phase_labels=(
+        "Vault Bootstrap" "Database Init" "Preflight" "Initialization" "MongoDB"
+        "Build" "Services" "Vault DB Engine" "Keycloak" "Realm Verify"
+        "KAS Register" "Seeding" "KAS Init"
+    )
+
+    local next_phase=""
+    if type hub_checkpoint_get_next_phase &>/dev/null; then
+        next_phase=$(hub_checkpoint_get_next_phase)
+    fi
+
+    local total=${#phase_names[@]}
+    local completed=0
+    local failed=0
+
+    local i
+    for (( i = 0; i < total; i++ )); do
+        local name="${phase_names[$i]}"
+        local label="${phase_labels[$i]}"
+        local num=$((i + 1))
+
+        local status="pending"
+        local timestamp=""
+        local duration=""
+
+        # Check checkpoint status
+        if type hub_checkpoint_is_complete &>/dev/null && hub_checkpoint_is_complete "$name"; then
+            status="complete"
+            completed=$((completed + 1))
+            if type hub_checkpoint_get_timestamp &>/dev/null; then
+                timestamp=$(hub_checkpoint_get_timestamp "$name")
+            fi
+            # Read duration from checkpoint file
+            local ckpt_file="${HUB_CHECKPOINT_DIR:-${DIVE_ROOT}/.dive-state/hub/.phases}/${name}.done"
+            if [ -f "$ckpt_file" ] && type jq &>/dev/null; then
+                duration=$(jq -r '.duration_seconds // empty' "$ckpt_file" 2>/dev/null)
+            fi
+        fi
+
+        # Check orchestration DB for failed status
+        if type orch_db_record_step &>/dev/null && type orch_db_get_step_status &>/dev/null; then
+            local db_status
+            db_status=$(orch_db_get_step_status "USA" "$name" 2>/dev/null || echo "")
+            if [ "$db_status" = "FAILED" ] && [ "$status" != "complete" ]; then
+                status="failed"
+                failed=$((failed + 1))
+            fi
+        fi
+
+        # Format output
+        local icon=" "
+        local color="${NC:-}"
+        case "$status" in
+            complete)
+                icon="+"
+                color="${GREEN:-}"
+                ;;
+            failed)
+                icon="x"
+                color="${RED:-}"
+                ;;
+            pending)
+                icon="-"
+                color="${YELLOW:-}"
+                ;;
+        esac
+
+        # Mark the resume point
+        local resume_marker=""
+        if [ -n "$next_phase" ] && [ "$name" = "$next_phase" ]; then
+            resume_marker=" <-- resume point"
+        fi
+
+        printf "  %s[%s]%s Phase %2d: %-18s %-10s" \
+            "$color" "$icon" "${NC:-}" "$num" "$label" "($status)"
+
+        if [ -n "$duration" ] && [ "$duration" != "null" ] && [ "$duration" != "0" ]; then
+            printf " %ss" "$duration"
+        fi
+
+        if [ -n "$timestamp" ] && [ "$timestamp" != "null" ]; then
+            printf " @ %s" "$timestamp"
+        fi
+
+        if [ -n "$resume_marker" ]; then
+            printf "%s%s%s" "${CYAN:-}" "$resume_marker" "${NC:-}"
+        fi
+
+        echo ""
+    done
+
+    echo ""
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    echo "  Summary: $completed/$total complete, $failed failed"
+
+    if [ -n "$next_phase" ]; then
+        echo "  Resume:  ./dive hub deploy --resume  (starts at $next_phase)"
+    elif [ "$completed" -eq "$total" ]; then
+        echo "  Status:  All phases complete"
+    fi
+
+    echo "==============================================================================="
+    echo ""
 }
 
 # =============================================================================
