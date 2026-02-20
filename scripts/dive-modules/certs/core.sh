@@ -84,15 +84,12 @@ get_mkcert_ca_path() {
 # mount this one bundle. Infra services (postgres, mongo, redis) use the
 # Vault-only chain from their instance certs dir.
 #
-# Arguments:
-#   $1 - Output file path (optional, default: certs/ca-bundle/rootCA.pem)
-#
 # Returns:
 #   0 - Always (best-effort)
 ##
 _rebuild_ca_bundle() {
     ensure_dive_root
-    local output_file="${1:-${DIVE_ROOT}/certs/ca-bundle/rootCA.pem}"
+    local output_file="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
 
     mkdir -p "$(dirname "$output_file")"
     : > "$output_file"
