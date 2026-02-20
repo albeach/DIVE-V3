@@ -1026,10 +1026,18 @@ spoke_pipeline_redeploy() {
 # completion info, and which phase would resume next.
 ##
 spoke_phases() {
-    local instance_code="${1:-}"
+    local instance_code=""
+    local show_timing=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timing) show_timing=true; shift ;;
+            *) [ -z "$instance_code" ] && instance_code="$1"; shift ;;
+        esac
+    done
+
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
-        echo "Usage: ./dive spoke phases <CODE>"
+        echo "Usage: ./dive spoke phases <CODE> [--timing]"
         return 1
     fi
 
@@ -1048,6 +1056,13 @@ spoke_phases() {
     local total=${#phase_names[@]}
     local completed=0
     local failed=0
+    local total_duration=0
+
+    # Timing header
+    if [ "$show_timing" = "true" ]; then
+        printf "  %-4s %-18s %-10s %10s\n" "#" "Phase" "Status" "Duration"
+        echo "  ─────────────────────────────────────────────────────────────────────────────"
+    fi
 
     local i
     for (( i = 0; i < total; i++ )); do
@@ -1056,6 +1071,7 @@ spoke_phases() {
         local num=$((i + 1))
 
         local status="pending"
+        local duration=""
 
         # Check checkpoint status
         if type spoke_checkpoint_is_complete &>/dev/null && spoke_checkpoint_is_complete "$code_upper" "$name"; then
@@ -1073,6 +1089,20 @@ spoke_phases() {
             fi
         fi
 
+        # Get timing data if available
+        if [ "$show_timing" = "true" ] && type pipeline_get_phase_timing &>/dev/null; then
+            local timing_data
+            timing_data=$(pipeline_get_phase_timing "$name" 2>/dev/null) || true
+            if [ -n "$timing_data" ]; then
+                duration=$(echo "$timing_data" | awk '{print $3}')
+            fi
+        fi
+
+        # Accumulate total duration
+        if [ -n "$duration" ] && [ "$duration" != "0" ]; then
+            total_duration=$((total_duration + duration))
+        fi
+
         # Format output
         local icon=" "
         local color="${NC:-}"
@@ -1082,13 +1112,26 @@ spoke_phases() {
             pending)  icon="-"; color="${YELLOW:-}" ;;
         esac
 
-        printf "  %s[%s]%s Phase %d: %-18s (%s)\n" \
-            "$color" "$icon" "${NC:-}" "$num" "$label" "$status"
+        if [ "$show_timing" = "true" ]; then
+            local dur_str="-"
+            if [ -n "$duration" ] && [ "$duration" != "0" ]; then
+                dur_str="${duration}s"
+            fi
+            printf "  %s[%s]%s %2d %-18s %-10s %10s\n" \
+                "$color" "$icon" "${NC:-}" "$num" "$label" "($status)" "$dur_str"
+        else
+            printf "  %s[%s]%s Phase %d: %-18s (%s)\n" \
+                "$color" "$icon" "${NC:-}" "$num" "$label" "$status"
+        fi
     done
 
     echo ""
     echo "  ─────────────────────────────────────────────────────────────────────────────"
     echo "  Summary: $completed/$total complete, $failed failed"
+
+    if [ "$show_timing" = "true" ] && [ "$total_duration" -gt 0 ]; then
+        echo "  Total duration: ${total_duration}s"
+    fi
 
     # Determine resume point
     local resume_phase=""

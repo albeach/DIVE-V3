@@ -924,9 +924,337 @@ pipeline_dry_run_summary() {
 }
 
 # =============================================================================
+# STRUCTURED LOGGING
+# =============================================================================
+# JSON-formatted log entries for deployment observability.
+# Each entry includes: timestamp, phase, level, message, duration_ms
+# Logs to both stdout (human-readable) and a structured JSONL file.
+# =============================================================================
+
+# Log session state
+export _DEPLOY_LOG_FILE=""
+export _DEPLOY_LOG_TYPE=""
+export _DEPLOY_LOG_INSTANCE=""
+
+##
+# Initialize structured logging for a deployment session
+#
+# Creates the log directory and opens a JSONL log file.
+#
+# Arguments:
+#   $1 - Deployment type (hub|spoke)
+#   $2 - Instance code (e.g., USA, GBR)
+#
+# Returns:
+#   0 - Logging initialized
+#   1 - Failed to create log directory
+##
+pipeline_log_init() {
+    local deploy_type="$1"
+    local instance_code="$2"
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+
+    local log_dir="${DIVE_ROOT}/.dive-state/logs"
+    if ! mkdir -p "$log_dir" 2>/dev/null; then
+        log_verbose "Could not create log directory: $log_dir"
+        return 1
+    fi
+
+    export _DEPLOY_LOG_FILE="${log_dir}/deploy-${deploy_type}-${instance_code}-${timestamp}.jsonl"
+    export _DEPLOY_LOG_TYPE="$deploy_type"
+    export _DEPLOY_LOG_INSTANCE="$instance_code"
+
+    # Write session header
+    pipeline_log_structured "info" "INIT" "Deployment session started" 0
+    return 0
+}
+
+##
+# Write a structured log entry
+#
+# Outputs JSON to the log file and a human-readable line to stdout.
+#
+# Arguments:
+#   $1 - Level (info|warn|error|success)
+#   $2 - Phase name (e.g., PREFLIGHT, BUILD, or INIT/COMPLETE)
+#   $3 - Message
+#   $4 - Duration in milliseconds (0 if not applicable)
+##
+pipeline_log_structured() {
+    local level="$1"
+    local phase="$2"
+    local message="$3"
+    local duration_ms="${4:-0}"
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Write to JSONL file if session is active
+    if [ -n "${_DEPLOY_LOG_FILE:-}" ]; then
+        printf '{"timestamp":"%s","phase":"%s","level":"%s","message":"%s","duration_ms":%s,"type":"%s","instance":"%s"}\n' \
+            "$ts" "$phase" "$level" "$message" "$duration_ms" \
+            "${_DEPLOY_LOG_TYPE:-unknown}" "${_DEPLOY_LOG_INSTANCE:-unknown}" \
+            >> "$_DEPLOY_LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+##
+# Finalize structured logging session
+#
+# Writes a completion entry and returns the log file path.
+#
+# Arguments:
+#   $1 - Exit code (0=success, 1=failure)
+#   $2 - Total duration in seconds
+##
+pipeline_log_finalize() {
+    local exit_code="$1"
+    local duration_s="$2"
+    local result="success"
+    [ "$exit_code" -ne 0 ] && result="failure"
+
+    pipeline_log_structured "info" "COMPLETE" "Deployment $result" "$((duration_s * 1000))"
+}
+
+##
+# Get the current log file path
+#
+# Returns:
+#   Log file path on stdout (empty if no active session)
+##
+pipeline_log_get_path() {
+    echo "${_DEPLOY_LOG_FILE:-}"
+}
+
+# =============================================================================
+# PHASE TIMING METRICS
+# =============================================================================
+# Tracks start/end/duration for each phase in a structured format.
+# Data is stored in parallel arrays for later retrieval.
+# =============================================================================
+
+# Timing tracking arrays
+_PIPELINE_TIMING_PHASES=()
+_PIPELINE_TIMING_STARTS=()
+_PIPELINE_TIMING_ENDS=()
+_PIPELINE_TIMING_DURATIONS=()
+_PIPELINE_TIMING_RESULTS=()
+
+##
+# Reset timing data for a new deployment
+##
+pipeline_timing_reset() {
+    _PIPELINE_TIMING_PHASES=()
+    _PIPELINE_TIMING_STARTS=()
+    _PIPELINE_TIMING_ENDS=()
+    _PIPELINE_TIMING_DURATIONS=()
+    _PIPELINE_TIMING_RESULTS=()
+}
+
+##
+# Record the start of a phase
+#
+# Arguments:
+#   $1 - Phase name
+##
+pipeline_timing_start() {
+    local phase="$1"
+    _PIPELINE_TIMING_PHASES+=("$phase")
+    _PIPELINE_TIMING_STARTS+=("$(date +%s)")
+    _PIPELINE_TIMING_ENDS+=("0")
+    _PIPELINE_TIMING_DURATIONS+=("0")
+    _PIPELINE_TIMING_RESULTS+=("running")
+}
+
+##
+# Record the end of a phase
+#
+# Arguments:
+#   $1 - Phase name
+#   $2 - Result (success|failure|skipped)
+##
+pipeline_timing_end() {
+    local phase="$1"
+    local result="${2:-success}"
+    local end_time
+    end_time=$(date +%s)
+
+    local i
+    for (( i = ${#_PIPELINE_TIMING_PHASES[@]} - 1; i >= 0; i-- )); do
+        if [ "${_PIPELINE_TIMING_PHASES[$i]}" = "$phase" ]; then
+            _PIPELINE_TIMING_ENDS[$i]="$end_time"
+            _PIPELINE_TIMING_DURATIONS[$i]="$((end_time - ${_PIPELINE_TIMING_STARTS[$i]}))"
+            _PIPELINE_TIMING_RESULTS[$i]="$result"
+            break
+        fi
+    done
+}
+
+##
+# Get timing data for a specific phase
+#
+# Arguments:
+#   $1 - Phase name
+#
+# Returns:
+#   "start_epoch end_epoch duration_s result" on stdout
+#   Returns 1 if phase not found
+##
+pipeline_get_phase_timing() {
+    local phase="$1"
+    local i
+    for (( i = ${#_PIPELINE_TIMING_PHASES[@]} - 1; i >= 0; i-- )); do
+        if [ "${_PIPELINE_TIMING_PHASES[$i]}" = "$phase" ]; then
+            echo "${_PIPELINE_TIMING_STARTS[$i]} ${_PIPELINE_TIMING_ENDS[$i]} ${_PIPELINE_TIMING_DURATIONS[$i]} ${_PIPELINE_TIMING_RESULTS[$i]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+##
+# Print timing data for all phases in a formatted table
+#
+# Arguments:
+#   $1 - Total deployment duration in seconds
+##
+pipeline_timing_print() {
+    local total_duration="${1:-0}"
+
+    echo ""
+    echo "  Phase Timing Metrics"
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    printf "  %-25s %10s %10s\n" "Phase" "Duration" "Result"
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+
+    local i
+    for (( i = 0; i < ${#_PIPELINE_TIMING_PHASES[@]}; i++ )); do
+        local phase="${_PIPELINE_TIMING_PHASES[$i]}"
+        local dur="${_PIPELINE_TIMING_DURATIONS[$i]}"
+        local res="${_PIPELINE_TIMING_RESULTS[$i]}"
+
+        printf "  %-25s %8ss %10s\n" "$phase" "$dur" "$res"
+    done
+
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    printf "  %-25s %8ss\n" "TOTAL" "$total_duration"
+    echo ""
+}
+
+# =============================================================================
+# DEPLOYMENT HISTORY
+# =============================================================================
+# Reads structured log files to show recent deployment attempts.
+# =============================================================================
+
+##
+# List recent deployment history
+#
+# Arguments:
+#   $1 - Deployment type (hub|spoke)
+#   $2 - Instance code (e.g., USA, GBR) — optional, shows all if empty
+#   $3 - Max entries to show (default: 10)
+##
+pipeline_show_history() {
+    local deploy_type="$1"
+    local instance_code="${2:-}"
+    local max_entries="${3:-10}"
+
+    local log_dir="${DIVE_ROOT}/.dive-state/logs"
+    if [ ! -d "$log_dir" ]; then
+        echo "  No deployment history found."
+        return 0
+    fi
+
+    echo ""
+    echo "==============================================================================="
+    if [ -n "$instance_code" ]; then
+        echo "  Deployment History — ${deploy_type^^} ${instance_code}"
+    else
+        echo "  Deployment History — ${deploy_type^^}"
+    fi
+    echo "==============================================================================="
+    echo ""
+    printf "  %-22s %-10s %-8s %-10s %s\n" "Timestamp" "Instance" "Result" "Duration" "Mode"
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+
+    # Build file pattern
+    local pattern="deploy-${deploy_type}-"
+    if [ -n "$instance_code" ]; then
+        pattern="deploy-${deploy_type}-${instance_code}-"
+    fi
+
+    local count=0
+    # List log files in reverse chronological order (newest first by filename)
+    local log_file
+    while IFS= read -r log_file; do
+        [ -z "$log_file" ] && continue
+        [ ! -f "$log_file" ] && continue
+
+        # Extract metadata from COMPLETE entry (last line)
+        local complete_line
+        complete_line=$(tail -1 "$log_file" 2>/dev/null)
+
+        local ts instance result duration_s mode_info
+        # Parse timestamp from filename (deploy-type-INSTANCE-YYYYMMDD-HHMMSS.jsonl)
+        local basename_f
+        basename_f=$(basename "$log_file" .jsonl)
+        ts=$(echo "$basename_f" | sed -E 's/deploy-[a-z]+-[A-Z]+-//' | sed 's/-/ /')
+        instance=$(echo "$basename_f" | sed -E 's/deploy-[a-z]+-([A-Z]+)-.*/\1/')
+
+        # Parse result from COMPLETE line
+        result="unknown"
+        duration_s="-"
+        if echo "$complete_line" | grep -q '"phase":"COMPLETE"' 2>/dev/null; then
+            if echo "$complete_line" | grep -q '"message":"Deployment success"' 2>/dev/null; then
+                result="success"
+            else
+                result="failure"
+            fi
+            # Extract duration
+            duration_s=$(echo "$complete_line" | sed -E 's/.*"duration_ms":([0-9]+).*/\1/' 2>/dev/null)
+            if [ -n "$duration_s" ] && [ "$duration_s" != "$complete_line" ]; then
+                duration_s="$((duration_s / 1000))s"
+            else
+                duration_s="-"
+            fi
+        fi
+
+        # Parse mode from INIT line (if available)
+        mode_info="deploy"
+
+        printf "  %-22s %-10s %-8s %-10s %s\n" "$ts" "$instance" "$result" "$duration_s" "$mode_info"
+
+        count=$((count + 1))
+        [ "$count" -ge "$max_entries" ] && break
+    done < <(ls -1r "${log_dir}/${pattern}"*.jsonl 2>/dev/null)
+
+    if [ "$count" -eq 0 ]; then
+        echo "  No deployment history found."
+    fi
+
+    echo ""
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    echo "  Showing $count most recent deployments"
+    echo "  Log directory: $log_dir"
+    echo "==============================================================================="
+    echo ""
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
+export -f pipeline_log_init
+export -f pipeline_log_structured
+export -f pipeline_log_finalize
+export -f pipeline_log_get_path
+export -f pipeline_timing_reset
+export -f pipeline_timing_start
+export -f pipeline_timing_end
+export -f pipeline_get_phase_timing
+export -f pipeline_timing_print
+export -f pipeline_show_history
 export -f pipeline_clear_phases
 export -f pipeline_register_phase
 export -f pipeline_get_phase_count
