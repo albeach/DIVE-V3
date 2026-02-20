@@ -1,104 +1,16 @@
 /**
  * Session Analytics Controller
  *
- * Provides comprehensive session analytics for admin dashboard:
- * - Active session counts
+ * Provides real session data from Keycloak admin API:
+ * - Active session counts from Keycloak realm
  * - Session duration statistics
- * - Geographic distribution
- * - Device/browser analytics
- * - Trends and patterns
+ * - User/client distribution
  */
 
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { IAdminAPIResponse } from '../types/admin.types';
-
-interface SessionAnalytics {
-    totalSessions: number;
-    activeSessions: number;
-    averageSessionDuration: number;
-    peakConcurrentSessions: number;
-    sessionsToday: number;
-    sessionsByHour: Array<{ hour: number; count: number }>;
-    sessionsByDevice: Record<string, number>;
-    sessionsByCountry: Record<string, number>;
-    sessionsByBrowser: Record<string, number>;
-    trends: {
-        sessions7d: number;
-        sessions30d: number;
-        change7d: number;
-        change30d: number;
-    };
-}
-
-/**
- * Generate session analytics data
- *
- * NOTE: This is a placeholder implementation. In production, this should:
- * 1. Query actual session data from database
- * 2. Use Redis for real-time session counts
- * 3. Aggregate historical data from logs
- * 4. Parse user agents for device/browser info
- * 5. Use GeoIP for country detection
- */
-function generateSessionAnalytics(): SessionAnalytics {
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    // Simulated data - replace with actual queries
-    return {
-        totalSessions: 1247,
-        activeSessions: 89,
-        averageSessionDuration: 45.2, // minutes
-        peakConcurrentSessions: 142,
-        sessionsToday: 324,
-
-        // Sessions by hour (last 24 hours)
-        sessionsByHour: Array.from({ length: 24 }, (_, i) => {
-            const hour = (currentHour - 23 + i + 24) % 24;
-            // Simulate peak during business hours
-            const isPeakHour = hour >= 8 && hour <= 17;
-            const baseCount = isPeakHour ? 30 : 10;
-            const variance = Math.random() * 15;
-            return {
-                hour,
-                count: Math.floor(baseCount + variance),
-            };
-        }),
-
-        // Device distribution
-        sessionsByDevice: {
-            'Desktop': 687,
-            'Mobile': 412,
-            'Tablet': 148,
-        },
-
-        // Country distribution
-        sessionsByCountry: {
-            'USA': 892,
-            'GBR': 187,
-            'FRA': 98,
-            'CAN': 45,
-            'DEU': 25,
-        },
-
-        // Browser distribution
-        sessionsByBrowser: {
-            'Chrome': 578,
-            'Firefox': 234,
-            'Safari': 289,
-            'Edge': 146,
-        },
-
-        // Trends
-        trends: {
-            sessions7d: 8940,
-            sessions30d: 34280,
-            change7d: 12.5, // +12.5% vs previous week
-            change30d: 8.3, // +8.3% vs previous month
-        },
-    };
-}
+import { keycloakAdminService } from '../services/keycloak-admin.service';
 
 /**
  * GET /api/admin/sessions/analytics
@@ -113,7 +25,27 @@ export const getSessionAnalyticsHandler = async (
     try {
         logger.info('Admin: Get session analytics', { requestId });
 
-        const analytics = generateSessionAnalytics();
+        const stats = await keycloakAdminService.getSessionStats();
+
+        const analytics = {
+            totalSessions: stats.totalActive as number,
+            activeSessions: stats.totalActive as number,
+            averageSessionDuration: Math.round(((stats.averageDuration as number) || 0) / 60), // seconds → minutes
+            peakConcurrentSessions: stats.peakConcurrent24h as number,
+            sessionsToday: stats.totalActive as number,
+            sessionsByHour: [],
+            sessionsByDevice: {},
+            sessionsByCountry: {},
+            sessionsByBrowser: {},
+            sessionsByClient: stats.byClient || {},
+            sessionsByUser: stats.byUser || {},
+            trends: {
+                sessions7d: 0,
+                sessions30d: 0,
+                change7d: 0,
+                change30d: 0,
+            },
+        };
 
         const response: IAdminAPIResponse = {
             success: true,
@@ -165,30 +97,30 @@ export const getSessionsListHandler = async (
         const pageNum = parseInt(page as string, 10);
         const limitNum = parseInt(limit as string, 10);
 
-        // Simulated session data - replace with actual database query
-        const mockSessions = Array.from({ length: limitNum }, (_, i) => ({
-            id: `session-${i + 1}`,
-            userId: `user-${Math.floor(Math.random() * 100)}`,
-            username: `user${Math.floor(Math.random() * 100)}`,
-            email: `user${Math.floor(Math.random() * 100)}@example.com`,
-            ipAddress: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            device: Math.random() > 0.5 ? 'Desktop' : 'Mobile',
-            browser: ['Chrome', 'Firefox', 'Safari'][Math.floor(Math.random() * 3)],
-            country: ['USA', 'GBR', 'FRA'][Math.floor(Math.random() * 3)],
-            city: ['Washington', 'London', 'Paris'][Math.floor(Math.random() * 3)],
-            createdAt: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(),
-            lastActivity: new Date(Date.now() - Math.random() * 3600000).toISOString(),
-            expiresAt: new Date(Date.now() + Math.random() * 3600000 * 8).toISOString(),
-            clearance: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'][Math.floor(Math.random() * 4)],
-            roles: ['dive-user'],
+        const filters: Record<string, unknown> = {};
+        if (userId) filters.username = userId;
+        if (status) filters.status = status;
+
+        const sessions = await keycloakAdminService.getActiveSessions(undefined, filters);
+
+        // Paginate
+        const total = sessions.length;
+        const start = (pageNum - 1) * limitNum;
+        const paginatedSessions = sessions.slice(start, start + limitNum).map(s => ({
+            id: s.id,
+            userId: s.userId,
+            username: s.username,
+            ipAddress: s.ipAddress,
+            createdAt: s.start ? new Date(s.start as number).toISOString() : undefined,
+            lastActivity: s.lastAccess ? new Date(s.lastAccess as number).toISOString() : undefined,
+            clients: s.clients || {},
         }));
 
         const response: IAdminAPIResponse = {
             success: true,
             data: {
-                sessions: mockSessions,
-                total: 89,
+                sessions: paginatedSessions,
+                total,
                 page: pageNum,
                 pageSize: limitNum,
             },
@@ -227,7 +159,7 @@ export const revokeSessionHandler = async (
     try {
         logger.info('Admin: Revoke session', { requestId, sessionId: id });
 
-        // In production: Remove session from database and blacklist token in Redis
+        await keycloakAdminService.revokeSession(id);
 
         const response: IAdminAPIResponse = {
             success: true,
@@ -268,9 +200,7 @@ export const revokeAllUserSessionsHandler = async (
     try {
         logger.info('Admin: Revoke all user sessions', { requestId, userId });
 
-        // In production: Remove all user sessions and blacklist all tokens
-
-        const revokedCount = Math.floor(Math.random() * 5) + 1; // Simulated count
+        const revokedCount = await keycloakAdminService.revokeUserSessions(userId);
 
         const response: IAdminAPIResponse = {
             success: true,

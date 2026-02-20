@@ -654,6 +654,46 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
         return updateRealmThemeCore(this.getContext(), themeName, realmName);
     }
+
+    /**
+     * Get realm configuration (password policy, OTP settings, etc.)
+     */
+    async getRealmConfig(realmName?: string): Promise<Record<string, unknown>> {
+        await this.ensureAuthenticated();
+        const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+        const token = this.getContext().client.accessToken;
+        const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
+
+        const response = await this.axios.get(`${baseUrl}/admin/realms/${realm}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        return response.data;
+    }
+
+    /**
+     * Update realm configuration (password policy, etc.)
+     */
+    async updateRealmConfig(updates: Record<string, unknown>, realmName?: string): Promise<void> {
+        await this.ensureAuthenticated();
+        const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+        const token = this.getContext().client.accessToken;
+        const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
+
+        const current = await this.axios.get(`${baseUrl}/admin/realms/${realm}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        await this.axios.put(`${baseUrl}/admin/realms/${realm}`, {
+            ...current.data,
+            ...updates,
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            }
+        });
+    }
 }
 
 // Export singleton instance
