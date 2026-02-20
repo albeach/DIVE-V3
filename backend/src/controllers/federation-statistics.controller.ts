@@ -1,19 +1,22 @@
 /**
  * Federation Statistics Controller
  *
- * Provides federation-wide statistics and metrics:
- * - Spoke health and connectivity
- * - Request throughput and latency
- * - Error rates
- * - Traffic patterns
- * - Cross-spoke communication metrics
+ * Provides federation-wide statistics from real MongoDB data:
+ * - Decision log statistics (allow/deny counts, latency)
+ * - Spoke registration counts
+ * - Federation audit trail queries
  */
 
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { IAdminAPIResponse } from '../types/admin.types';
+import { decisionLogService } from '../services/decision-log.service';
+import { getDb } from '../utils/mongodb-singleton';
 
-interface FederationStatistics {
+/**
+ * Query real federation statistics from MongoDB
+ */
+async function queryFederationStatistics(): Promise<{
     totalSpokes: number;
     activeSpokes: number;
     totalRequests24h: number;
@@ -28,143 +31,175 @@ interface FederationStatistics {
         latencyChange7d: number;
         errorRateChange7d: number;
     };
-}
+}> {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 3600000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 3600000);
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 3600000);
 
-interface FederationTraffic {
-    timeRange: { start: string; end: string };
-    totalRequests: number;
-    totalBytes: number;
-    history: Array<{
-        timestamp: string;
-        requests: number;
-        bytes: number;
-        errors: number;
-        latency: number;
-    }>;
-    bySpoke: Array<{
-        spokeId: string;
-        spokeName: string;
-        requests: number;
-        bytes: number;
-        avgLatency: number;
-    }>;
-    topEndpoints: Array<{
-        endpoint: string;
-        count: number;
-        avgLatency: number;
-    }>;
-}
+    // Query spoke registrations
+    const db = getDb();
+    const spokeCollection = db.collection('spoke_registrations');
+    const spokes = await spokeCollection.find({}).toArray();
+    const totalSpokes = spokes.length;
+    const activeSpokes = spokes.filter(s => s.status === 'approved').length;
 
-/**
- * Generate federation statistics
- * NOTE: Replace with actual data queries in production
- */
-function generateFederationStatistics(): FederationStatistics {
+    // Query 24h decision statistics
+    const stats24h = await decisionLogService.getStatistics(oneDayAgo, now);
+    const totalRequests24h = stats24h.totalDecisions;
+    const successRate = totalRequests24h > 0
+        ? Math.round((stats24h.allowCount / totalRequests24h) * 1000) / 10
+        : 100;
+
+    // Get peak latency from decisions collection
+    const peakResult = await db.collection('decisions').aggregate([
+        { $match: { timestamp: { $gte: oneDayAgo.toISOString() } } },
+        { $group: { _id: null, peak: { $max: '$latency_ms' } } }
+    ]).toArray();
+    const peakLatency = peakResult.length > 0 ? peakResult[0].peak : 0;
+
+    // Group by country of affiliation (spoke proxy)
+    const requestsBySpoke = stats24h.decisionsByCountry;
+    const latencyBySpoke: Record<string, number> = {};
+    const errorsBySpoke: Record<string, number> = {};
+
+    // Per-spoke latency and errors
+    const spokeMetrics = await db.collection('decisions').aggregate([
+        { $match: { timestamp: { $gte: oneDayAgo.toISOString() } } },
+        {
+            $group: {
+                _id: '$subject.countryOfAffiliation',
+                avgLatency: { $avg: '$latency_ms' },
+                denyCount: { $sum: { $cond: [{ $eq: ['$decision', 'DENY'] }, 1, 0] } }
+            }
+        }
+    ]).toArray();
+
+    spokeMetrics.forEach(m => {
+        if (m._id) {
+            latencyBySpoke[m._id] = Math.round(m.avgLatency);
+            errorsBySpoke[m._id] = m.denyCount;
+        }
+    });
+
+    // 7-day trends: compare current vs previous week
+    const stats7d = await decisionLogService.getStatistics(sevenDaysAgo, now);
+    const statsPrev7d = await decisionLogService.getStatistics(fourteenDaysAgo, sevenDaysAgo);
+
+    const requestsChange7d = statsPrev7d.totalDecisions > 0
+        ? Math.round(((stats7d.totalDecisions - statsPrev7d.totalDecisions) / statsPrev7d.totalDecisions) * 1000) / 10
+        : 0;
+    const latencyChange7d = statsPrev7d.averageLatency > 0
+        ? Math.round(((stats7d.averageLatency - statsPrev7d.averageLatency) / statsPrev7d.averageLatency) * 1000) / 10
+        : 0;
+    const currentErrorRate = stats7d.totalDecisions > 0 ? stats7d.denyCount / stats7d.totalDecisions : 0;
+    const prevErrorRate = statsPrev7d.totalDecisions > 0 ? statsPrev7d.denyCount / statsPrev7d.totalDecisions : 0;
+    const errorRateChange7d = prevErrorRate > 0
+        ? Math.round(((currentErrorRate - prevErrorRate) / prevErrorRate) * 1000) / 10
+        : 0;
+
     return {
-        totalSpokes: 5,
-        activeSpokes: 4,
-        totalRequests24h: 45678,
-        successRate: 99.2,
-        averageLatency: 127, // ms
-        peakLatency: 892, // ms
-
-        requestsBySpoke: {
-            'spoke-usa': 28934,
-            'spoke-gbr': 9234,
-            'spoke-fra': 5123,
-            'spoke-deu': 2387,
-        },
-
-        latencyBySpoke: {
-            'spoke-usa': 95,
-            'spoke-gbr': 142,
-            'spoke-fra': 187,
-            'spoke-deu': 156,
-        },
-
-        errorsBySpoke: {
-            'spoke-usa': 42,
-            'spoke-gbr': 18,
-            'spoke-fra': 25,
-            'spoke-deu': 12,
-        },
-
-        trends: {
-            requestsChange7d: 8.5, // +8.5%
-            latencyChange7d: -3.2, // -3.2% (improvement)
-            errorRateChange7d: -12.4, // -12.4% (improvement)
-        },
+        totalSpokes,
+        activeSpokes,
+        totalRequests24h,
+        successRate,
+        averageLatency: stats24h.averageLatency,
+        peakLatency,
+        requestsBySpoke,
+        latencyBySpoke,
+        errorsBySpoke,
+        trends: { requestsChange7d, latencyChange7d, errorRateChange7d },
     };
 }
 
 /**
- * Generate federation traffic data
- * NOTE: Replace with actual data queries in production
+ * Query real federation traffic data from MongoDB
  */
-function generateFederationTraffic(): FederationTraffic {
+async function queryFederationTraffic(): Promise<{
+    timeRange: { start: string; end: string };
+    totalRequests: number;
+    totalBytes: number;
+    history: Array<{ timestamp: string; requests: number; bytes: number; errors: number; latency: number }>;
+    bySpoke: Array<{ spokeId: string; spokeName: string; requests: number; bytes: number; avgLatency: number }>;
+    topEndpoints: Array<{ endpoint: string; count: number; avgLatency: number }>;
+}> {
     const now = new Date();
     const start = new Date(now.getTime() - 24 * 3600000);
+    const db = getDb();
+
+    // Hourly histogram from decisions collection
+    const hourlyData = await db.collection('decisions').aggregate([
+        { $match: { timestamp: { $gte: start.toISOString() } } },
+        {
+            $group: {
+                _id: { $substr: ['$timestamp', 0, 13] }, // YYYY-MM-DDTHH
+                requests: { $sum: 1 },
+                errors: { $sum: { $cond: [{ $eq: ['$decision', 'DENY'] }, 1, 0] } },
+                avgLatency: { $avg: '$latency_ms' }
+            }
+        },
+        { $sort: { _id: 1 } }
+    ]).toArray();
+
+    const history = hourlyData.map(h => ({
+        timestamp: `${h._id}:00:00.000Z`,
+        requests: h.requests,
+        bytes: h.requests * 5000, // Estimated avg 5KB per request
+        errors: h.errors,
+        latency: Math.round(h.avgLatency || 0),
+    }));
+
+    const totalRequests = history.reduce((sum, h) => sum + h.requests, 0);
+    const totalBytes = history.reduce((sum, h) => sum + h.bytes, 0);
+
+    // Per-spoke breakdown
+    const spokeData = await db.collection('decisions').aggregate([
+        { $match: { timestamp: { $gte: start.toISOString() } } },
+        {
+            $group: {
+                _id: '$subject.countryOfAffiliation',
+                requests: { $sum: 1 },
+                avgLatency: { $avg: '$latency_ms' }
+            }
+        },
+        { $sort: { requests: -1 } }
+    ]).toArray();
+
+    const bySpoke = spokeData.filter(s => s._id).map(s => ({
+        spokeId: `spoke-${(s._id as string).toLowerCase()}`,
+        spokeName: s._id as string,
+        requests: s.requests,
+        bytes: s.requests * 5000,
+        avgLatency: Math.round(s.avgLatency || 0),
+    }));
+
+    // Top endpoints from decisions (group by action.operation)
+    const endpointData = await db.collection('decisions').aggregate([
+        { $match: { timestamp: { $gte: start.toISOString() } } },
+        {
+            $group: {
+                _id: '$action.operation',
+                count: { $sum: 1 },
+                avgLatency: { $avg: '$latency_ms' }
+            }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+    ]).toArray();
+
+    const topEndpoints = endpointData.filter(e => e._id).map(e => ({
+        endpoint: e._id as string,
+        count: e.count,
+        avgLatency: Math.round(e.avgLatency || 0),
+    }));
 
     return {
-        timeRange: {
-            start: start.toISOString(),
-            end: now.toISOString(),
-        },
-        totalRequests: 45678,
-        totalBytes: 234567890,
-
-        history: Array.from({ length: 24 }, (_, i) => {
-            const timestamp = new Date(start.getTime() + i * 3600000);
-            const isBusinessHours = timestamp.getHours() >= 8 && timestamp.getHours() <= 17;
-            const baseRequests = isBusinessHours ? 2500 : 800;
-
-            return {
-                timestamp: timestamp.toISOString(),
-                requests: baseRequests + Math.floor(Math.random() * 500),
-                bytes: (baseRequests + Math.floor(Math.random() * 500)) * 5000,
-                errors: Math.floor(Math.random() * 20),
-                latency: 100 + Math.random() * 50,
-            };
-        }),
-
-        bySpoke: [
-            {
-                spokeId: 'spoke-usa',
-                spokeName: 'United States',
-                requests: 28934,
-                bytes: 144670000,
-                avgLatency: 95,
-            },
-            {
-                spokeId: 'spoke-gbr',
-                spokeName: 'United Kingdom',
-                requests: 9234,
-                bytes: 46170000,
-                avgLatency: 142,
-            },
-            {
-                spokeId: 'spoke-fra',
-                spokeName: 'France',
-                requests: 5123,
-                bytes: 25615000,
-                avgLatency: 187,
-            },
-            {
-                spokeId: 'spoke-deu',
-                spokeName: 'Germany',
-                requests: 2387,
-                bytes: 11935000,
-                avgLatency: 156,
-            },
-        ],
-
-        topEndpoints: [
-            { endpoint: '/api/resources', count: 12340, avgLatency: 95 },
-            { endpoint: '/api/authz/decision', count: 10234, avgLatency: 45 },
-            { endpoint: '/api/users', count: 5678, avgLatency: 120 },
-            { endpoint: '/api/policies', count: 3456, avgLatency: 200 },
-            { endpoint: '/api/federation/sync', count: 2345, avgLatency: 350 },
-        ],
+        timeRange: { start: start.toISOString(), end: now.toISOString() },
+        totalRequests,
+        totalBytes,
+        history,
+        bySpoke,
+        topEndpoints,
     };
 }
 
@@ -181,7 +216,7 @@ export const getFederationStatisticsHandler = async (
     try {
         logger.info('Admin: Get federation statistics', { requestId });
 
-        const statistics = generateFederationStatistics();
+        const statistics = await queryFederationStatistics();
 
         const response: IAdminAPIResponse = {
             success: true,
@@ -223,7 +258,7 @@ export const getFederationTrafficHandler = async (
     try {
         logger.info('Admin: Get federation traffic', { requestId });
 
-        const traffic = generateFederationTraffic();
+        const traffic = await queryFederationTraffic();
 
         const response: IAdminAPIResponse = {
             success: true,
