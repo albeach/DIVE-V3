@@ -444,30 +444,27 @@ orch_acquire_deployment_lock() {
     # SPECIAL CASE: Hub (USA) deployment
     # Hub creates the orchestration database, so it can't use database locking initially
     if [ "$code_upper" = "USA" ]; then
-        echo "DEBUG: Checking hub bootstrap mode for USA" >&2
         if ! type -t orch_db_check_connection >/dev/null 2>&1; then
-            echo "DEBUG: orch_db_check_connection function not found - skipping DB lock" >&2
+            log_verbose "Hub bootstrap: orch_db_check_connection not available, using bootstrap lock"
             ORCH_CONTEXT[lock_acquired]="true"
             ORCH_CONTEXT[lock_type]="hub-bootstrap"
-            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode - function not available)"
+            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
             return 0
         fi
         if ! orch_db_check_connection; then
-            echo "DEBUG: Database not connected - skipping DB lock" >&2
+            log_verbose "Hub bootstrap: database not connected, using bootstrap lock"
             ORCH_CONTEXT[lock_acquired]="true"
             ORCH_CONTEXT[lock_type]="hub-bootstrap"
-            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode - DB not available)"
+            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
             return 0
         fi
-        echo "DEBUG: Database IS connected - will try to acquire DB lock" >&2
+        log_verbose "Hub: database connected, will acquire DB lock"
     fi
 
     # PostgreSQL advisory locking (MANDATORY for non-Hub instances)
     if type -t orch_db_acquire_lock >/dev/null 2>&1; then
         if orch_db_acquire_lock "$instance_code" "$timeout"; then
-            log_verbose "DEBUG: About to set lock_acquired"
             ORCH_CONTEXT[lock_acquired]="true"
-            log_verbose "DEBUG: lock_acquired set successfully"
             ORCH_CONTEXT[lock_type]="database"
             log_success "Deployment lock acquired for $instance_code (PostgreSQL advisory lock)"
             return 0
@@ -547,11 +544,16 @@ orch_release_deployment_lock() {
 
     local lock_type="${ORCH_CONTEXT[lock_type]:-database}"
 
-    # Release PostgreSQL advisory lock
+    # Release lock based on type
     if [ "$lock_type" = "database" ]; then
         if type -t orch_db_release_lock >/dev/null 2>&1; then
             orch_db_release_lock "$instance_code" 2>/dev/null || true
         fi
+    elif [ "$lock_type" = "file" ]; then
+        local code_upper
+        code_upper=$(upper "$instance_code")
+        local lock_file="${DIVE_ROOT}/.dive-state/${code_upper}.lock"
+        rm -f "$lock_file" 2>/dev/null || true
     fi
     # hub-bootstrap mode doesn't have a lock to release
 
