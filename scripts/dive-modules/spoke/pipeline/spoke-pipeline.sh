@@ -214,10 +214,13 @@ _spoke_pipeline_execute_internal() {
     local start_time="$4"
     local resume_mode="${5:-false}"
 
-    # Start deployment log capture
+    # Source utilities (deployment logging + timing dashboard)
+    local _utils_dir="${DIVE_ROOT}/scripts/dive-modules/utilities"
     if ! type deployment_log_start &>/dev/null; then
-        local _logging="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-logging.sh"
-        [ -f "$_logging" ] && source "$_logging"
+        [ -f "${_utils_dir}/deployment-logging.sh" ] && source "${_utils_dir}/deployment-logging.sh"
+    fi
+    if ! type deployment_print_timing_dashboard &>/dev/null; then
+        [ -f "${_utils_dir}/deployment-dashboard.sh" ] && source "${_utils_dir}/deployment-dashboard.sh"
     fi
     if type deployment_log_start &>/dev/null; then
         if deployment_log_start "spoke" "$code_upper"; then
@@ -418,18 +421,22 @@ _spoke_pipeline_execute_internal() {
             orch_create_checkpoint "$code_upper" "COMPLETE" "Pipeline completed successfully"
         fi
 
-        # Print timing summary
+        # Print timing dashboard
         if [ ${#spoke_phase_times[@]} -gt 0 ]; then
-            echo ""
-            echo "==============================================================================="
-            echo "  Spoke Deployment Performance Summary"
-            echo "==============================================================================="
-            for timing in "${spoke_phase_times[@]}"; do
-                echo "  $timing"
-            done
-            echo "  -------------------------------------------------------------------------------"
-            echo "  Total Duration: ${duration}s"
-            echo "==============================================================================="
+            if type deployment_print_timing_dashboard &>/dev/null; then
+                deployment_print_timing_dashboard "spoke" "${spoke_phase_times[@]}" "$duration"
+            else
+                echo ""
+                echo "==============================================================================="
+                echo "  Spoke Deployment Performance Summary"
+                echo "==============================================================================="
+                for timing in "${spoke_phase_times[@]}"; do
+                    echo "  $timing"
+                done
+                echo "  -------------------------------------------------------------------------------"
+                echo "  Total Duration: ${duration}s"
+                echo "==============================================================================="
+            fi
         fi
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
