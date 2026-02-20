@@ -14,7 +14,7 @@
         "dev:http": "next dev",
         "build": "SKIP_ENV_VALIDATION=1 next build",
         "start": "next start",
-        "lint": "next lint",
+        "lint": "eslint src/ --ext .ts,.tsx,.js,.jsx",
         "typecheck": "tsc --noEmit",
         "db:generate": "drizzle-kit generate",
         "db:push": "drizzle-kit push",

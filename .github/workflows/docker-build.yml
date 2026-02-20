@@ -36,6 +36,8 @@ jobs:
     name: Build Images
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Docker builds are informational on PRs (transient registry outages should not block merges)
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     permissions:
       contents: read
       packages: write
