@@ -55,6 +55,38 @@ readonly PIPELINE_MODE_UP="up"              # Quick start (skip initialization)
 readonly PIPELINE_MODE_REDEPLOY="redeploy"  # Redeploy (skip init, full deploy)
 
 # =============================================================================
+# FLAG TAXONOMY (Phase 7: UX Polish)
+# =============================================================================
+#
+# Confirmation flags: --confirm / --yes / -y
+#   Meaning: "I acknowledge this destructive action"
+#   Used by: nuke (required for all destructive operations)
+#   In non-interactive mode, --confirm must be explicit (no default)
+#
+# Force flags: --force / -f
+#   Meaning: "Override safety checks"
+#   Used by:
+#     - spoke deploy --force : Redeploy even if already deployed
+#     - pipeline_validated_set_state --force : Override state transition validation
+#     - nuke --force : Implies --confirm + skips interactive prompt
+#
+# Pipeline control flags:
+#   --resume           : Resume from last checkpoint
+#   --dry-run / -n     : Simulate deployment without making changes
+#   --from-phase X     : Start from specified phase (skip earlier)
+#   --skip-phase X     : Skip specified phase (can be repeated)
+#   --only-phase X     : Run only the specified phase
+#   --force-build      : Force rebuild Docker images (bypass cache)
+#   --preserve-logs    : Keep deployment logs during nuke (Phase 6)
+#
+# Command aliases:
+#   up / start         : Start services (hub and spoke)
+#   down / stop        : Stop services (hub and spoke)
+#   verify / health    : Run verification checks (spoke only)
+#
+# =============================================================================
+
+# =============================================================================
 # GRACEFUL SIGINT HANDLING
 # =============================================================================
 

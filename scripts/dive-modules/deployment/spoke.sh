@@ -98,7 +98,7 @@ module_spoke() {
             if type -t spoke_authorize &>/dev/null; then
                 spoke_authorize "$@"
             else
-                log_error "spoke_authorize not available - spoke/authorize.sh not loaded"
+                log_error "spoke_authorize not available. Ensure spoke/authorize.sh exists"
                 return 1
             fi
             ;;
@@ -123,7 +123,7 @@ module_spoke() {
             if type -t spoke_prepare &>/dev/null; then
                 spoke_prepare "$@"
             else
-                log_error "spoke_prepare not available - spoke/prepare.sh not loaded"
+                log_error "spoke_prepare not available. Ensure spoke/prepare.sh exists"
                 return 1
             fi
             ;;
@@ -135,7 +135,7 @@ module_spoke() {
             if type -t spoke_configure_remote &>/dev/null; then
                 spoke_configure_remote "$@"
             else
-                log_error "spoke_configure_remote not available - spoke/configure-remote.sh not loaded"
+                log_error "spoke_configure_remote not available. Ensure spoke/configure-remote.sh exists"
                 return 1
             fi
             ;;
@@ -160,7 +160,7 @@ module_spoke() {
             if type -t spoke_parallel_deploy &>/dev/null; then
                 spoke_parallel_deploy "$@"
             else
-                log_error "spoke_parallel_deploy not available - spoke/parallel-deploy.sh not loaded"
+                log_error "spoke_parallel_deploy not available. Ensure spoke/parallel-deploy.sh exists"
                 return 1
             fi
             ;;
@@ -225,7 +225,7 @@ module_spoke() {
                 if type -t spoke_deploy &>/dev/null; then
                     spoke_deploy "$@"
                 else
-                    log_error "spoke_deploy not available - spoke-deploy.sh not loaded"
+                    log_error "spoke_deploy not available. Try: ./dive hub deploy first, then ./dive spoke deploy <CODE>"
                     return 1
                 fi
             fi
@@ -254,7 +254,7 @@ module_spoke() {
             if type -t spoke_init &>/dev/null; then
                 spoke_init "$@"
             else
-                log_error "spoke_init not available - spoke-init.sh not loaded"
+                log_error "spoke_init not available. Ensure spoke/spoke-init.sh exists"
                 return 1
             fi
             ;;
@@ -273,7 +273,7 @@ module_spoke() {
             if type -t spoke_phases &>/dev/null; then
                 spoke_phases "$@"
             else
-                log_error "spoke_phases not available - spoke-pipeline.sh not loaded"
+                log_error "spoke_phases not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -288,7 +288,7 @@ module_spoke() {
             if type -t diag_full_report &>/dev/null; then
                 diag_full_report "spoke" "$_diag_code"
             else
-                log_error "Diagnostics module not available"
+                log_error "Diagnostics module not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -312,7 +312,7 @@ module_spoke() {
                     pipeline_state_show "spoke" "$_state_code"
                 fi
             else
-                log_error "State module not available"
+                log_error "State module not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -327,7 +327,7 @@ module_spoke() {
             if type -t pipeline_show_history &>/dev/null; then
                 pipeline_show_history "spoke" "$_hist_code" "${2:-10}"
             else
-                log_error "History module not available"
+                log_error "History module not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -337,7 +337,7 @@ module_spoke() {
             if type -t spoke_status &>/dev/null; then
                 spoke_status "$@"
             else
-                log_error "spoke_status not available - status.sh module failed to load"
+                log_error "spoke_status not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -346,7 +346,7 @@ module_spoke() {
             if type -t spoke_verify &>/dev/null; then
                 spoke_verify "$@"
             else
-                log_error "spoke_verify not available - verification.sh module failed to load"
+                log_error "spoke_verify not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -355,7 +355,7 @@ module_spoke() {
             if type -t spoke_verify_all &>/dev/null; then
                 spoke_verify_all "$@"
             else
-                log_error "spoke_verify_all not available - verification.sh module failed to load"
+                log_error "spoke_verify_all not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -370,7 +370,7 @@ module_spoke() {
             if type -t spoke_restart &>/dev/null; then
                 spoke_restart "$@"
             else
-                log_error "spoke_restart not available - operations.sh not loaded"
+                log_error "spoke_restart not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -379,7 +379,7 @@ module_spoke() {
             if type -t spoke_reload_secrets &>/dev/null; then
                 spoke_reload_secrets "$@"
             else
-                log_error "spoke_reload_secrets not available - operations.sh not loaded"
+                log_error "spoke_reload_secrets not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -388,7 +388,7 @@ module_spoke() {
             if type -t spoke_repair &>/dev/null; then
                 spoke_repair "$@"
             else
-                log_error "spoke_repair not available - operations.sh not loaded"
+                log_error "spoke_repair not available. Try: ./dive spoke deploy <CODE> first"
                 return 1
             fi
             ;;
@@ -445,71 +445,61 @@ _spoke_clean_locks() {
 }
 
 _spoke_help() {
-    cat << 'EOF'
-Usage: ./dive spoke <command> [args]
-
-Commands:
-  deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)
-  deploy-all [CODES...]       Deploy multiple spokes in parallel (--all for all)
-  authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)
-  revoke <CODE>               Revoke a spoke's federation authorization
-  prepare <CODE>              Generate config package on Hub (ECR-based remote)
-  configure <CODE>            Run Terraform + federation from Hub (remote)
-  start-remote <CODE>         SSH to spoke EC2 and run deploy.sh
-  init <CODE> [name]          Initialize spoke directory only
-  setup-wizard                Interactive spoke setup wizard
-  up <CODE>                   Start spoke services (local)
-  down <CODE>                 Stop spoke services
-  phases <CODE> [--timing]     Show pipeline phase status (optional timing)
-  state <CODE> [--repair]     Show deployment state (--repair to fix inconsistencies)
-  diagnose <CODE>             Run diagnostic checks (containers, certs, ports, disk)
-  history [CODE]              Show recent deployment history
-  status [CODE]               Show spoke status
-  verify <CODE>               Verify spoke deployment
-  verify-all                  Verify all provisioned spokes
-  logs <CODE> [service]       View spoke logs
-  clean-locks [CODE]          Clean stale deployment locks
-
-Repair Commands:
-  restart <CODE> [service]    Restart spoke services (all or specific)
-  reload-secrets <CODE>       Reload secrets from GCP and restart services
-  repair <CODE>               Auto-diagnose and fix common issues
-
-Zero-Config Remote Deployment (fresh instance):
-  # On the Hub:
-  ./dive spoke authorize GBR "United Kingdom"   # Get auth code UUID
-  # On the Spoke (any fresh Ubuntu instance):
-  ./dive spoke deploy GBR "United Kingdom" --auth-code <UUID>
-  # → Prompted for Hub domain (30s timeout → standalone mode)
-  # → Auth code validated by Hub API → auto-federated bidirectional SSO
-
-ECR-Based Remote Deployment (AWS):
-  ./dive --env dev spoke deploy GBR  # Auto: prepare → start → configure
-
-Parallel Multi-Spoke Deployment:
-  ./dive spoke deploy-all GBR FRA DEU   # Deploy 3 spokes concurrently
-  ./dive spoke deploy-all --all          # Deploy all provisioned spokes
-  ./dive spoke deploy-all --dry-run GBR  # Preview without deploying
-
-Local Spoke Deployment:
-  ./dive spoke deploy ALB "Albania"  # Full local pipeline (build from source)
-
-Standalone Mode (no federation):
-  ./dive spoke deploy GBR            # Skip Hub domain prompt → standalone
-
-Options:
-  --auth-code <UUID>          Pre-authorized federation code (from Hub)
-  --force                     Force deployment even if already deployed
-  --resume                    Resume from last checkpoint
-  --from-phase <PHASE>        Start from specified phase (skip earlier)
-  --skip-phase <PHASE>        Skip specified phase (can be repeated)
-  --only-phase <PHASE>        Run only the specified phase
-  --skip-federation           Skip federation setup
-  --domain <base>             Custom domain (e.g. gbr.mod.uk)
-  --dry-run                   Generate package without shipping (prepare only)
-
-For more help: ./dive help spoke
-EOF
+    echo "Usage: ./dive spoke <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)"
+    echo "  deploy-all [CODES...]       Deploy multiple spokes in parallel (--all for all)"
+    echo "  authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)"
+    echo "  revoke <CODE>               Revoke a spoke's federation authorization"
+    echo "  up <CODE> / start <CODE>    Start spoke services"
+    echo "  down <CODE> / stop <CODE>   Stop spoke services"
+    echo "  status [CODE]               Show spoke status"
+    echo "  verify <CODE> / health      Verify spoke deployment (aliases)"
+    echo "  verify-all                  Verify all provisioned spokes"
+    echo "  logs <CODE> [service]       View spoke logs"
+    echo "  init <CODE> [name]          Initialize spoke directory only"
+    echo ""
+    echo "Pipeline & Diagnostics:"
+    echo "  phases <CODE> [--timing]    Show pipeline phase status (optional timing)"
+    echo "  state <CODE> [--repair]     Show deployment state (--repair to fix inconsistencies)"
+    echo "  diagnose <CODE>             Run diagnostic checks (containers, certs, ports, disk)"
+    echo "  history [CODE]              Show recent deployment history"
+    echo ""
+    echo "Repair Commands:"
+    echo "  restart <CODE> [service]    Restart spoke services (all or specific)"
+    echo "  reload-secrets <CODE>       Reload secrets from GCP and restart services"
+    echo "  repair <CODE>               Auto-diagnose and fix common issues"
+    echo "  clean-locks [CODE]          Clean stale deployment locks"
+    echo ""
+    echo "Remote Deployment (AWS):"
+    echo "  prepare <CODE>              Generate config package on Hub (ECR-based remote)"
+    echo "  configure <CODE>            Run Terraform + federation from Hub (remote)"
+    echo "  start-remote <CODE>         SSH to spoke EC2 and run deploy.sh"
+    echo ""
+    echo "Deploy Options:"
+    echo "  --auth-code <UUID>          Pre-authorized federation code (from Hub)"
+    echo "  --force                     Force redeploy even if already deployed"
+    echo "  --resume                    Resume from last checkpoint"
+    echo "  --dry-run                   Simulate deployment without making changes"
+    echo "  --from-phase <PHASE>        Start from specified phase (skip earlier)"
+    echo "  --skip-phase <PHASE>        Skip specified phase (can be repeated)"
+    echo "  --only-phase <PHASE>        Run only the specified phase"
+    echo "  --skip-federation           Skip federation setup"
+    echo "  --domain <base>             Custom domain (e.g. gbr.mod.uk)"
+    echo ""
+    echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
+    echo ""
+    echo "Examples:"
+    echo "  ./dive spoke deploy ALB \"Albania\"                # Full local deployment"
+    echo "  ./dive spoke deploy GBR --resume                  # Resume from checkpoint"
+    echo "  ./dive spoke deploy GBR --dry-run                 # Simulate without changes"
+    echo "  ./dive spoke deploy GBR --from-phase CONFIGURATION  # Skip to phase"
+    echo "  ./dive --env dev spoke deploy GBR                 # ECR-based remote deploy"
+    echo "  ./dive spoke deploy-all GBR FRA DEU               # Parallel deployment"
+    echo "  ./dive spoke phases GBR --timing                  # Show phase durations"
+    echo "  ./dive spoke diagnose GBR                         # Run diagnostics"
+    echo "  ./dive spoke state GBR --repair                   # Fix state inconsistencies"
 }
 
 # =============================================================================
