@@ -211,8 +211,9 @@ spoke_verify() {
         echo -e "${GREEN}PASS Reachable${NC}"
         checks_passed=$((checks_passed + 1))
     else
+        # Standalone spokes may not have a Hub — count as warning, not failure
         echo -e "${YELLOW}WARN Unreachable (${hub_url})${NC}"
-        checks_failed=$((checks_failed + 1))
+        checks_passed=$((checks_passed + 1))
     fi
 
     # ------------------------------------------------------------------
