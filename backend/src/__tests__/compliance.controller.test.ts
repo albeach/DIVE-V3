@@ -29,6 +29,60 @@ jest.mock('../utils/logger', () => ({
     },
 }));
 
+// Mock compliance metrics service (runtime evidence source)
+const mockGetSLAMetrics = jest.fn();
+const mockGetTestCoverageMetrics = jest.fn();
+const mockGetPolicyDriftStatus = jest.fn();
+
+jest.mock('../services/compliance-metrics.service', () => ({
+    complianceMetricsService: {
+        getSLAMetrics: (...args: unknown[]) => mockGetSLAMetrics(...args),
+        getTestCoverageMetrics: (...args: unknown[]) => mockGetTestCoverageMetrics(...args),
+        getPolicyDriftStatus: (...args: unknown[]) => mockGetPolicyDriftStatus(...args),
+        getDecisionMetrics: jest.fn().mockResolvedValue({}),
+        getComplianceOverview: jest.fn().mockResolvedValue({}),
+        getCacheStats: jest.fn().mockReturnValue({}),
+        getAuditStats: jest.fn().mockReturnValue({}),
+    },
+}));
+
+// Default mock values: all SLA targets met, no drift
+function setupAllGreenMocks() {
+    mockGetSLAMetrics.mockResolvedValue({
+        availability: { current: 99.99, target: 99.9, compliant: true, uptimeHours: 720, downtimeHours: 0 },
+        latency: { p50Ms: 5, p95Ms: 15, p99Ms: 30, targetP95Ms: 50, compliant: true },
+        policySync: { lastSyncTime: new Date().toISOString(), syncIntervalSeconds: 300, targetSyncIntervalSeconds: 21600, compliant: true },
+        testCoverage: { current: 95, target: 85, compliant: true },
+        overallCompliant: true,
+        nextReviewDate: new Date().toISOString(),
+    });
+    mockGetTestCoverageMetrics.mockResolvedValue({
+        totalTests: 611,
+        passingTests: 611,
+        failingTests: 0,
+        passRate: 100,
+        coverage: 78.61,
+        lastRun: null,
+        coverageByPackage: {
+            'dive.base': { tests: 48, coverage: 95 },
+            'dive.org.nato': { tests: 89, coverage: 88 },
+            'dive.tenant': { tests: 247, coverage: 85 },
+            'dive.entrypoints': { tests: 156, coverage: 92 },
+            'dive.compat': { tests: 71, coverage: 78 },
+        },
+        trend: [],
+    });
+    mockGetPolicyDriftStatus.mockResolvedValue({
+        status: 'no_drift',
+        lastCheck: new Date().toISOString(),
+        lastDriftDetected: null,
+        sourceHash: 'abc123',
+        bundleRevisions: {},
+        driftDetails: [],
+        recommendations: [],
+    });
+}
+
 // Mock KAS Metrics Service (MongoDB SSOT)
 jest.mock('../services/kas-metrics.service', () => ({
     kasMetricsService: {
@@ -156,23 +210,22 @@ describe('Compliance Controller', () => {
         };
 
         jest.clearAllMocks();
+        setupAllGreenMocks();
     });
 
     describe('getComplianceStatus', () => {
-        it('should return overall ACP-240 compliance status with all required fields', async () => {
+        it('should return PERFECT when all SLA checks pass and no drift', async () => {
             await getComplianceStatus(mockReq as Request, mockRes as Response);
 
-            expect(mockRes.json).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    level: 'PERFECT',
-                    percentage: 100,
-                    badge: '💎',
-                    totalRequirements: 58,
-                    compliantRequirements: 58,
-                    partialRequirements: 0,
-                    gapRequirements: 0,
-                })
-            );
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            expect(response.level).toBe('PERFECT');
+            expect(response.percentage).toBe(100);
+            expect(response.badge).toBe('💎');
+            // 5+11+11+8+14+13+10+9+19+1 = 101 total requirements
+            expect(response.totalRequirements).toBe(101);
+            expect(response.compliantRequirements).toBe(101);
+            expect(response.partialRequirements).toBe(0);
+            expect(response.gapRequirements).toBe(0);
         });
 
         it('should include all 10 compliance sections', async () => {
@@ -204,31 +257,86 @@ describe('Compliance Controller', () => {
             });
         });
 
-        it('should include test metrics with passing tests', async () => {
+        it('should include runtime test metrics from metrics service', async () => {
             await getComplianceStatus(mockReq as Request, mockRes as Response);
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-            expect(response.testMetrics).toEqual({
-                total: 762,
-                passing: 762,
-                failing: 0,
-                passRate: 100,
-                coverage: 95,
-                backendTests: 636,
-                opaTests: 126,
-            });
+            expect(response.testMetrics.total).toBe(611);
+            expect(response.testMetrics.passing).toBe(611);
+            expect(response.testMetrics.failing).toBe(0);
+            expect(response.testMetrics.passRate).toBe(100);
+            expect(response.testMetrics.coverage).toBe(78.61);
         });
 
-        it('should include deployment status with certificate ID', async () => {
+        it('should include dynamic deployment status with certificate ID', async () => {
             await getComplianceStatus(mockReq as Request, mockRes as Response);
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-            expect(response.deploymentStatus).toEqual({
-                ready: true,
-                classification: 'SECRET',
-                environment: 'Production Ready',
-                certificateId: 'ACP240-DIVE-V3-2025-10-18-PERFECT',
+            expect(response.deploymentStatus.ready).toBe(true);
+            expect(response.deploymentStatus.classification).toBe('SECRET');
+            expect(response.deploymentStatus.environment).toBe('Production Ready');
+            expect(response.deploymentStatus.certificateId).toMatch(/^ACP240-DIVE-V3-\d{4}-\d{2}-\d{2}-PERFECT$/);
+        });
+
+        it('should reduce ABAC section when policy drift detected', async () => {
+            mockGetPolicyDriftStatus.mockResolvedValue({
+                status: 'drift_detected',
+                lastCheck: new Date().toISOString(),
+                lastDriftDetected: new Date().toISOString(),
+                sourceHash: 'abc123',
+                bundleRevisions: {},
+                driftDetails: [{ type: 'policy', description: 'Drift', severity: 'warning' }],
+                recommendations: ['Review policies'],
             });
+
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            // ABAC section (id: 3) should lose 2 compliance points
+            const abacSection = response.sections.find((s: { id: number }) => s.id === 3);
+            expect(abacSection.compliant).toBe(9); // 11 - 2
+            expect(response.percentage).toBeLessThan(100);
+            expect(response.level).not.toBe('PERFECT');
+            expect(response.gapRequirements).toBeGreaterThan(0);
+        });
+
+        it('should reduce sections when SLA checks fail', async () => {
+            mockGetSLAMetrics.mockResolvedValue({
+                availability: { current: 95, target: 99.9, compliant: false, uptimeHours: 680, downtimeHours: 40 },
+                latency: { p50Ms: 100, p95Ms: 200, p99Ms: 500, targetP95Ms: 50, compliant: false },
+                policySync: { lastSyncTime: null, syncIntervalSeconds: 86400, targetSyncIntervalSeconds: 21600, compliant: false },
+                testCoverage: { current: 50, target: 85, compliant: false },
+                overallCompliant: false,
+                nextReviewDate: new Date().toISOString(),
+            });
+
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            // Multiple sections should be degraded
+            expect(response.percentage).toBeLessThan(100);
+            // Identity (2): -1, ZTDF (5): -1, Logging (6): -1, Best Practices (8): -1, Checklist (9): -2
+            expect(response.gapRequirements).toBe(6);
+            expect(response.deploymentStatus.environment).toBe('Pre-Production');
+        });
+
+        it('should set level to HIGH when percentage >= 90', async () => {
+            // Only SLA policy sync fails: -1 in section 9
+            mockGetSLAMetrics.mockResolvedValue({
+                availability: { current: 99.99, target: 99.9, compliant: true, uptimeHours: 720, downtimeHours: 0 },
+                latency: { p50Ms: 5, p95Ms: 15, p99Ms: 30, targetP95Ms: 50, compliant: true },
+                policySync: { lastSyncTime: null, syncIntervalSeconds: 86400, targetSyncIntervalSeconds: 21600, compliant: false },
+                testCoverage: { current: 95, target: 85, compliant: true },
+                overallCompliant: false,
+                nextReviewDate: new Date().toISOString(),
+            });
+
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            // 101 - 2 (sync + overall) = 99 -> 98%
+            expect(response.level).toBe('HIGH');
+            expect(response.badge).toBe('🟢');
         });
     });
 
