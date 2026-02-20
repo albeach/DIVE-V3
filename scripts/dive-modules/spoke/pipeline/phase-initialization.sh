@@ -434,17 +434,27 @@ spoke_init_generate_config() {
         log_info "Remote mode: Hub URL → ${hub_url_internal}"
     fi
 
-    # Hub OPAL URL: Docker container name (local) or external Caddy URL (remote)
-    # In remote mode, derive from HUB_API_URL if HUB_OPAL_URL not explicitly set
-    # (e.g., https://dev-usa-api.dive25.com → https://dev-usa-opal.dive25.com)
+    # Hub OPAL URL resolution: supports local, remote (DIVE_DOMAIN_SUFFIX),
+    # and external (custom domain hub) deployments.
     local hub_opal_url="https://dive-hub-opal-server:7002"
-    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
-        if [ -n "${HUB_OPAL_URL:-}" ]; then
-            hub_opal_url="$HUB_OPAL_URL"
-        elif [[ "${hub_url_internal}" =~ ^https://([^-]+-[^-]+)-api\.(.+)$ ]]; then
-            hub_opal_url="https://${BASH_REMATCH[1]}-opal.${BASH_REMATCH[2]}"
-            export HUB_OPAL_URL="$hub_opal_url"
+    if [ -n "${HUB_OPAL_URL:-}" ]; then
+        # Explicit override always wins
+        hub_opal_url="$HUB_OPAL_URL"
+        log_info "Hub OPAL URL (explicit): ${hub_opal_url}"
+    elif [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        # Remote/standalone: use URL resolution helper if available
+        if type resolve_hub_public_url &>/dev/null; then
+            local _resolved_opal
+            _resolved_opal=$(resolve_hub_public_url "opal" 2>/dev/null)
+            if [ -n "$_resolved_opal" ] && [[ "$_resolved_opal" != *localhost* ]]; then
+                hub_opal_url="$_resolved_opal"
+            fi
         fi
+        # Fallback: derive from HUB_API_URL pattern
+        if [[ "$hub_opal_url" == *"dive-hub-opal"* ]] && [[ "${hub_url_internal:-}" =~ ^https://([^-]+-[^-]+)-api\.(.+)$ ]]; then
+            hub_opal_url="https://${BASH_REMATCH[1]}-opal.${BASH_REMATCH[2]}"
+        fi
+        export HUB_OPAL_URL="$hub_opal_url"
         log_info "Remote mode: Hub OPAL URL → ${hub_opal_url}"
     fi
 
@@ -500,10 +510,10 @@ spoke_init_generate_config() {
     local opal_server_url=""
     local master_token="${OPAL_AUTH_MASTER_TOKEN:-}"
 
-    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
-        # Remote mode: use Hub OPAL public URL
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        # Remote/standalone mode: use Hub OPAL public URL (may be empty for standalone)
         opal_server_url="${HUB_OPAL_URL:-}"
-        log_verbose "Remote mode — OPAL server: ${opal_server_url}"
+        [ -n "$opal_server_url" ] && log_verbose "Remote mode — OPAL server: ${opal_server_url}"
     elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
         # Local mode: use localhost
         opal_server_url="https://localhost:${OPAL_PORT:-7002}"
@@ -828,8 +838,56 @@ TUNNEL_TOKEN=
 # =============================================================================
 EOF
 
-    # Append Caddy domain config when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy)
-    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+    # =========================================================================
+    # Domain configuration: SPOKE_CUSTOM_DOMAIN (per-spoke) or DIVE_DOMAIN_SUFFIX
+    # =========================================================================
+    # Priority: per-spoke custom domain > session custom domain > env-prefix domain
+    # Custom domain: operator-owned (e.g., gbr.mod.uk → app.gbr.mod.uk)
+    # Domain suffix: DIVE-managed (e.g., dev.dive25.com → dev-gbr-app.dive25.com)
+    # =========================================================================
+    local _per_spoke_domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _effective_custom_domain="${!_per_spoke_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
+
+    if [ -n "$_effective_custom_domain" ]; then
+        local _spoke_app="app.${_effective_custom_domain}"
+        local _spoke_api="api.${_effective_custom_domain}"
+        local _spoke_idp="idp.${_effective_custom_domain}"
+
+        # Hub issuer: resolve from hub public URL or fall back to co-located container
+        local _hub_idp=""
+        if type resolve_hub_public_url &>/dev/null; then
+            _hub_idp=$(resolve_hub_public_url "idp" 2>/dev/null | sed 's|^https://||')
+        fi
+        if [ -z "$_hub_idp" ]; then
+            _hub_idp="dive-hub-keycloak:8443"
+        fi
+        local _hub_lower
+        _hub_lower="$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')"
+
+        cat >> "$env_file" << DOMAIN_EOF
+
+# Custom domain configuration (SPOKE_CUSTOM_DOMAIN=${_effective_custom_domain})
+SPOKE_CUSTOM_DOMAIN=${_effective_custom_domain}
+CADDY_SPOKE_APP=${_spoke_app}
+CADDY_SPOKE_API=${_spoke_api}
+CADDY_SPOKE_IDP=${_spoke_idp}
+KEYCLOAK_HOSTNAME=${_spoke_idp}
+NEXT_PUBLIC_API_URL=https://${_spoke_api}
+NEXT_PUBLIC_BACKEND_URL=https://${_spoke_api}
+NEXT_PUBLIC_BASE_URL=https://${_spoke_app}
+NEXT_PUBLIC_KEYCLOAK_URL=https://${_spoke_idp}
+NEXTAUTH_URL=https://${_spoke_app}
+AUTH_URL=https://${_spoke_app}
+KEYCLOAK_ISSUER=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower}
+AUTH_KEYCLOAK_ISSUER=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower}
+TRUSTED_ISSUERS=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower},https://dive-spoke-${code_lower}-keycloak:8443/realms/dive-v3-broker-${code_lower},https://${_hub_idp}/realms/dive-v3-broker-${_hub_lower},https://keycloak:8443/realms/dive-v3-broker-${_hub_lower}
+NEXT_PUBLIC_EXTERNAL_DOMAINS=https://${_spoke_app},https://${_spoke_api},https://${_spoke_idp}
+CORS_ALLOWED_ORIGINS=https://${_spoke_app},https://${_spoke_api},https://${_spoke_idp},https://${_hub_idp}
+NODE_ENV=production
+DOMAIN_EOF
+        log_success "Custom domain config written to .env (${_spoke_app})"
+
+    elif [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
         local _env_prefix _base_domain _spoke_app _spoke_api _spoke_idp
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
         _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"

@@ -3,6 +3,12 @@
 # DIVE V3 CLI - Federation Mappers & Client Management
 # =============================================================================
 # Extracted from federation/setup.sh (Phase 13d)
+# Updated (Phase 1 External Federation): All docker exec calls replaced with
+# keycloak_admin_api() for cross-network support.
+#
+# API change: $1 is now instance_code (e.g., "USA", "GBR") instead of
+# container name. The keycloak_admin_api() layer handles local vs remote routing.
+#
 # Contains: _ensure_federation_client, _ensure_federation_client_mappers,
 #   _create_amr_acr_mappers, _create_protocol_mapper, _configure_idp_mappers,
 #   _create_idp_mapper
@@ -16,9 +22,16 @@
 
 ##
 # Ensure a federation client exists in a realm
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR) — target where client is created
+#   $2 - Admin token
+#   $3 - Realm name
+#   $4 - Partner code (lowercase)
+#   $5 - Partner code (uppercase)
 ##
 _ensure_federation_client() {
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local partner_lower="$4"
@@ -29,9 +42,8 @@ _ensure_federation_client() {
     echo -n "  Checking ${client_id} in ${realm}... "
 
     local existing
-    existing=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
+    existing=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
 
     if [ -n "$existing" ]; then
@@ -57,16 +69,13 @@ _ensure_federation_client() {
             \"protocol\": \"openid-connect\"
         }"
 
-        docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/admin/realms/${realm}/clients" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$client_config" 2>/dev/null
+        keycloak_admin_api "$instance_code" "POST" \
+            "realms/${realm}/clients" "$client_config" 2>/dev/null
 
         echo -e "${GREEN}created${NC}"
     fi
 
-    _ensure_federation_client_mappers "$kc_container" "$token" "$realm" "$client_id"
+    _ensure_federation_client_mappers "$instance_code" "$token" "$realm" "$client_id"
 }
 
 # =============================================================================
@@ -79,6 +88,12 @@ _ensure_federation_client() {
 #
 # NOTE: When USE_TERRAFORM_SSOT=true, this function is SKIPPED because
 # Terraform manages protocol mappers via terraform/modules/federated-instance/
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#   $2 - Admin token (unused — keycloak_admin_api manages tokens)
+#   $3 - Realm name
+#   $4 - Client ID
 ##
 _ensure_federation_client_mappers() {
     # Skip if Terraform is SSOT
@@ -87,16 +102,15 @@ _ensure_federation_client_mappers() {
         return 0
     fi
 
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local client_id="$4"
 
     # Get client UUID
     local client_uuid
-    client_uuid=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
+    client_uuid=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
         jq -r '.[0].id // empty' 2>/dev/null)
 
     if [ -z "$client_uuid" ]; then
@@ -134,7 +148,7 @@ _ensure_federation_client_mappers() {
     for attr in "${standard_attrs[@]}"; do
         local multivalued="false"
         [ "$attr" = "acpCOI" ] && multivalued="true"
-        _create_protocol_mapper "$kc_container" "$token" "$realm" "$client_uuid" "$attr" "$attr" "federation-std-${attr}" "$multivalued"
+        _create_protocol_mapper "$instance_code" "$token" "$realm" "$client_uuid" "$attr" "$attr" "federation-std-${attr}" "$multivalued"
         ((mapper_count++))
     done
 
@@ -144,12 +158,12 @@ _ensure_federation_client_mappers() {
         local claim_name="${mapping##*:}"
         local multivalued="false"
         [ "$claim_name" = "acpCOI" ] && multivalued="true"
-        _create_protocol_mapper "$kc_container" "$token" "$realm" "$client_uuid" "$source_attr" "$claim_name" "federation-${source_attr}" "$multivalued"
+        _create_protocol_mapper "$instance_code" "$token" "$realm" "$client_uuid" "$source_attr" "$claim_name" "federation-${source_attr}" "$multivalued"
         ((mapper_count++))
     done
 
     # Add AMR/ACR protocol mappers for MFA state propagation
-    _create_amr_acr_mappers "$kc_container" "$token" "$realm" "$client_uuid"
+    _create_amr_acr_mappers "$instance_code" "$token" "$realm" "$client_uuid"
     ((mapper_count += 2))
 
     echo -e "${GREEN}${mapper_count} mappers${NC}"
@@ -158,9 +172,15 @@ _ensure_federation_client_mappers() {
 ##
 # Create AMR/ACR protocol mappers on a client
 # These read from the authentication session (not user attributes)
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#   $2 - Admin token (unused)
+#   $3 - Realm name
+#   $4 - Client UUID
 ##
 _create_amr_acr_mappers() {
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local client_uuid="$4"
@@ -181,23 +201,18 @@ _create_amr_acr_mappers() {
     }"
 
     local existing_amr
-    existing_amr=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
+    existing_amr=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$amr_mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
 
     if [ -n "$existing_amr" ]; then
-        docker exec "$kc_container" curl -sf \
-            -X PUT "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing_amr}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$amr_mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "PUT" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing_amr}" \
+            "$amr_mapper_config" >/dev/null 2>&1
     else
-        docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$amr_mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "POST" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            "$amr_mapper_config" >/dev/null 2>&1
     fi
 
     # ACR Mapper
@@ -216,32 +231,36 @@ _create_amr_acr_mappers() {
     }"
 
     local existing_acr
-    existing_acr=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
+    existing_acr=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$acr_mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
 
     if [ -n "$existing_acr" ]; then
-        docker exec "$kc_container" curl -sf \
-            -X PUT "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing_acr}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$acr_mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "PUT" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing_acr}" \
+            "$acr_mapper_config" >/dev/null 2>&1
     else
-        docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$acr_mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "POST" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            "$acr_mapper_config" >/dev/null 2>&1
     fi
 }
 
 ##
 # Create a single protocol mapper on a client
-# Usage: _create_protocol_mapper container token realm client_uuid user_attr claim_name mapper_name [multivalued]
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#   $2 - Admin token (unused)
+#   $3 - Realm name
+#   $4 - Client UUID
+#   $5 - User attribute name
+#   $6 - Claim name
+#   $7 - Mapper name
+#   $8 - Multivalued (true/false, default: false)
 ##
 _create_protocol_mapper() {
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local client_uuid="$4"
@@ -251,9 +270,8 @@ _create_protocol_mapper() {
     local multivalued="${8:-false}"
 
     local existing
-    existing=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
+    existing=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
 
     # Always use jsonType.label=String for Keycloak v26+
@@ -274,17 +292,13 @@ _create_protocol_mapper() {
     }"
 
     if [ -n "$existing" ]; then
-        docker exec "$kc_container" curl -sf \
-            -X PUT "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "PUT" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${existing}" \
+            "$mapper_config" >/dev/null 2>&1
     else
-        docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$mapper_config" >/dev/null 2>&1
+        keycloak_admin_api "$instance_code" "POST" \
+            "realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            "$mapper_config" >/dev/null 2>&1
     fi
 }
 
@@ -296,9 +310,15 @@ _create_protocol_mapper() {
 # Configure IdP claim mappers for importing claims from federated tokens
 # These mappers tell Keycloak how to import claims from the remote IdP's
 # tokens into local user attributes.
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#   $2 - Admin token (unused)
+#   $3 - Realm name
+#   $4 - IdP alias
 ##
 _configure_idp_mappers() {
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local idp_alias="$4"
@@ -307,15 +327,24 @@ _configure_idp_mappers() {
     local claims=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI" "amr" "acr")
 
     for claim in "${claims[@]}"; do
-        _create_idp_mapper "$kc_container" "$token" "$realm" "$idp_alias" "$claim" "$claim" "import-${claim}"
+        _create_idp_mapper "$instance_code" "$token" "$realm" "$idp_alias" "$claim" "$claim" "import-${claim}"
     done
 }
 
 ##
 # Create a single IdP mapper
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, GBR)
+#   $2 - Admin token (unused)
+#   $3 - Realm name
+#   $4 - IdP alias
+#   $5 - Claim name
+#   $6 - User attribute name
+#   $7 - Mapper name
 ##
 _create_idp_mapper() {
-    local kc_container="$1"
+    local instance_code="$1"
     local token="$2"
     local realm="$3"
     local idp_alias="$4"
@@ -324,9 +353,8 @@ _create_idp_mapper() {
     local mapper_name="$7"
 
     local existing
-    existing=$(docker exec "$kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null | \
+    existing=$(keycloak_admin_api "$instance_code" "GET" \
+        "realms/${realm}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null | \
         jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
 
     local mapper_config="{
@@ -341,17 +369,13 @@ _create_idp_mapper() {
     }"
 
     if [ -n "$existing" ]; then
-        docker exec "$kc_container" curl -sf \
-            -X PUT "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers/${existing}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$mapper_config" >/dev/null 2>&1 || true
+        keycloak_admin_api "$instance_code" "PUT" \
+            "realms/${realm}/identity-provider/instances/${idp_alias}/mappers/${existing}" \
+            "$mapper_config" >/dev/null 2>&1 || true
     else
-        docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$mapper_config" >/dev/null 2>&1 || true
+        keycloak_admin_api "$instance_code" "POST" \
+            "realms/${realm}/identity-provider/instances/${idp_alias}/mappers" \
+            "$mapper_config" >/dev/null 2>&1 || true
     fi
 }
 
