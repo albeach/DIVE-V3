@@ -15,10 +15,13 @@ hub_pipeline_execute() {
 
     log_info "Starting Hub pipeline: $instance_code ($pipeline_mode mode)"
 
-    # Start deployment log capture
+    # Source utilities (deployment logging + timing dashboard)
+    local _utils_dir="${DIVE_ROOT}/scripts/dive-modules/utilities"
     if ! type deployment_log_start &>/dev/null; then
-        local _logging="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-logging.sh"
-        [ -f "$_logging" ] && source "$_logging"
+        [ -f "${_utils_dir}/deployment-logging.sh" ] && source "${_utils_dir}/deployment-logging.sh"
+    fi
+    if ! type deployment_print_timing_dashboard &>/dev/null; then
+        [ -f "${_utils_dir}/deployment-dashboard.sh" ] && source "${_utils_dir}/deployment-dashboard.sh"
     fi
     if type deployment_log_start &>/dev/null; then
         if deployment_log_start "hub" "$instance_code"; then
@@ -539,8 +542,12 @@ _hub_pipeline_execute_internal() {
             progress_complete
         fi
 
-        # Print success banner and timing summary
-        _hub_print_performance_summary "${phase_times[@]}" "$duration"
+        # Print success banner and timing dashboard
+        if type deployment_print_timing_dashboard &>/dev/null; then
+            deployment_print_timing_dashboard "hub" "${phase_times[@]}" "$duration"
+        else
+            _hub_print_performance_summary "${phase_times[@]}" "$duration"
+        fi
         deployment_print_success "$instance_code" "Hub" "$duration" "$pipeline_mode" "hub"
 
         # Post-deployment summary with URLs and next steps
