@@ -723,6 +723,207 @@ pipeline_get_phase_names() {
 }
 
 # =============================================================================
+# DRY-RUN MODE
+# =============================================================================
+# When DIVE_DRY_RUN=true, the pipeline simulates execution without making
+# real changes. Validation-only phases (preflight, config checks) still run.
+# =============================================================================
+
+# Phases that execute even in dry-run mode (validation only, no side effects)
+readonly PIPELINE_DRY_RUN_VALIDATION_PHASES="PREFLIGHT"
+
+##
+# Check if dry-run mode is active
+#
+# Returns:
+#   0 - Dry-run mode is active
+#   1 - Normal execution mode
+##
+pipeline_is_dry_run() {
+    [ "${DIVE_DRY_RUN:-false}" = "true" ]
+}
+
+##
+# Check if a phase should run in validation-only mode during dry-run
+#
+# Arguments:
+#   $1 - Phase name
+#
+# Returns:
+#   0 - Phase is a validation phase (should execute in dry-run)
+#   1 - Phase is not a validation phase (should be simulated)
+##
+pipeline_is_validation_phase() {
+    local phase_name="$1"
+    local vp
+    for vp in $PIPELINE_DRY_RUN_VALIDATION_PHASES; do
+        [ "$vp" = "$phase_name" ] && return 0
+    done
+    return 1
+}
+
+##
+# Simulate a phase execution in dry-run mode
+#
+# Prints what the phase would do without actually executing it.
+#
+# Arguments:
+#   $1 - Phase number
+#   $2 - Phase name
+#   $3 - Phase label
+#   $4 - Phase function
+#   $5 - Phase mode (standard|non_fatal|direct)
+#   $6 - State transition (if any)
+##
+pipeline_dry_run_phase() {
+    local phase_num="$1"
+    local phase_name="$2"
+    local phase_label="$3"
+    local phase_function="$4"
+    local phase_mode="$5"
+    local phase_state="${6:-}"
+
+    echo ""
+    echo "  [DRY-RUN] Phase ${phase_num}: ${phase_label} (${phase_name})"
+    echo "    Function:  ${phase_function}()"
+    echo "    Mode:      ${phase_mode}"
+
+    if [ -n "$phase_state" ]; then
+        echo "    State:     would transition to ${phase_state}"
+    fi
+
+    # Show mode-specific behavior
+    case "$phase_mode" in
+        standard)
+            echo "    Behavior:  fatal on failure, circuit breaker protected"
+            ;;
+        non_fatal)
+            echo "    Behavior:  warn on failure, pipeline continues"
+            ;;
+        direct)
+            echo "    Behavior:  direct execution (no circuit breaker)"
+            ;;
+    esac
+}
+
+# Dry-run summary tracking arrays
+_DRY_RUN_WOULD_EXECUTE=()
+_DRY_RUN_WOULD_SKIP=()
+_DRY_RUN_VALIDATED=()
+_DRY_RUN_WARNINGS=()
+
+##
+# Reset dry-run tracking state
+##
+pipeline_dry_run_reset() {
+    _DRY_RUN_WOULD_EXECUTE=()
+    _DRY_RUN_WOULD_SKIP=()
+    _DRY_RUN_VALIDATED=()
+    _DRY_RUN_WARNINGS=()
+}
+
+##
+# Record a phase that would execute in dry-run
+#
+# Arguments:
+#   $1 - Phase label
+##
+pipeline_dry_run_record_execute() {
+    _DRY_RUN_WOULD_EXECUTE+=("$1")
+}
+
+##
+# Record a phase that would be skipped in dry-run
+#
+# Arguments:
+#   $1 - Phase label
+#   $2 - Reason for skip
+##
+pipeline_dry_run_record_skip() {
+    _DRY_RUN_WOULD_SKIP+=("$1 ($2)")
+}
+
+##
+# Record a validation that ran during dry-run
+#
+# Arguments:
+#   $1 - Validation description
+##
+pipeline_dry_run_record_validation() {
+    _DRY_RUN_VALIDATED+=("$1")
+}
+
+##
+# Record a warning found during dry-run
+#
+# Arguments:
+#   $1 - Warning message
+##
+pipeline_dry_run_record_warning() {
+    _DRY_RUN_WARNINGS+=("$1")
+}
+
+##
+# Print comprehensive dry-run summary
+#
+# Arguments:
+#   $1 - Deployment type (hub|spoke)
+#   $2 - Instance code
+##
+pipeline_dry_run_summary() {
+    local deploy_type="$1"
+    local instance_code="$2"
+
+    echo ""
+    echo "==============================================================================="
+    echo "  DRY-RUN SUMMARY — ${deploy_type^^} ${instance_code}"
+    echo "==============================================================================="
+    echo ""
+
+    # Phases that would execute
+    echo "  Phases that would execute: ${#_DRY_RUN_WOULD_EXECUTE[@]}"
+    local phase
+    for phase in "${_DRY_RUN_WOULD_EXECUTE[@]+"${_DRY_RUN_WOULD_EXECUTE[@]}"}"; do
+        echo "    [+] $phase"
+    done
+
+    # Phases that would be skipped
+    if [ ${#_DRY_RUN_WOULD_SKIP[@]} -gt 0 ]; then
+        echo ""
+        echo "  Phases that would be skipped: ${#_DRY_RUN_WOULD_SKIP[@]}"
+        for phase in "${_DRY_RUN_WOULD_SKIP[@]+"${_DRY_RUN_WOULD_SKIP[@]}"}"; do
+            echo "    [-] $phase"
+        done
+    fi
+
+    # Validations that ran
+    if [ ${#_DRY_RUN_VALIDATED[@]} -gt 0 ]; then
+        echo ""
+        echo "  Validations performed:"
+        local validation
+        for validation in "${_DRY_RUN_VALIDATED[@]+"${_DRY_RUN_VALIDATED[@]}"}"; do
+            echo "    [v] $validation"
+        done
+    fi
+
+    # Warnings
+    if [ ${#_DRY_RUN_WARNINGS[@]} -gt 0 ]; then
+        echo ""
+        echo "  Warnings:"
+        local warning
+        for warning in "${_DRY_RUN_WARNINGS[@]+"${_DRY_RUN_WARNINGS[@]}"}"; do
+            echo "    [!] $warning"
+        done
+    fi
+
+    echo ""
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+    echo "  No changes were made. Run without --dry-run to execute."
+    echo "==============================================================================="
+    echo ""
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
@@ -744,9 +945,18 @@ export -f pipeline_uninstall_sigint_handler
 export -f pipeline_check_sigint
 export -f _pipeline_sigint_handler
 export -f _pipeline_save_interrupt_checkpoint
+export -f pipeline_is_dry_run
+export -f pipeline_is_validation_phase
+export -f pipeline_dry_run_phase
+export -f pipeline_dry_run_reset
+export -f pipeline_dry_run_record_execute
+export -f pipeline_dry_run_record_skip
+export -f pipeline_dry_run_record_validation
+export -f pipeline_dry_run_record_warning
+export -f pipeline_dry_run_summary
 
 log_verbose "Pipeline common module loaded"
 
 # sc2034-anchor
 : "${PIPELINE_MODE_DEPLOY:-}" "${PIPELINE_MODE_REDEPLOY:-}" "${PIPELINE_MODE_UP:-}" "${PIPELINE_PHASE_COMPLETE:-}" "${PIPELINE_PHASE_CONFIGURATION:-}" "${PIPELINE_PHASE_DEPLOYMENT:-}"
-: "${PIPELINE_PHASE_INITIALIZATION:-}" "${PIPELINE_PHASE_PREFLIGHT:-}" "${PIPELINE_PHASE_VERIFICATION:-}"
+: "${PIPELINE_PHASE_INITIALIZATION:-}" "${PIPELINE_PHASE_PREFLIGHT:-}" "${PIPELINE_PHASE_VERIFICATION:-}" "${PIPELINE_DRY_RUN_VALIDATION_PHASES:-}"
