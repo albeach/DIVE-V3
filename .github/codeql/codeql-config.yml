@@ -1,0 +1,19 @@
+name: "DIVE V3 CodeQL Config"
+
+paths:
+  - backend/src
+  - frontend/src
+  - kas/src
+
+paths-ignore:
+  - '**/__tests__/**'
+  - '**/__mocks__/**'
+  - '**/dist/**'
+  - '**/node_modules/**'
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+
+queries:
+  - uses: security-and-quality
