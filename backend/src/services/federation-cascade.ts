@@ -259,10 +259,38 @@ export async function getSpokeKeycloakPassword(store: ISpokeStore, spokeInstance
  * Creates bidirectional OIDC trust: Hub ↔ Spoke
  */
 export async function createFederationIdP(spoke: ISpokeRegistration, store: ISpokeStore): Promise<void> {
-  const { keycloakFederationService } = await import('./keycloak-federation.service');
-
   const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
   const spokeInstanceCode = spoke.instanceCode;
+
+  // V2 bridge: Check if a V2 enrollment exists for this spoke
+  try {
+    const { enrollmentStore } = await import('../models/enrollment.model');
+    const v2Enrollment = await enrollmentStore.findByRequester(spokeInstanceCode);
+    if (v2Enrollment && v2Enrollment.status === 'credentials_exchanged') {
+      logger.info('V2 enrollment found — delegating to activation service', {
+        enrollmentId: v2Enrollment.enrollmentId,
+        spokeInstanceCode,
+      });
+      const { federationActivationService } = await import('./federation-activation.service');
+      await federationActivationService.activateHubSide(v2Enrollment);
+      return; // V2 activation handles everything
+    }
+    if (v2Enrollment && v2Enrollment.status === 'active') {
+      logger.info('V2 enrollment already active — skipping V1 IdP creation', {
+        enrollmentId: v2Enrollment.enrollmentId,
+        spokeInstanceCode,
+      });
+      return; // Already activated via V2
+    }
+  } catch (error) {
+    logger.debug('V2 enrollment check failed, falling through to V1 flow', {
+      spokeInstanceCode,
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+  }
+
+  // V1 flow: traditional bidirectional IdP with admin password
+  const { keycloakFederationService } = await import('./keycloak-federation.service');
 
   logger.info('Auto-linking IdP for approved spoke', {
     spokeId: spoke.spokeId,

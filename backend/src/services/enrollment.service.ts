@@ -15,6 +15,8 @@
  */
 
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import {
@@ -52,6 +54,7 @@ export interface EnrollmentResponse {
   verifierInstanceCode: string;
   message: string;
   statusPollingUrl: string;
+  sseToken: string;
 }
 
 export interface EnrollmentEvent {
@@ -124,6 +127,27 @@ class EnrollmentService extends EventEmitter {
       throw new Error(`Certificate validation failed: ${certValidation.errors.join(', ')}`);
     }
 
+    // Check CRL for revoked certificates (graceful: skip if CRL unavailable)
+    try {
+      const certDir = process.env.CERT_DIR || path.join(process.cwd(), 'certs');
+      const crlPath = path.join(certDir, 'crl', 'intermediate-crl.json');
+      if (fs.existsSync(crlPath)) {
+        const { crlManager } = await import('../utils/crl-manager');
+        const cert = new (await import('crypto')).X509Certificate(request.instanceCertPEM);
+        const result = await crlManager.isRevoked(cert.serialNumber, crlPath);
+        if (result.revoked) {
+          throw new Error(
+            `Certificate revoked (reason: ${result.reason}, date: ${result.revocationDate?.toISOString()})`,
+          );
+        }
+      }
+    } catch (error) {
+      if ((error as Error).message.includes('Certificate revoked')) throw error;
+      logger.debug('CRL check skipped during enrollment', {
+        error: (error as Error).message,
+      });
+    }
+
     // Check for duplicate enrollment (same requester, non-terminal status)
     const existing = await enrollmentStore.findByRequester(request.instanceCode);
     if (existing && !['rejected', 'revoked', 'expired'].includes(existing.status)) {
@@ -191,6 +215,7 @@ class EnrollmentService extends EventEmitter {
       verifierInstanceCode: instanceCode,
       message: 'Enrollment received. Verify fingerprints out-of-band, then await approval.',
       statusPollingUrl: `/api/federation/enrollment/${enrollmentId}/status`,
+      sseToken: enrollment.sseToken || '',
     };
   }
 
@@ -417,6 +442,26 @@ class EnrollmentService extends EventEmitter {
       revokedBy: actor,
       reason,
     });
+
+    // Add enrollment cert to CRL (non-fatal if CRL unavailable)
+    try {
+      const certDir = process.env.CERT_DIR || path.join(process.cwd(), 'certs');
+      const crlPath = path.join(certDir, 'crl', 'intermediate-crl.json');
+      if (updated.requesterCertPEM && fs.existsSync(crlPath)) {
+        const { crlManager } = await import('../utils/crl-manager');
+        const cert = new (await import('crypto')).X509Certificate(updated.requesterCertPEM);
+        await crlManager.revokeCertificate(cert.serialNumber, 'affiliationChanged', crlPath, reason);
+        logger.info('Revoked enrollment cert added to CRL', {
+          enrollmentId,
+          serialNumber: cert.serialNumber,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to add revoked enrollment cert to CRL (non-fatal)', {
+        enrollmentId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    }
 
     return updated;
   }

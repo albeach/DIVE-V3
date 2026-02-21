@@ -32,13 +32,15 @@ import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
 import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { strictRateLimiter, apiRateLimiter, adminRateLimiter } from '../middleware/rate-limit.middleware';
 import { getResourcesByQuery } from '../services/resource.service';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
-// Simple Vault HTTP client for auth-code validation (handles self-signed TLS)
+// Simple Vault HTTP client for auth-code validation (uses CA certs with graceful fallback)
 async function vaultRequest(method: string, url: string, token: string, body?: object): Promise<{ ok: boolean; status: number; data: unknown }> {
     return new Promise((resolve) => {
         const parsedUrl = new URL(url);
@@ -51,7 +53,7 @@ async function vaultRequest(method: string, url: string, token: string, body?: o
                 'X-Vault-Token': token,
                 ...(body ? { 'Content-Type': 'application/json' } : {}),
             },
-            rejectUnauthorized: false,
+            agent: getSecureHttpsAgent(),
             timeout: 5000,
         };
 
@@ -1087,7 +1089,7 @@ const enrollmentRequestSchema = z.object({
  * Submit a federation enrollment request.
  * Public endpoint — no auth required. The enrollment signature proves identity.
  */
-router.post('/enroll', async (req: Request, res: Response): Promise<void> => {
+router.post('/enroll', strictRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const parsed = enrollmentRequestSchema.safeParse(req.body);
 
@@ -1223,7 +1225,7 @@ router.get('/enrollments/pending', authenticateJWT, requireAdmin, async (_req: R
  * POST /api/federation/enrollment/:enrollmentId/verify-fingerprint
  * Mark fingerprint as verified after OOB verification. Admin-only.
  */
-router.post('/enrollment/:enrollmentId/verify-fingerprint', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/enrollment/:enrollmentId/verify-fingerprint', authenticateJWT, requireAdmin, adminRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { enrollmentId } = req.params;
         const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
@@ -1253,7 +1255,7 @@ router.post('/enrollment/:enrollmentId/verify-fingerprint', authenticateJWT, req
  * POST /api/federation/enrollment/:enrollmentId/approve
  * Approve an enrollment request. Admin-only.
  */
-router.post('/enrollment/:enrollmentId/approve', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/enrollment/:enrollmentId/approve', authenticateJWT, requireAdmin, adminRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { enrollmentId } = req.params;
         const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
@@ -1293,7 +1295,7 @@ router.post('/enrollment/:enrollmentId/approve', authenticateJWT, requireAdmin, 
  * POST /api/federation/enrollment/:enrollmentId/reject
  * Reject an enrollment request with a reason. Admin-only.
  */
-router.post('/enrollment/:enrollmentId/reject', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/enrollment/:enrollmentId/reject', authenticateJWT, requireAdmin, adminRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { enrollmentId } = req.params;
         const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
@@ -1334,7 +1336,7 @@ router.post('/enrollment/:enrollmentId/reject', authenticateJWT, requireAdmin, a
  * Get credentials after approval (for the enrolling instance to pick up).
  * Authenticated by enrollment certificate verification.
  */
-router.get('/enrollment/:enrollmentId/credentials', async (req: Request, res: Response): Promise<void> => {
+router.get('/enrollment/:enrollmentId/credentials', apiRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { enrollmentId } = req.params;
         const enrollment = await enrollmentService.getEnrollment(enrollmentId);
@@ -1356,9 +1358,26 @@ router.get('/enrollment/:enrollmentId/credentials', async (req: Request, res: Re
             return;
         }
 
+        // Decrypt credentials if encrypted via Vault transit
+        let credentials = enrollment.approverCredentials;
+        if (enrollment._secretsEncrypted) {
+            try {
+                const { enrollmentStore } = await import('../models/enrollment.model');
+                const decrypted = await enrollmentStore.getDecryptedCredentials(enrollmentId, 'approver');
+                if (decrypted) credentials = decrypted as typeof credentials;
+            } catch (error) {
+                logger.error('Failed to decrypt credentials for response', {
+                    enrollmentId,
+                    error: error instanceof Error ? error.message : 'Unknown',
+                });
+                res.status(500).json({ error: 'InternalError', message: 'Failed to decrypt credentials' });
+                return;
+            }
+        }
+
         res.json({
             status: enrollment.status,
-            credentials: enrollment.approverCredentials,
+            credentials,
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1375,7 +1394,7 @@ router.get('/enrollment/:enrollmentId/credentials', async (req: Request, res: Re
  * POST /api/federation/enrollment/:enrollmentId/credentials
  * Push reciprocal credentials from the enrolling instance.
  */
-router.post('/enrollment/:enrollmentId/credentials', async (req: Request, res: Response): Promise<void> => {
+router.post('/enrollment/:enrollmentId/credentials', strictRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { enrollmentId } = req.params;
         const credentialSchema = z.object({
@@ -1428,12 +1447,22 @@ router.post('/enrollment/:enrollmentId/credentials', async (req: Request, res: R
  */
 router.get('/enrollment/:enrollmentId/events', async (req: Request, res: Response): Promise<void> => {
     const { enrollmentId } = req.params;
+    const token = req.query.token as string | undefined;
 
-    // Verify enrollment exists
+    // Verify enrollment exists and validate SSE token
+    let enrollment;
     try {
-        await enrollmentService.getEnrollment(enrollmentId);
+        enrollment = await enrollmentService.getEnrollment(enrollmentId);
     } catch {
         res.status(404).json({ error: 'NotFound', message: `Enrollment not found: ${enrollmentId}` });
+        return;
+    }
+
+    if (!token || token !== enrollment.sseToken) {
+        res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Valid SSE token required. Use the sseToken from the enrollment response.',
+        });
         return;
     }
 

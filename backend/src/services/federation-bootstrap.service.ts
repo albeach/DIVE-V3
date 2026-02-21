@@ -924,6 +924,58 @@ class FederationBootstrapService {
         }
       });
 
+      // Audit trail: log all enrollment lifecycle events to federation_audits (ACP-240)
+      const enrollmentAuditMap: Record<string, string> = {
+        'enrollment:requested': 'ENROLLMENT_CREATED',
+        'enrollment:fingerprint_verified': 'ENROLLMENT_VERIFIED',
+        'enrollment:approved': 'ENROLLMENT_APPROVED',
+        'enrollment:rejected': 'ENROLLMENT_REJECTED',
+        'enrollment:credentials_exchanged': 'CREDENTIALS_EXCHANGED',
+        'enrollment:activated': 'FEDERATION_ACTIVATED_V2',
+        'enrollment:revoked': 'ENROLLMENT_REVOKED',
+      };
+
+      enrollmentService.on('enrollment', async (event: {
+        type: string;
+        enrollment: {
+          enrollmentId: string;
+          requesterInstanceCode: string;
+          requesterInstanceName: string;
+          status: string;
+        };
+        actor?: string;
+        reason?: string;
+      }) => {
+        const auditEventType = enrollmentAuditMap[event.type];
+        if (!auditEventType) return;
+
+        try {
+          const { federationAuditStore } = await import('../models/federation-audit.model');
+          await federationAuditStore.create({
+            eventType: auditEventType as import('../models/federation-audit.model').FederationEventType,
+            actorId: event.actor || 'system',
+            actorInstance: process.env.INSTANCE_CODE || 'USA',
+            targetInstanceCode: event.enrollment.requesterInstanceCode,
+            correlationId: event.enrollment.enrollmentId,
+            timestamp: new Date(),
+            compliantWith: ['ACP-240', 'ADatP-5663'],
+            metadata: {
+              enrollmentId: event.enrollment.enrollmentId,
+              requesterInstanceName: event.enrollment.requesterInstanceName,
+              previousStatus: event.enrollment.status,
+              eventType: event.type,
+              reason: event.reason,
+            },
+          });
+        } catch (error) {
+          logger.warn('Failed to create audit entry for enrollment event', {
+            type: event.type,
+            enrollmentId: event.enrollment.enrollmentId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      });
+
       logger.debug('Enrollment event handlers registered');
     } catch (error) {
       logger.warn('Failed to register enrollment event handlers', {

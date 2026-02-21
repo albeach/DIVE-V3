@@ -20,8 +20,10 @@
 
 import crypto from 'crypto';
 import { X509Certificate } from 'crypto';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -173,32 +175,50 @@ class InstanceIdentityService {
   }
 
   /**
-   * Generate a CSR (Certificate Signing Request) for CA signing during approval.
-   * The approving instance signs this CSR to issue a CA-signed certificate.
+   * Generate a real PKCS#10 CSR (Certificate Signing Request) for CA signing during approval.
+   * Uses openssl via child_process since Node.js crypto lacks native CSR generation.
+   * Returns PEM-encoded CSR with SPIFFE SAN.
    */
   async generateCSR(): Promise<string> {
     const identity = await this.getIdentity();
     const instanceCode = identity.instanceCode;
+    const cn = `dive-instance-${instanceCode.toLowerCase()}`;
+    const spiffeUri = `URI:spiffe://${SPIFFE_DOMAIN}/instance/${instanceCode}`;
+    const dnsName = `DNS:${cn}`;
 
-    // Node.js crypto doesn't have native CSR generation.
-    // We'll create a self-signed cert and the approver will re-sign it.
-    // For production, use openssl via child_process or a library.
-    // For now, return the self-signed cert PEM — the approver's CA will
-    // sign a new cert using the same public key.
-    logger.debug('CSR generation requested', { instanceCode });
+    logger.debug('Generating PKCS#10 CSR', { instanceCode, cn });
 
-    // Export public key in SPKI format for the approver to build a cert
-    const publicKeyPEM = identity.privateKey
-      .export({ type: 'spki', format: 'pem' }) as unknown;
+    // Write private key to temp file for openssl
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dive-csr-'));
+    const keyPath = path.join(tmpDir, 'instance.key');
 
-    // Return a JSON-encoded CSR-like structure
-    // Real CSR generation will use openssl in Phase D hardening
-    return JSON.stringify({
-      publicKey: String(publicKeyPEM),
-      subject: `CN=dive-instance-${instanceCode.toLowerCase()},O=DIVE Federation`,
-      san: `URI:spiffe://${SPIFFE_DOMAIN}/instance/${instanceCode}`,
-      instanceCode,
-    });
+    try {
+      const keyPem = identity.privateKey.export({ type: 'sec1', format: 'pem' });
+      fs.writeFileSync(keyPath, keyPem, { mode: 0o600 });
+
+      // Generate CSR with openssl
+      const csrPem = execSync(
+        `openssl req -new -key "${keyPath}" ` +
+        `-subj "/CN=${cn}/O=DIVE Federation/OU=Instance Identity" ` +
+        `-addext "subjectAltName=${spiffeUri},${dnsName}"`,
+        { encoding: 'utf-8', timeout: 10000 },
+      ).trim();
+
+      if (!csrPem.includes('-----BEGIN CERTIFICATE REQUEST-----')) {
+        throw new Error('openssl did not produce a valid CSR');
+      }
+
+      logger.info('CSR generated successfully', { instanceCode, cn });
+      return csrPem;
+    } finally {
+      // Cleanup temp files
+      try {
+        fs.unlinkSync(keyPath);
+        fs.rmdirSync(tmpDir);
+      } catch {
+        // Best-effort cleanup
+      }
+    }
   }
 
   /**

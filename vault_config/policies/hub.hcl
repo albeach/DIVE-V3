@@ -63,6 +63,19 @@ path "pki_int/config/urls" {
   capabilities = ["create", "read", "update"]
 }
 
+# Transit encryption engine (credential encryption at rest)
+path "transit/encrypt/*" {
+  capabilities = ["create", "update"]
+}
+
+path "transit/decrypt/*" {
+  capabilities = ["create", "update"]
+}
+
+path "transit/keys/*" {
+  capabilities = ["read", "list"]
+}
+
 # Database secrets engine management
 path "database/*" {
   capabilities = ["create", "read", "update", "delete", "list"]

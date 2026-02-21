@@ -87,6 +87,7 @@ export interface ISpokeRegistration {
   // BIDIRECTIONAL FEDERATION CREDENTIALS
   // Spoke's Keycloak admin password for creating reverse IdP
   // NOTE: This is stored encrypted and cleared after bidirectional federation is established
+  /** @deprecated V1 only. V2 enrollment uses credential exchange — no admin passwords cross the wire. */
   keycloakAdminPassword?: string;  // Encrypted or base64-encoded
 
   // Rate Limiting
@@ -146,6 +147,7 @@ export interface IRegistrationRequest {
 
   // CRITICAL FOR BIDIRECTIONAL FEDERATION:
   // Spoke must provide its Keycloak admin credentials so Hub can create reverse IdP
+  /** @deprecated V1 only. V2 enrollment uses credential exchange — no admin passwords cross the wire. */
   keycloakAdminPassword?: string;  // Spoke's Keycloak admin password (for bidirectional federation)
 
   // Pre-approved partner metadata (from Vault KV, set by shell pipeline)

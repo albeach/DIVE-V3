@@ -16,6 +16,7 @@
  */
 
 import { Collection, Db, ObjectId } from 'mongodb';
+import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { getDb } from '../utils/mongodb-singleton';
 
@@ -99,6 +100,12 @@ export interface IEnrollment {
     kasPublicKey?: string;      // Requester's KAS public key PEM
   };
 
+  // SSE authentication
+  sseToken?: string;               // HMAC token for SSE event stream authentication
+
+  // Encryption status
+  _secretsEncrypted?: boolean;    // True if credential secrets encrypted via Vault transit
+
   // Metadata
   createdAt: Date;
   updatedAt: Date;
@@ -151,6 +158,7 @@ class EnrollmentStore {
 
     const doc: IEnrollment = {
       ...enrollment,
+      sseToken: enrollment.sseToken || crypto.randomBytes(32).toString('hex'),
       createdAt: now,
       updatedAt: now,
       expiresAt,
@@ -256,17 +264,36 @@ class EnrollmentStore {
 
   /**
    * Store approver's credentials after approval.
+   * Sensitive fields (oidcClientSecret, opalToken, spokeToken) are encrypted via Vault transit.
    */
   async setApproverCredentials(
     enrollmentId: string,
     credentials: NonNullable<IEnrollment['approverCredentials']>,
   ): Promise<IEnrollment | null> {
     const col = this.collection();
+    let toStore = credentials;
+    let encrypted = false;
+
+    try {
+      const { vaultTransitService } = await import('../services/vault-transit.service');
+      const result = await vaultTransitService.encryptCredentials(
+        credentials as Record<string, unknown>,
+      );
+      toStore = result.credentials as typeof credentials;
+      encrypted = result.encrypted;
+    } catch (error) {
+      logger.warn('Vault transit encryption unavailable for approver credentials', {
+        enrollmentId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    }
+
     return col.findOneAndUpdate(
       { enrollmentId },
       {
         $set: {
-          approverCredentials: credentials,
+          approverCredentials: toStore,
+          _secretsEncrypted: encrypted,
           updatedAt: new Date(),
         },
       },
@@ -276,21 +303,98 @@ class EnrollmentStore {
 
   /**
    * Store requester's reciprocal credentials.
+   * Sensitive fields (oidcClientSecret) are encrypted via Vault transit.
    */
   async setRequesterCredentials(
     enrollmentId: string,
     credentials: NonNullable<IEnrollment['requesterCredentials']>,
   ): Promise<IEnrollment | null> {
     const col = this.collection();
+    let toStore = credentials;
+    let encrypted = false;
+
+    try {
+      const { vaultTransitService } = await import('../services/vault-transit.service');
+      const result = await vaultTransitService.encryptCredentials(
+        credentials as Record<string, unknown>,
+      );
+      toStore = result.credentials as typeof credentials;
+      encrypted = result.encrypted;
+    } catch (error) {
+      logger.warn('Vault transit encryption unavailable for requester credentials', {
+        enrollmentId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    }
+
     return col.findOneAndUpdate(
       { enrollmentId },
       {
         $set: {
-          requesterCredentials: credentials,
+          requesterCredentials: toStore,
+          _secretsEncrypted: encrypted,
           updatedAt: new Date(),
         },
       },
       { returnDocument: 'after' },
+    );
+  }
+
+  /**
+   * Get decrypted credentials for an enrollment.
+   * Handles both encrypted and plaintext credentials transparently.
+   */
+  async getDecryptedCredentials(
+    enrollmentId: string,
+    side: 'approver' | 'requester',
+  ): Promise<NonNullable<IEnrollment['approverCredentials']> | NonNullable<IEnrollment['requesterCredentials']> | null> {
+    const enrollment = await this.findByEnrollmentId(enrollmentId);
+    if (!enrollment) return null;
+
+    const credentials = side === 'approver'
+      ? enrollment.approverCredentials
+      : enrollment.requesterCredentials;
+    if (!credentials) return null;
+
+    if (!enrollment._secretsEncrypted) return credentials;
+
+    try {
+      const { vaultTransitService } = await import('../services/vault-transit.service');
+      return await vaultTransitService.decryptCredentials(
+        credentials as Record<string, unknown>,
+      ) as typeof credentials;
+    } catch (error) {
+      logger.error('Failed to decrypt credentials', {
+        enrollmentId,
+        side,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      throw new Error(`Failed to decrypt ${side} credentials for enrollment ${enrollmentId}`);
+    }
+  }
+
+  /**
+   * Update OPAL token in approver credentials.
+   */
+  async updateOpalToken(enrollmentId: string, token: string): Promise<void> {
+    let tokenToStore = token;
+    try {
+      const { vaultTransitService } = await import('../services/vault-transit.service');
+      const result = await vaultTransitService.encrypt(token);
+      tokenToStore = result.ciphertext;
+    } catch {
+      // Store plaintext if encryption unavailable
+    }
+
+    const col = this.collection();
+    await col.updateOne(
+      { enrollmentId },
+      {
+        $set: {
+          'approverCredentials.opalToken': tokenToStore,
+          updatedAt: new Date(),
+        },
+      },
     );
   }
 

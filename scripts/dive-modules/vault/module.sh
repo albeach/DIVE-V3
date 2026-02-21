@@ -430,6 +430,30 @@ module_vault_setup() {
 
     # Spoke AppRoles are created dynamically via: ./dive vault provision <CODE>
 
+    # Enable Transit engine for credential encryption
+    log_info "Enabling Transit encryption engine..."
+
+    if vault secrets list | grep -q "^transit/"; then
+        log_verbose "  ✓ Transit engine already enabled"
+    else
+        if vault secrets enable transit >/dev/null 2>&1; then
+            log_success "  ✓ Enabled Transit encryption engine"
+        else
+            log_warn "  ✗ Failed to enable Transit engine (non-fatal)"
+        fi
+    fi
+
+    # Create federation-credentials encryption key (AES256-GCM96)
+    if vault read transit/keys/federation-credentials >/dev/null 2>&1; then
+        log_verbose "  ✓ Transit key already exists: federation-credentials"
+    else
+        if vault write -f transit/keys/federation-credentials type=aes256-gcm96 >/dev/null 2>&1; then
+            log_success "  ✓ Created Transit key: federation-credentials (AES256-GCM96)"
+        else
+            log_warn "  ✗ Failed to create Transit key (non-fatal)"
+        fi
+    fi
+
     # Enable audit logging
     log_info "Enabling audit logging..."
 

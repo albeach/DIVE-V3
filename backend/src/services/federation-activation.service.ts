@@ -137,10 +137,21 @@ class FederationActivationService {
       requesterInstanceCode: requesterCode,
     });
 
+    // Decrypt credentials if encrypted via Vault transit
+    let requesterCredentials = enrollment.requesterCredentials;
+    if (enrollment._secretsEncrypted) {
+      const { enrollmentStore } = await import('../models/enrollment.model');
+      const decrypted = await enrollmentStore.getDecryptedCredentials(
+        enrollment.enrollmentId,
+        'requester',
+      );
+      if (decrypted) requesterCredentials = decrypted as typeof requesterCredentials;
+    }
+
     // Step 1: Create local IdP using requester's (spoke's) credentials
     const idpResult = await this.createLocalIdPFromCredentials(
       requesterCode,
-      enrollment.requesterCredentials,
+      requesterCredentials,
     );
 
     logger.info('Hub-side IdP created', {
@@ -202,6 +213,28 @@ class FederationActivationService {
       });
     } catch (error) {
       logger.error('OPAL sync failed after V2 activation (non-fatal)', {
+        enrollmentId: enrollment.enrollmentId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // Step 3.5: Generate OPAL client token for the spoke (same as V1 flow)
+    try {
+      const { opalTokenService } = await import('./opal-token.service');
+      if (opalTokenService.isConfigured()) {
+        const opalClientToken = await opalTokenService.generateClientToken(
+          enrollment.enrollmentId,
+          requesterCode,
+        );
+        const { enrollmentStore } = await import('../models/enrollment.model');
+        await enrollmentStore.updateOpalToken(enrollment.enrollmentId, opalClientToken.token);
+        logger.info('OPAL client token generated for V2 enrollment', {
+          enrollmentId: enrollment.enrollmentId,
+          requesterInstanceCode: requesterCode,
+        });
+      }
+    } catch (error) {
+      logger.error('OPAL token generation failed during V2 activation (non-fatal)', {
         enrollmentId: enrollment.enrollmentId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
