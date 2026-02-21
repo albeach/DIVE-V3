@@ -225,11 +225,8 @@ Open GitHub Actions runs:
 Start here:
 
 - Full docs index: [`docs/README.md`](docs/README.md)
-- Hub-spoke deployment guide: [`docs/HUB_SPOKE_101_DEPLOYMENT.md`](docs/HUB_SPOKE_101_DEPLOYMENT.md)
-- Deployment quick reference: [`DEPLOYMENT_QUICK_REFERENCE.md`](DEPLOYMENT_QUICK_REFERENCE.md)
-- Testing guide: [`TESTING_GUIDE.md`](TESTING_GUIDE.md)
 - CLI modules reference: [`scripts/dive-modules/README.md`](scripts/dive-modules/README.md)
-- Architecture review docs: [`docs/architecture/README.md`](docs/architecture/README.md)
+- Architecture docs: [`docs/architecture/README.md`](docs/architecture/README.md)
 - OpenAPI spec (SP registry): [`docs/api/sp-registry-openapi.yaml`](docs/api/sp-registry-openapi.yaml)
 - Postman collection docs: [`docs/postman/README.md`](docs/postman/README.md)
 

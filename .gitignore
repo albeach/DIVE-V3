@@ -10,6 +10,10 @@
 /*.sh
 /*.txt
 !package*.json
+access_token_decoded.json
+id_token_decoded.json
+*token_decoded.json
+*decoded_token*.json
 
 /notes/
 /docs/notes/
@@ -32,6 +36,8 @@ resources/
 **/*CONTINUATION_HANDOFF*.md
 **/*COMPLETION_HANDOFF*.md
 **/*IMPLEMENTATION-HANDOFF*.md
+**/*SESSION_COMPLETE*.md
+**/*NEXT_SESSION_PROMPT*.md
 
 ##########
 # Archived files (should stay local only)
@@ -199,6 +205,24 @@ dist/
 # Cursor / Claude local state
 .cursor/
 .claude
+
+# Aggressive doc-noise prevention
+frontend/docs/
+frontend/*MIGRATION*.md
+frontend/*CHANGELOG*.md
+frontend/*QUICK_REFERENCE*.md
+frontend/README-*.md
+frontend/src/**/*.md
+
+kas/*PROMPT*.md
+kas/*SUMMARY*.md
+kas/PHASE*.md
+kas/docs/
+kas/tests/README.md
+
+cloudflared/*SUMMARY*.md
+cloudflared/*STATUS*.md
+cloudflared/*QUICK_REFERENCE*.md
 
 # Docker local state
 .docker/
