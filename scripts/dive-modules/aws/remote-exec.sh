@@ -196,23 +196,26 @@ remote_dive_exec() {
         return 1
     }
 
-    # For spoke deploys, inject hub address and deployment mode
+    # Inject environment variables for remote execution
     local env_prefix=""
+
+    # Domain suffix and Cloudflare token apply to BOTH hub and spoke deploys
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        env_prefix="${env_prefix}DIVE_DOMAIN_SUFFIX=${DIVE_DOMAIN_SUFFIX} "
+        log_info "Injecting domain suffix: ${DIVE_DOMAIN_SUFFIX}"
+    fi
+    if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+        env_prefix="${env_prefix}CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN} "
+    fi
+
+    # For spoke deploys, also inject hub address and deployment mode
     if [ "$role" = "spoke" ]; then
         local hub_ip
         hub_ip=$(aws_get_instance_ip "hub" "" 2>/dev/null || echo "")
         if [ -n "$hub_ip" ] && [ "$hub_ip" != "None" ]; then
-            env_prefix="HUB_EXTERNAL_ADDRESS=${hub_ip} DEPLOYMENT_MODE=remote "
+            env_prefix="${env_prefix}HUB_EXTERNAL_ADDRESS=${hub_ip} DEPLOYMENT_MODE=remote "
             log_info "Injecting hub address: HUB_EXTERNAL_ADDRESS=${hub_ip}"
 
-            # Inject domain suffix and Cloudflare token for Caddy setup
-            if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
-                env_prefix="${env_prefix}DIVE_DOMAIN_SUFFIX=${DIVE_DOMAIN_SUFFIX} "
-                log_info "Injecting domain suffix: ${DIVE_DOMAIN_SUFFIX}"
-            fi
-            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
-                env_prefix="${env_prefix}CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN} "
-            fi
             # Inject OPAL master token for token provisioning
             if [ -n "${OPAL_AUTH_MASTER_TOKEN:-}" ]; then
                 env_prefix="${env_prefix}OPAL_AUTH_MASTER_TOKEN=${OPAL_AUTH_MASTER_TOKEN} "
