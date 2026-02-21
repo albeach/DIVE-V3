@@ -24,6 +24,7 @@ export function createTestZTDFResource(params: {
     releasabilityTo: string[];
     COI?: string[];
     content?: string;
+    releasableToIndustry?: boolean; // Industry access control (ACP-240 Section 4.2)
 }): IZTDFResource {
     // Encrypt content
     const encryptionResult = encryptContent(params.content || 'Test content');
@@ -44,7 +45,8 @@ export function createTestZTDFResource(params: {
         releasabilityTo: params.releasabilityTo,
         COI: params.COI || [],
         originatingCountry: params.releasabilityTo[0] || 'USA',
-        creationDate: new Date().toISOString()
+        creationDate: new Date().toISOString(),
+        releasableToIndustry: params.releasableToIndustry // Industry access control (ACP-240 Section 4.2)
     });
 
     // Create policy
@@ -103,6 +105,13 @@ export function createTestZTDFResource(params: {
         resourceId: params.resourceId,
         title: params.title,
         ztdf,
+        legacy: {
+            classification: params.classification,
+            releasabilityTo: params.releasabilityTo,
+            COI: params.COI || [],
+            encrypted: true,
+            releasableToIndustry: params.releasableToIndustry // Industry access control
+        },
         createdAt: new Date(),
         updatedAt: new Date()
     };
@@ -170,6 +179,66 @@ export const TEST_RESOURCES = {
         releasabilityTo: ['FRA'],
         COI: [],
         content: 'French national defense information'
+    }),
+
+    // ============================================
+    // Industry Access Control Test Resources
+    // ============================================
+
+    /**
+     * Government-only SECRET document (default: releasableToIndustry not set)
+     * Industry users should be DENIED access
+     */
+    govOnlySecretDocument: createTestZTDFResource({
+        resourceId: 'doc-gov-only-001',
+        title: 'Government-Only Operations Plan',
+        classification: 'SECRET',
+        releasabilityTo: ['USA', 'DEU', 'FRA'],
+        COI: ['NATO'],
+        content: 'Sensitive government operations information - not for industry',
+        releasableToIndustry: false // Explicitly gov-only
+    }),
+
+    /**
+     * Industry-accessible CONFIDENTIAL document
+     * Industry users with proper clearance SHOULD have access
+     */
+    industryAllowedConfidentialDocument: createTestZTDFResource({
+        resourceId: 'doc-industry-001',
+        title: 'Coalition Industry Partnership Brief',
+        classification: 'CONFIDENTIAL',
+        releasabilityTo: ['USA', 'DEU', 'GBR'],
+        COI: [],
+        content: 'Information approved for cleared industry partners',
+        releasableToIndustry: true // Explicitly industry-accessible
+    }),
+
+    /**
+     * Industry-accessible UNCLASSIFIED document
+     * Wide distribution including industry partners
+     */
+    industryAllowedUnclassifiedDocument: createTestZTDFResource({
+        resourceId: 'doc-industry-002',
+        title: 'Coalition Logistics RFI',
+        classification: 'UNCLASSIFIED',
+        releasabilityTo: ['USA', 'DEU', 'FRA', 'GBR', 'CAN'],
+        COI: [],
+        content: 'Request for Information - open to industry bidders',
+        releasableToIndustry: true // Explicitly industry-accessible
+    }),
+
+    /**
+     * Government-only UNCLASSIFIED document
+     * Even unclassified can be restricted from industry
+     */
+    govOnlyUnclassifiedDocument: createTestZTDFResource({
+        resourceId: 'doc-gov-unclass-001',
+        title: 'Internal Policy Discussion',
+        classification: 'UNCLASSIFIED',
+        releasabilityTo: ['USA', 'DEU'],
+        COI: [],
+        content: 'Internal government policy discussion - not for public or industry',
+        releasableToIndustry: false // Gov-only even though unclassified
     })
 };
 
@@ -217,42 +286,134 @@ export function createZTDFResourceWithoutHashes(): IZTDFResource {
 
 /**
  * Sample user profiles for testing
+ *
+ * User Pattern: testuser-{country}-{1,2,3,4}
+ *   1 = UNCLASSIFIED
+ *   2 = CONFIDENTIAL
+ *   3 = SECRET
+ *   4 = TOP_SECRET
+ *
+ * Password: TestUser2025!Pilot
  */
 export const TEST_USERS = {
-    usSecret: {
-        uniqueID: 'testuser-us',
-        email: 'testuser@example.mil',
-        clearance: 'SECRET',
-        countryOfAffiliation: 'USA',
-        acpCOI: ['FVEY']
-    },
-    usTopSecret: {
-        uniqueID: 'testuser-us-ts',
-        email: 'admin@pentagon.mil',
-        clearance: 'TOP_SECRET',
-        countryOfAffiliation: 'USA',
-        acpCOI: ['FVEY', 'US-ONLY']
-    },
-    frenchConfidential: {
-        uniqueID: 'testuser-fra',
-        email: 'testuser@gouv.fr',
-        clearance: 'CONFIDENTIAL',
-        countryOfAffiliation: 'FRA',
-        acpCOI: ['NATO-COSMIC']
-    },
-    canadianSecret: {
-        uniqueID: 'testuser-can',
-        email: 'testuser@gc.ca',
-        clearance: 'SECRET',
-        countryOfAffiliation: 'CAN',
-        acpCOI: ['FVEY']
-    },
-    contractor: {
-        uniqueID: 'bob.contractor',
-        email: 'bob@contractor.com',
+    // USA Test Users
+    usaLevel1: {
+        uniqueID: 'testuser-usa-1',
+        email: 'testuser-usa-1@dive-demo.example',
         clearance: 'UNCLASSIFIED',
         countryOfAffiliation: 'USA',
         acpCOI: []
+    },
+    usaLevel2: {
+        uniqueID: 'testuser-usa-2',
+        email: 'testuser-usa-2@dive-demo.example',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'USA',
+        acpCOI: []
+    },
+    usaLevel3: {
+        uniqueID: 'testuser-usa-3',
+        email: 'testuser-usa-3@dive-demo.example',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['NATO']
+    },
+    usaLevel4: {
+        uniqueID: 'testuser-usa-4',
+        email: 'testuser-usa-4@dive-demo.example',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY', 'NATO-COSMIC']
+    },
+    // France Test Users
+    fraLevel1: {
+        uniqueID: 'testuser-fra-1',
+        email: 'testuser-fra-1@dive-demo.example',
+        clearance: 'UNCLASSIFIED',
+        countryOfAffiliation: 'FRA',
+        acpCOI: []
+    },
+    fraLevel2: {
+        uniqueID: 'testuser-fra-2',
+        email: 'testuser-fra-2@dive-demo.example',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'FRA',
+        acpCOI: []
+    },
+    fraLevel3: {
+        uniqueID: 'testuser-fra-3',
+        email: 'testuser-fra-3@dive-demo.example',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'FRA',
+        acpCOI: ['NATO']
+    },
+    fraLevel4: {
+        uniqueID: 'testuser-fra-4',
+        email: 'testuser-fra-4@dive-demo.example',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'FRA',
+        acpCOI: ['FVEY', 'NATO-COSMIC']
+    },
+    // Industry Partner Test User
+    contractor: {
+        uniqueID: 'contractor.bah',
+        email: 'contractor.bah@bah.com',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['NATO'],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    // ============================================
+    // Industry Partner Test Users
+    // ============================================
+
+    /**
+     * German industry partner with SECRET clearance
+     */
+    germanIndustrySecret: {
+        uniqueID: 'testuser-deu-industry-1',
+        email: 'engineer@abc-llc.de',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'DEU',
+        acpCOI: ['NATO'],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    /**
+     * US industry partner with CONFIDENTIAL clearance
+     */
+    usIndustryConfidential: {
+        uniqueID: 'testuser-usa-industry-1',
+        email: 'analyst@defense-corp.com',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'USA',
+        acpCOI: [],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    /**
+     * US government user (explicit GOV type)
+     */
+    usGovernmentSecret: {
+        uniqueID: 'testuser-usa-gov-1',
+        email: 'analyst@state.gov',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY'],
+        organizationType: 'GOV' // Government personnel
+    },
+
+    /**
+     * US military user (explicit MIL type)
+     */
+    usMilitaryTopSecret: {
+        uniqueID: 'testuser-usa-mil-1',
+        email: 'officer@army.mil',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY', 'US-ONLY'],
+        organizationType: 'MIL' // Military personnel
     }
 };
 
@@ -269,4 +430,3 @@ export function generateTestRequestId(): string {
 export function generateTestResourceId(): string {
     return `doc-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
-

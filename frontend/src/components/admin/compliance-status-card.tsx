@@ -234,4 +234,3 @@ function ComplianceStandard({
         </details>
     );
 }
-

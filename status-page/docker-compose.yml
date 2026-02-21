@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  status-page:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dive-v3-status-page
+    restart: unless-stopped
+    ports:
+      - "8888:80"  # Local access
+    environment:
+      - CHECK_INTERVAL=60
+      - HISTORY_SIZE=1440
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - dive-network
+
+networks:
+  dive-network:
+    external: true
+    name: dive-v3_dive-network

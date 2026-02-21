@@ -1,0 +1,135 @@
+{
+  "multiKas": {
+    "title": "Architecture Multi-KAS Coalition",
+    "description": "Gestion distribuée des clés pour les environnements de coalition",
+    "loading": "Chargement du registre Multi-KAS...",
+    "loadingSubtitle": "Récupération des données en direct depuis MongoDB",
+    "refreshing": "Actualisation...",
+    "refresh": "Actualiser",
+    "liveFromMongoDB": "En direct depuis MongoDB",
+    "updated": "Mis à jour : {{time}}",
+    "lastUpdated": "Dernière mise à jour : {{time}}",
+    "autoRefreshInterval": "Intervalle d'actualisation automatique : {{seconds}} secondes",
+    "errorTitle": "Erreur de chargement des données KAS",
+    "retry": "Réessayer",
+    "hideDetails": "Masquer les détails",
+    "showDetails": "Afficher les détails",
+    "technicalDetails": "Détails techniques",
+    "howItWorks": {
+      "title": "Comment fonctionne Multi-KAS dans DIVE V3",
+      "uploadPhase": {
+        "title": "Phase de téléchargement (Création de ressource)",
+        "description": "Lorsque vous téléchargez une ressource chiffrée, upload.service.ts crée automatiquement 1 à 4 objets d'accès aux clés (KAO) en fonction des balises releasabilityTo et COI de la ressource. Chaque KAO enveloppe la clé de chiffrement des données (DEK) avec la clé publique d'un KAS différent."
+      },
+      "accessPhase": {
+        "title": "Phase d'accès (Demande de clé)",
+        "description": "Lorsque vous essayez de consulter une ressource, resource.service.ts sélectionne le KAS optimal en fonction de vos attributs (pays, appartenance COI). Il envoie une demande de réenveloppement à ce KAS, qui réévalue la politique OPA avant de libérer la clé."
+      },
+      "mongoDBSSOT": {
+        "title": "MongoDB comme SSOT",
+        "description": "Toutes les inscriptions KAS sont stockées dans la collection kas_registry. Les métriques de santé, les pulsations et les accords de fédération sont suivis en temps réel. Le tableau de bord que vous consultez récupère des données en direct depuis MongoDB toutes les 30 secondes."
+      },
+      "dataSource": {
+        "title": "Source de données :",
+        "description": "Ce tableau de bord affiche les instances KAS réelles de la collection MongoDB kas_registry. Les métriques sont agrégées depuis audit_log pour les comptages de requêtes et les temps de réponse."
+      }
+    },
+    "grid": {
+      "title": "Registre de fédération KAS",
+      "subtitle": "Données en direct depuis MongoDB (collection kas_registry)"
+    },
+    "flow": {
+      "title": "Flux Multi-KAS"
+    },
+    "example": {
+      "title": "Exemple : Ressource Multi-KAO",
+      "classification": "Classification",
+      "kaoCount": "{{count}} KAO",
+      "releasableTo": "Diffusable à :",
+      "communitiesOfInterest": "Communautés d'intérêt :",
+      "keyAccessObjects": "Objets d'accès aux clés (KAO) :",
+      "kaoNumber": "KAO #{{number}}",
+      "kasEndpoint": "Point de terminaison KAS :",
+      "wrappedKey": "Clé enveloppée :"
+    },
+    "benefits": {
+      "title": "Avantages pour la coalition",
+      "instantGrowth": {
+        "title": "Instant Coalition Growth",
+        "description": "Add new coalition partners in minutes by deploying a spoke KAS. No re-encryption needed for existing resources."
+      },
+      "sovereignty": {
+        "title": "National Key Sovereignty",
+        "description": "Each nation controls its own KAS. Keys never leave national boundaries without explicit policy approval."
+      },
+      "policyDriven": {
+        "title": "Policy-Driven Access",
+        "description": "OPA policies evaluated at each KAS ensure only authorized users with proper clearances can access resources."
+      },
+      "zeroReencryption": {
+        "title": "Zero Re-encryption",
+        "description": "Resources encrypted once, accessible by multiple KAS endpoints. No need to re-encrypt when adding partners."
+      }
+    },
+    "footer": {
+      "dataSource": "Data sourced from MongoDB collections: {{collections}}",
+      "collections": "kas_registry and audit_log"
+    }
+  },
+  "certificates": {
+    "title": "Certificate Compliance",
+    "subtitle": "TLS certificate validation and trust management",
+    "valid": "Valid",
+    "invalid": "Invalid",
+    "expired": "Expired",
+    "expiringSoon": "Expiring Soon",
+    "expiresIn": "Expires in {{days}} days",
+    "issuer": "Issuer",
+    "subject": "Subject",
+    "validFrom": "Valid From",
+    "validUntil": "Valid Until",
+    "serialNumber": "Serial Number",
+    "fingerprint": "Fingerprint"
+  },
+  "classifications": {
+    "title": "Classification Levels",
+    "subtitle": "Security classification and marking standards",
+    "unclassified": "UNCLASSIFIED",
+    "confidential": "CONFIDENTIAL",
+    "secret": "SECRET",
+    "topSecret": "TOP SECRET",
+    "description": {
+      "unclassified": "Information that does not meet the standards for classification",
+      "confidential": "Information that could cause damage to national security if disclosed",
+      "secret": "Information that could cause serious damage to national security if disclosed",
+      "topSecret": "Information that could cause exceptionally grave damage to national security if disclosed"
+    }
+  },
+  "identityAssurance": {
+    "title": "Identity Assurance Levels",
+    "subtitle": "Authentication strength and identity proofing",
+    "ial1": "IAL1 - Self-Asserted",
+    "ial2": "IAL2 - Verified",
+    "ial3": "IAL3 - In-Person Proofed",
+    "aal1": "AAL1 - Single-Factor",
+    "aal2": "AAL2 - Two-Factor",
+    "aal3": "AAL3 - Hardware-Protected"
+  },
+  "coiKeys": {
+    "title": "Community of Interest (COI) Keys",
+    "subtitle": "Coalition access control and key management",
+    "nato": "NATO-COSMIC",
+    "fvey": "Five Eyes (FVEY)",
+    "canUs": "CAN-US",
+    "usOnly": "US-ONLY",
+    "description": "COI tags determine which KAS endpoints can decrypt resources"
+  },
+  "breadcrumbs": {
+    "compliance": "Compliance",
+    "multiKas": "Multi-KAS",
+    "certificates": "Certificates",
+    "classifications": "Classifications",
+    "identityAssurance": "Identity Assurance",
+    "coiKeys": "COI Keys"
+  }
+}

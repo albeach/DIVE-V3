@@ -1,0 +1,26 @@
+# =============================================================================
+# DIVE V3 Keycloak - Kubernetes Service
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 8443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app: keycloak
+    app.kubernetes.io/name: keycloak

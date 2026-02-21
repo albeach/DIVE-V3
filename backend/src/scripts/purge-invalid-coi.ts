@@ -1,37 +1,30 @@
 /**
  * Purge Invalid COI Documents
- * 
+ *
  * Safely removes documents with COI coherence violations
  * Creates backup before deletion
- * 
+ *
  * Date: October 21, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
-import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+// import { logger } from '../utils/logger';  // Commented out - not used in this script
 import * as fs from 'fs';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
+// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
+const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 
 async function main() {
     console.log('🧹 Purging Invalid COI Documents');
     console.log('==================================\n');
 
-    const client = new MongoClient(MONGODB_URL, {
-        authSource: 'admin',
-        auth: {
-            username: 'admin',
-            password: 'password'
-        }
-    });
-
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection('resources');
 
         // Get all resources
@@ -58,22 +51,14 @@ async function main() {
                     coiOperator: resource.ztdf.policy.securityLabel.coiOperator || 'ALL',
                     caveats: resource.ztdf.policy.securityLabel.caveats || []
                 };
-            } else if (resource.legacy) {
-                securityLabel = {
-                    classification: resource.legacy.classification,
-                    releasabilityTo: resource.legacy.releasabilityTo,
-                    COI: resource.legacy.COI || [],
-                    coiOperator: resource.legacy.coiOperator || 'ALL',
-                    caveats: resource.legacy.caveats || []
-                };
             } else {
-                console.log(`⚠️  Skipping ${resourceId}: No security label found`);
+                console.log(`⚠️  Skipping ${resourceId}: No ZTDF security label found`);
                 invalidIds.push(resourceId);
                 continue;
             }
 
             // Validate COI coherence
-            const validation = validateCOICoherence(securityLabel);
+            const validation = await validateCOICoherence(securityLabel);
 
             if (!validation.valid) {
                 invalidIds.push(resourceId);
@@ -125,11 +110,7 @@ async function main() {
     } catch (error) {
         console.error('❌ Error purging documents:', error);
         throw error;
-    } finally {
-        await client.close();
-        console.log('🔌 MongoDB connection closed\n');
     }
 }
 
 main();
-

@@ -1,0 +1,191 @@
+{
+  "title": "Zasoby",
+  "subtitle": "Zarządzaj i uzyskuj dostęp do zasobów informacyjnych koalicji",
+  "list": {
+    "title": "Przeglądarka zasobów",
+    "searchPlaceholder": "Szukaj zasobów według tytułu, klasyfikacji lub tagów...",
+    "noResults": "Nie znaleziono zasobów",
+    "totalResources": "{{count}} zasobów",
+    "showing": "Wyświetlanie {{start}}-{{end}} z {{total}}",
+    "loadMore": "Załaduj więcej",
+    "refresh": "Odśwież"
+  },
+  "filters": {
+    "title": "Filtry",
+    "clearAll": "Wyczyść wszystko",
+    "classification": "Klasyfikacja",
+    "releasability": "Możliwość rozpowszechniania",
+    "coi": "Społeczność interesów",
+    "dateRange": "Zakres dat",
+    "encrypted": "Tylko zaszyfrowane zasoby",
+    "apply": "Zastosuj filtry",
+    "reset": "Resetuj"
+  },
+  "table": {
+    "title": "Tytuł",
+    "classification": "Klasyfikacja",
+    "releasability": "Możliwość rozpowszechniania",
+    "created": "Utworzony",
+    "modified": "Zmodyfikowany",
+    "actions": "Akcje",
+    "view": "Zobacz",
+    "edit": "Edytuj",
+    "delete": "Usuń",
+    "download": "Pobierz",
+    "requestAccess": "Żądaj dostępu"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "Nie znaleziono wyników",
+      "description": "Nie mogliśmy znaleźć dokumentów pasujących do \"{{query}}\". Spróbuj dostosować terminy wyszukiwania lub filtry.",
+      "clearSearch": "Wyczyść wyszukiwanie"
+    },
+    "noMatchingDocuments": {
+      "title": "Brak pasujących dokumentów",
+      "description": "Twoje obecne filtry nie pasują do żadnych dokumentów. Spróbuj złagodzić kryteria filtrowania.",
+      "clearFilters": "Wyczyść filtry"
+    },
+    "error": {
+      "title": "Wystąpił błąd",
+      "description": "Napotkaliśmy błąd podczas ładowania dokumentów. Spróbuj ponownie.",
+      "tryAgain": "Spróbuj ponownie"
+    }
+  },
+  "detail": {
+    "title": "Szczegóły zasobu",
+    "metadata": "Metadane",
+    "resourceId": "ID zasobu",
+    "createdBy": "Utworzony przez",
+    "createdDate": "Data utworzenia",
+    "lastModified": "Ostatnia modyfikacja",
+    "fileSize": "Rozmiar pliku",
+    "contentType": "Typ zawartości",
+    "accessLog": "Dziennik dostępu",
+    "noAccessHistory": "Brak dostępnej historii dostępu"
+  },
+  "upload": {
+    "title": "Prześlij zasób",
+    "dragDrop": "Przeciągnij i upuść pliki tutaj lub kliknij, aby przeglądać",
+    "selectFile": "Wybierz plik",
+    "maxSize": "Maksymalny rozmiar pliku: {{size}}MB",
+    "allowedTypes": "Dozwolone typy: {{types}}",
+    "metadata": {
+      "title": "Metadane zasobu",
+      "titleLabel": "Tytuł",
+      "titlePlaceholder": "Wprowadź tytuł zasobu",
+      "description": "Opis",
+      "descriptionPlaceholder": "Wprowadź opis zasobu",
+      "classification": "Poziom klasyfikacji",
+      "releasability": "Możliwy do rozpowszechnienia do",
+      "coi": "Społeczności interesów",
+      "tags": "Tagi",
+      "encryption": "Szyfrowanie"
+    },
+    "uploading": "Przesyłanie...",
+    "uploadProgress": "{{percent}}% przesłane",
+    "uploadSuccess": "Zasób przesłany pomyślnie",
+    "uploadError": "Błąd podczas przesyłania zasobu",
+    "cancel": "Anuluj przesyłanie"
+  },
+  "access": {
+    "requesting": "Żądanie dostępu...",
+    "granted": "Dostęp przyznany",
+    "denied": "Dostęp odmówiony",
+    "pending": "Dostęp oczekujący",
+    "reasonDenied": "Powód: {{reason}}",
+    "requestKey": "Żądaj klucza deszyfrowania",
+    "keyReceived": "Otrzymano klucz deszyfrowania",
+    "decrypting": "Deszyfrowanie...",
+    "decrypted": "Pomyślnie odszyfrowano"
+  },
+  "errors": {
+    "notFound": "Zasób nie znaleziony",
+    "accessDenied": "Nie masz uprawnień dostępu do tego zasobu",
+    "loadFailed": "Błąd podczas ładowania zasobu",
+    "uploadFailed": "Błąd podczas przesyłania zasobu",
+    "deleteFailed": "Błąd podczas usuwania zasobu",
+    "insufficientClearance": "Niewystarczający poziom uprawnień",
+    "countryNotReleased": "Zasób nie został rozpowszechniony do Twojego kraju",
+    "coiNotMember": "Nie jesteś członkiem wymaganej COI"
+  },
+  "breadcrumbs": {
+    "resources": "Zasoby",
+    "upload": "Prześlij",
+    "detail": "Szczegóły"
+  },
+  "federation": {
+    "local": "Lokalny",
+    "federated": "Sfederowany"
+  },
+  "classifications": {
+    "unclassified": "NIEKLASYFIKOWANY",
+    "restricted": "OGRANICZONY",
+    "confidential": "POUFNY",
+    "secret": "TAJNY",
+    "topSecret": "ŚCIŚLE TAJNY"
+  },
+  "auth": {
+    "signInToView": "Zaloguj się, aby zobaczyć zasoby",
+    "needAuthentication": "Musisz być uwierzytelniony, aby uzyskać dostęp do zasobów koalicji."
+  },
+  "sorting": {
+    "titleAZ": "Tytuł A-Z",
+    "titleZA": "Tytuł Z-A",
+    "newest": "Najnowszy",
+    "oldest": "Najstarszy"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Łączna liczba dokumentów",
+    "ztdfEncrypted": "Zaszyfrowany ZTDF",
+    "local": "Lokalny",
+    "federated": "Sfederowany",
+    "classification": "Klasyfikacja",
+    "instances": "instancji",
+    "accessRate": "Współczynnik dostępu",
+    "avgAge": "Średni wiek",
+    "topCOIs": "Top COI",
+    "coalition": "Koalicja"
+  },
+  "viewModes": {
+    "grid": "Siatka",
+    "list": "Lista",
+    "compact": "Kompaktowy"
+  },
+  "bulkActions": {
+    "selected": "wybrane",
+    "deselectAll": "Odznacz wszystko",
+    "selectAll": "Zaznacz wszystko",
+    "export": "Eksportuj",
+    "compare": "Porównaj",
+    "compareTooltip": {
+      "selectMin": "Wybierz co najmniej 2 elementy do porównania",
+      "maxItems": "Można porównać maksymalnie 4 elementy",
+      "compareSelected": "Porównaj wybrane elementy"
+    }
+  },
+  "comparison": {
+    "title": "Porównaj zasoby",
+    "closeTooltip": "Zamknij (Escape)",
+    "metadata": "Metadane"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Brak zakładek jeszcze",
+      "description": "Dodaj zakładki do dokumentów i polityk dla szybkiego dostępu. Kliknij ikonę zakładki w dowolnym zasobie, aby zapisać ją tutaj."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Data utworzenia",
+    "quickSelect": "Szybki wybór",
+    "today": "Dzisiaj",
+    "last7Days": "Ostatnie 7 dni",
+    "last30Days": "Ostatnie 30 dni",
+    "last90Days": "Ostatnie 90 dni",
+    "thisMonth": "Ten miesiąc",
+    "lastMonth": "Poprzedni miesiąc",
+    "customRange": "Zakres niestandardowy",
+    "placeholder": "Filtruj według zakresu dat",
+    "clickToStart": "Kliknij datę, aby rozpocząć wybór",
+    "clickToComplete": "Kliknij inną datę, aby uzupełnić zakres"
+  }
+}

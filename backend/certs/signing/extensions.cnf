@@ -1,0 +1,5 @@
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, nonRepudiation
+extendedKeyUsage = codeSigning
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer

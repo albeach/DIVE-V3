@@ -1,0 +1,113 @@
+{
+    "_updated": "2026-01-29T20:00:00Z",
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Pilote ICAM Adapté aux Coalitions"
+    },
+    "nav": {
+        "home": "Accueil",
+        "docs": "Docs",
+        "upload": "Télécharger",
+        "policies": "Politiques",
+        "more": "Plus",
+        "dashboard": "Tableau de Bord",
+        "dashboard.description": "Aperçu et statistiques rapides",
+        "resources": "Ressources",
+        "admin": "Administration",
+        "dashboard": "Tableau de Bord",
+        "signOut": "Se Déconnecter",
+        "documents": {
+            "name": "Documents",
+            "shortName": "Docs",
+            "description": "Bibliothèque de ressources classifiées",
+            "browse": "Parcourir",
+            "allDocuments": "Tous les documents",
+            "recent": "Récent",
+            "favorites": "Favoris",
+            "actions": "Actions",
+            "myActivity": "Mon activité",
+            "requestAccess": "Demander l'accès"
+        },
+        "upload": {
+            "name": "Télécharger",
+            "shortName": "Télécharger",
+            "description": "Téléchargement sécurisé de documents"
+        },
+        "policyTools": {
+            "name": "Politiques",
+            "shortName": "Politiques",
+            "description": "Politiques d'autorisation et conformité",
+            "explore": "Explorer",
+            "policyLibrary": "Bibliothèque de politiques",
+            "policySandbox": "Bac à sable de politiques",
+            "sandboxWorkspaces": "Espaces de travail du bac à sable",
+            "builder": "Constructeur",
+            "myPolicies": "Mes politiques",
+            "test": "Test",
+            "reference": "Référence",
+            "compliance": "Conformité",
+            "standardsCompliance": "Normes et conformité"
+        },
+        "compliance": {
+            "name": "Conformité",
+            "shortName": "Conformité",
+            "description": "Normes et conformité",
+            "standards": "Normes",
+            "standardsCompliance": "Conformité aux normes",
+            "security": "Sécurité",
+            "kas": "KAS",
+            "cois": "COIs",
+            "pki": "PKI",
+            "classifications": "Classifications"
+        },
+        "admin": {
+            "dashboard": "Tableau de bord",
+            "dashboard.description": "Aperçu administrateur",
+            "spRegistry": "Registre SP",
+            "spRegistry.description": "Gérer les fournisseurs de services",
+            "certificates": "Certificats",
+            "certificates.description": "Gérer les certificats PKI",
+            "idpGovernance": "Gouvernance IdP",
+            "idpGovernance.description": "Gouvernance des identités",
+            "idpManagement": "Gestion IdP",
+            "idpManagement.description": "Configurer les fournisseurs d'identité",
+            "approvals": "Approbations",
+            "approvals.description": "Approbations en attente",
+            "auditLogs": "Journaux d'audit",
+            "auditLogs.description": "Voir le journal d'audit",
+            "opaPolicy": "Politique OPA",
+            "opaPolicy.description": "Édition en temps réel des politiques",
+            "integrationGuide": "Guide d'intégration",
+            "integrationGuide.description": "Tutoriel interactif 5663 × 240"
+        }
+    },
+    "common": {
+        "loading": "Chargement...",
+        "error": "Erreur",
+        "success": "Succès",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "delete": "Supprimer",
+        "edit": "Modifier",
+        "view": "Voir",
+        "test": "Tester",
+        "refresh": "Actualiser",
+        "retry": "Réessayer",
+        "export": "Exporter",
+        "import": "Importer",
+        "search": "Rechercher",
+        "filter": "Filtrer",
+        "clearFilters": "Effacer les Filtres",
+        "noResults": "Aucun résultat trouvé",
+        "confirm": "Confirmer"
+    },
+    "time": {
+        "justNow": "À l'instant",
+        "minuteAgo": "Il y a 1 minute",
+        "minutesAgo": "Il y a {{count}} minutes",
+        "hourAgo": "Il y a 1 heure",
+        "hoursAgo": "Il y a {{count}} heures",
+        "dayAgo": "Il y a 1 jour",
+        "daysAgo": "Il y a {{count}} jours"
+    }
+}

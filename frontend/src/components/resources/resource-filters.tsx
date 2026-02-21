@@ -1,6 +1,6 @@
 /**
  * Modern Resource Filters Component (2025)
- * 
+ *
  * Features:
  * - Compact collapsible sections (Disclosure)
  * - Count badges on filter categories
@@ -14,12 +14,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Disclosure } from '@headlessui/react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface ResourceFiltersState {
     search: string;
     classifications: string[];
     countries: string[];
     cois: string[];
+    fileTypes: string[];  // documents, images, videos, audio, structured, archives, text
     encryptionStatus: 'all' | 'encrypted' | 'unencrypted';
     sortBy: 'title' | 'classification' | 'createdAt';
     sortOrder: 'asc' | 'desc';
@@ -36,11 +38,12 @@ interface ResourceFiltersProps {
     filteredCount: number;
 }
 
-const CLASSIFICATIONS = [
-    { value: 'UNCLASSIFIED', label: 'UNCLASS', color: 'bg-green-50 text-green-900 border-green-300', icon: '🟢' },
-    { value: 'CONFIDENTIAL', label: 'CONFID', color: 'bg-yellow-50 text-yellow-900 border-yellow-300', icon: '🟡' },
+const ALL_CLASSIFICATIONS = [
+    { value: 'UNCLASSIFIED', label: 'UNCLASSIFIED', color: 'bg-green-50 text-green-900 border-green-300', icon: '🟢' },
+    { value: 'RESTRICTED', label: 'RESTRICTED', color: 'bg-blue-50 text-blue-900 border-blue-300', icon: '🔵' },
+    { value: 'CONFIDENTIAL', label: 'CONFIDENTIAL', color: 'bg-yellow-50 text-yellow-900 border-yellow-300', icon: '🟡' },
     { value: 'SECRET', label: 'SECRET', color: 'bg-orange-50 text-orange-900 border-orange-300', icon: '🟠' },
-    { value: 'TOP_SECRET', label: 'TOP SEC', color: 'bg-red-50 text-red-900 border-red-300', icon: '🔴' }
+    { value: 'TOP_SECRET', label: 'TOP SECRET', color: 'bg-red-50 text-red-900 border-red-300', icon: '🔴' }
 ];
 
 const COUNTRIES = [
@@ -56,40 +59,105 @@ const COUNTRIES = [
     { code: 'NZL', name: 'New Zealand', flag: '🇳🇿' }
 ];
 
-const COIS = [
-    { value: 'FVEY', label: 'Five Eyes', icon: '👁️', color: 'purple' },
-    { value: 'NATO-COSMIC', label: 'NATO COSMIC', icon: '⭐', color: 'blue' },
-    { value: 'US-ONLY', label: 'US Only', icon: '🇺🇸', color: 'red' },
-    { value: 'CAN-US', label: 'Canada-US', icon: '🤝', color: 'indigo' },
-    { value: 'EU-RESTRICTED', label: 'EU Restricted', icon: '🇪🇺', color: 'blue' },
-    { value: 'QUAD', label: 'QUAD', icon: '◆', color: 'green' }
+// File type categories (matching backend paginated-search.controller.ts)
+const FILE_TYPES = [
+    { value: 'documents', icon: '📄' },
+    { value: 'images', icon: '🖼️' },
+    { value: 'videos', icon: '🎥' },
+    { value: 'audio', icon: '🎵' },
+    { value: 'structured', icon: '📊' },
+    { value: 'archives', icon: '📦' },
+    { value: 'text', icon: '📝' },
+    { value: 'code', icon: '💻' }
 ];
 
+// COI list will be dynamically fetched from API
+interface COI {
+    value: string;
+    label: string;
+    icon: string;
+    color: string;
+}
+
+// CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+// - UNCLASSIFIED users can ONLY see UNCLASSIFIED
+// - RESTRICTED users can see UNCLASSIFIED and RESTRICTED
 const CLEARANCE_HIERARCHY: Record<string, string[]> = {
     'UNCLASSIFIED': ['UNCLASSIFIED'],
-    'CONFIDENTIAL': ['UNCLASSIFIED', 'CONFIDENTIAL'],
-    'SECRET': ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET'],
-    'TOP_SECRET': ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
+    'RESTRICTED': ['UNCLASSIFIED', 'RESTRICTED'],
+    'CONFIDENTIAL': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL'],
+    'SECRET': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET'],
+    'TOP_SECRET': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
 };
 
-const CLASSIFICATION_VALUES = CLASSIFICATIONS.map(c => c.value);
+const CLASSIFICATION_VALUES = ALL_CLASSIFICATIONS.map(c => c.value);
 const COUNTRY_CODES = COUNTRIES.map(c => c.code);
-const COI_VALUES = COIS.map(c => c.value);
+// COI_VALUES will be computed dynamically from fetched COIs
 
-export default function ResourceFilters({ 
-    userAttributes, 
-    onFilterChange, 
-    totalCount, 
-    filteredCount 
+export default function ResourceFilters({
+    userAttributes,
+    onFilterChange,
+    totalCount,
+    filteredCount
 }: ResourceFiltersProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    
+    const { t } = useTranslation('resources');
+
+    // Fetch COI options from API
+    const [cois, setCois] = useState<COI[]>([]);
+    const [coiLoading, setCoiLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchCOIs = async () => {
+            try {
+                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+                const response = await fetch(`${backendUrl}/api/coi-keys?status=active`);
+                const data = await response.json();
+
+                // Transform API response to filter format
+                const coiFilters: COI[] = data.cois.map((coi: any) => {
+                    // Map colors to Tailwind-friendly values
+                    const colorMap: Record<string, string> = {
+                        '#8B5CF6': 'purple',
+                        '#3B82F6': 'blue',
+                        '#1E40AF': 'indigo',
+                        '#DC2626': 'red',
+                        '#6366F1': 'indigo',
+                        '#10B981': 'green',
+                        '#F59E0B': 'amber',
+                        '#EF4444': 'red'
+                    };
+
+                    return {
+                        value: coi.coiId,
+                        label: coi.name,
+                        icon: coi.icon,
+                        color: colorMap[coi.color] || 'gray'
+                    };
+                });
+
+                setCois(coiFilters);
+            } catch (error) {
+                console.error('Failed to fetch COI options:', error);
+                // Fallback to empty array
+                setCois([]);
+            } finally {
+                setCoiLoading(false);
+            }
+        };
+
+        fetchCOIs();
+    }, []);
+
+    const COI_VALUES = useMemo(() => cois.map(c => c.value), [cois]);
+
     const [filters, setFilters] = useState<ResourceFiltersState>(() => ({
         search: searchParams.get('search') || '',
         classifications: searchParams.get('classification')?.split(',').filter(Boolean) || [],
         countries: searchParams.get('country')?.split(',').filter(Boolean) || [],
         cois: searchParams.get('coi')?.split(',').filter(Boolean) || [],
+        fileTypes: searchParams.get('fileType')?.split(',').filter(Boolean) || [],
         encryptionStatus: (searchParams.get('encrypted') as any) || 'all',
         sortBy: (searchParams.get('sortBy') as any) || 'title',
         sortOrder: (searchParams.get('sortOrder') as any) || 'asc',
@@ -97,11 +165,12 @@ export default function ResourceFilters({
 
     useEffect(() => {
         const params = new URLSearchParams();
-        
+
         if (filters.search) params.set('search', filters.search);
         if (filters.classifications.length > 0) params.set('classification', filters.classifications.join(','));
         if (filters.countries.length > 0) params.set('country', filters.countries.join(','));
         if (filters.cois.length > 0) params.set('coi', filters.cois.join(','));
+        if (filters.fileTypes.length > 0) params.set('fileType', filters.fileTypes.join(','));
         if (filters.encryptionStatus !== 'all') params.set('encrypted', filters.encryptionStatus);
         if (filters.sortBy !== 'title') params.set('sortBy', filters.sortBy);
         if (filters.sortOrder !== 'asc') params.set('sortOrder', filters.sortOrder);
@@ -109,7 +178,7 @@ export default function ResourceFilters({
         const currentParams = new URLSearchParams(window.location.search);
         const newParamsString = params.toString();
         const currentParamsString = currentParams.toString();
-        
+
         if (newParamsString !== currentParamsString) {
             const newUrl = newParamsString ? `?${newParamsString}` : '/resources';
             router.replace(newUrl, { scroll: false });
@@ -122,7 +191,7 @@ export default function ResourceFilters({
         setFilters(prev => ({ ...prev, [key]: value }));
     };
 
-    const toggleArrayFilter = (key: 'classifications' | 'countries' | 'cois', value: string) => {
+    const toggleArrayFilter = (key: 'classifications' | 'countries' | 'cois' | 'fileTypes', value: string) => {
         setFilters(prev => ({
             ...prev,
             [key]: prev[key].includes(value)
@@ -137,6 +206,7 @@ export default function ResourceFilters({
             classifications: [],
             countries: [],
             cois: [],
+            fileTypes: [],
             encryptionStatus: 'all',
             sortBy: 'title',
             sortOrder: 'asc',
@@ -164,52 +234,60 @@ export default function ResourceFilters({
         setFilters(prev => ({ ...prev, encryptionStatus: 'encrypted' }));
     };
 
-    const activeFilterCount = 
+    const activeFilterCount =
         (filters.search ? 1 : 0) +
         filters.classifications.length +
         filters.countries.length +
         filters.cois.length +
+        filters.fileTypes.length +
         (filters.encryptionStatus !== 'all' ? 1 : 0);
 
     // Active filter chips (for display at top)
     const activeFilters = useMemo(() => {
         const chips: Array<{ label: string; onRemove: () => void }> = [];
-        
+
         if (filters.search) {
             chips.push({
                 label: `Search: "${filters.search}"`,
                 onRemove: () => updateFilter('search', '')
             });
         }
-        
+
         filters.classifications.forEach(c => {
             chips.push({
                 label: c,
                 onRemove: () => toggleArrayFilter('classifications', c)
             });
         });
-        
+
         filters.countries.forEach(c => {
             chips.push({
                 label: c,
                 onRemove: () => toggleArrayFilter('countries', c)
             });
         });
-        
+
         filters.cois.forEach(c => {
             chips.push({
                 label: c,
                 onRemove: () => toggleArrayFilter('cois', c)
             });
         });
-        
+
+        filters.fileTypes.forEach(ft => {
+            chips.push({
+                label: ft,
+                onRemove: () => toggleArrayFilter('fileTypes', ft)
+            });
+        });
+
         if (filters.encryptionStatus !== 'all') {
             chips.push({
                 label: filters.encryptionStatus === 'encrypted' ? '🔐 Encrypted' : '📝 Unencrypted',
                 onRemove: () => updateFilter('encryptionStatus', 'all')
             });
         }
-        
+
         return chips;
     }, [filters]);
 
@@ -315,7 +393,14 @@ export default function ResourceFilters({
                                 </svg>
                             </Disclosure.Button>
                             <Disclosure.Panel className="px-4 pb-3 space-y-1.5">
-                                {CLASSIFICATIONS.map(classItem => {
+                                {ALL_CLASSIFICATIONS
+                                    .filter(classItem => {
+                                        // Only show classifications at or below user's clearance
+                                        const userClearance = userAttributes?.clearance || 'UNCLASSIFIED';
+                                        const accessibleLevels = CLEARANCE_HIERARCHY[userClearance] || ['UNCLASSIFIED'];
+                                        return accessibleLevels.includes(classItem.value);
+                                    })
+                                    .map(classItem => {
                                     const isSelected = filters.classifications.includes(classItem.value);
                                     return (
                                         <button
@@ -374,7 +459,7 @@ export default function ResourceFilters({
                                     {COUNTRIES.map(country => {
                                         const isSelected = filters.countries.includes(country.code);
                                         const isUserCountry = country.code === userAttributes?.country;
-                                        
+
                                         return (
                                             <button
                                                 key={country.code}
@@ -434,22 +519,29 @@ export default function ResourceFilters({
                                 </svg>
                             </Disclosure.Button>
                             <Disclosure.Panel className="px-4 pb-3 space-y-1.5">
-                                {COIS.map(coiItem => {
-                                    const isSelected = filters.cois.includes(coiItem.value);
-                                    const colorClasses = {
-                                        purple: 'bg-purple-50 text-purple-900 border-purple-400',
-                                        blue: 'bg-blue-50 text-blue-900 border-blue-400',
-                                        red: 'bg-red-50 text-red-900 border-red-400',
-                                        indigo: 'bg-indigo-50 text-indigo-900 border-indigo-400',
-                                        green: 'bg-green-50 text-green-900 border-green-400'
-                                    };
-                                    
-                                    return (
-                                        <button
-                                            key={coiItem.value}
-                                            type="button"
-                                            onClick={() => toggleArrayFilter('cois', coiItem.value)}
-                                            className={`relative w-full px-3 py-2 rounded-lg border-2 text-left transition-all transform hover:scale-102 ${
+                                {coiLoading ? (
+                                    <div className="text-center text-sm text-gray-500 py-2">Loading COIs...</div>
+                                ) : cois.length === 0 ? (
+                                    <div className="text-center text-sm text-gray-500 py-2">No COIs available</div>
+                                ) : (
+                                    cois.map(coiItem => {
+                                        const isSelected = filters.cois.includes(coiItem.value);
+                                        const colorClasses = {
+                                            purple: 'bg-purple-50 text-purple-900 border-purple-400',
+                                            blue: 'bg-blue-50 text-blue-900 border-blue-400',
+                                            red: 'bg-red-50 text-red-900 border-red-400',
+                                            indigo: 'bg-indigo-50 text-indigo-900 border-indigo-400',
+                                            green: 'bg-green-50 text-green-900 border-green-400',
+                                            amber: 'bg-amber-50 text-amber-900 border-amber-400',
+                                            gray: 'bg-gray-50 text-gray-900 border-gray-400'
+                                        };
+
+                                        return (
+                                            <button
+                                                key={coiItem.value}
+                                                type="button"
+                                                onClick={() => toggleArrayFilter('cois', coiItem.value)}
+                                                className={`relative w-full px-3 py-2 rounded-lg border-2 text-left transition-all transform hover:scale-102 ${
                                                 isSelected
                                                     ? colorClasses[coiItem.color as keyof typeof colorClasses]
                                                     : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
@@ -470,7 +562,66 @@ export default function ResourceFilters({
                                             </div>
                                         </button>
                                     );
-                                })}
+                                })
+                                )}
+                            </Disclosure.Panel>
+                        </>
+                    )}
+                </Disclosure>
+
+                {/* File Type Filter */}
+                <Disclosure>
+                    {({ open }) => (
+                        <>
+                            <Disclosure.Button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors">
+                                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                                    {t('filters.fileType')}
+                                    {filters.fileTypes.length > 0 && (
+                                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-800">
+                                            {filters.fileTypes.length}
+                                        </span>
+                                    )}
+                                </span>
+                                <svg
+                                    className={`${open ? 'rotate-180' : ''} h-4 w-4 text-gray-500 transition-transform`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </Disclosure.Button>
+                            <Disclosure.Panel className="px-4 pb-3">
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    {FILE_TYPES.map(fileType => {
+                                        const isSelected = filters.fileTypes.includes(fileType.value);
+
+                                        return (
+                                            <button
+                                                key={fileType.value}
+                                                type="button"
+                                                onClick={() => toggleArrayFilter('fileTypes', fileType.value)}
+                                                className={`relative px-2 py-2 rounded-lg border-2 text-left transition-all transform hover:scale-105 ${
+                                                    isSelected
+                                                        ? 'bg-teal-50 text-teal-900 border-teal-400 shadow-sm'
+                                                        : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                {isSelected && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center">
+                                                        <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="text-center">
+                                                    <div className="text-xl mb-0.5">{fileType.icon}</div>
+                                                    <div className="text-xs font-bold">{t(`fileTypes.${fileType.value}`)}</div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </Disclosure.Panel>
                         </>
                     )}
@@ -504,7 +655,7 @@ export default function ResourceFilters({
                                     { value: 'encrypted', label: 'ZTDF Encrypted', icon: '🔐' },
                                     { value: 'unencrypted', label: 'Unencrypted', icon: '📝' }
                                 ].map(option => (
-                                    <label 
+                                    <label
                                         key={option.value}
                                         className={`flex items-center px-2 py-1.5 rounded cursor-pointer transition-colors ${
                                             filters.encryptionStatus === option.value

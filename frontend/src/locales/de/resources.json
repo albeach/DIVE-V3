@@ -1,0 +1,202 @@
+{
+  "title": "Ressourcen",
+  "subtitle": "Koalitionsinformationsressourcen verwalten und zugreifen",
+  "list": {
+    "title": "Ressourcen-Browser",
+    "searchPlaceholder": "Ressourcen nach Titel, Klassifizierung oder Tags durchsuchen...",
+    "noResults": "Keine Ressourcen gefunden",
+    "totalResources": "{{count}} Ressourcen",
+    "showing": "Zeige {{start}}-{{end}} von {{total}}",
+    "loadMore": "Mehr laden",
+    "refresh": "Aktualisieren"
+  },
+  "filters": {
+    "title": "Filter",
+    "clearAll": "Alle löschen",
+    "classification": "Klassifizierung",
+    "releasability": "Freigabefähigkeit",
+    "coi": "Interessengemeinschaft",
+    "dateRange": "Datumsbereich",
+    "fileType": "Dateityp",
+    "encrypted": "Nur verschlüsselte Ressourcen",
+    "apply": "Filter anwenden",
+    "reset": "Zurücksetzen"
+  },
+  "fileTypes": {
+    "documents": "Dokumente",
+    "images": "Bilder",
+    "videos": "Videos",
+    "audio": "Audio",
+    "structured": "Strukturiert",
+    "archives": "Archive",
+    "text": "Text",
+    "code": "Code"
+  },
+  "table": {
+    "title": "Titel",
+    "classification": "Klassifizierung",
+    "releasability": "Freigabefähigkeit",
+    "created": "Erstellt",
+    "modified": "Geändert",
+    "actions": "Aktionen",
+    "view": "Ansehen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "download": "Herunterladen",
+    "requestAccess": "Zugriff anfordern"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "Keine Ergebnisse gefunden",
+      "description": "Wir konnten keine Dokumente finden, die \"{{query}}\" entsprechen. Versuchen Sie, Ihre Suchbegriffe oder Filter anzupassen.",
+      "clearSearch": "Suche löschen"
+    },
+    "noMatchingDocuments": {
+      "title": "Keine übereinstimmenden Dokumente",
+      "description": "Ihre aktuellen Filter kommen nicht mit Dokumenten überein. Versuchen Sie, Ihre Filterkriterien zu lockern.",
+      "clearFilters": "Filter löschen"
+    },
+    "error": {
+      "title": "Ein Fehler ist aufgetreten",
+      "description": "Wir haben einen Fehler beim Laden der Dokumente angetroffen. Versuchen Sie es erneut.",
+      "tryAgain": "Erneut versuchen"
+    }
+  },
+  "detail": {
+    "title": "Ressourcendetails",
+    "metadata": "Metadaten",
+    "resourceId": "Ressourcen-ID",
+    "createdBy": "Erstellt von",
+    "createdDate": "Erstellungsdatum",
+    "lastModified": "Zuletzt geändert",
+    "fileSize": "Dateigröße",
+    "contentType": "Inhaltstyp",
+    "accessLog": "Zugriffsprotokoll",
+    "noAccessHistory": "Kein Zugriffsverlauf verfügbar"
+  },
+  "upload": {
+    "title": "Ressource hochladen",
+    "dragDrop": "Dateien hierher ziehen und ablegen oder zum Durchsuchen klicken",
+    "selectFile": "Datei auswählen",
+    "maxSize": "Maximale Dateigröße: {{size}}MB",
+    "allowedTypes": "Zulässige Typen: {{types}}",
+    "metadata": {
+      "title": "Ressourcen-Metadaten",
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Ressourcentitel eingeben",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Ressourcenbeschreibung eingeben",
+      "classification": "Klassifizierungsstufe",
+      "releasability": "Freigabefähig für",
+      "coi": "Interessengemeinschaften",
+      "tags": "Tags",
+      "encryption": "Verschlüsselung"
+    },
+    "uploading": "Hochladen...",
+    "uploadProgress": "{{percent}}% hochgeladen",
+    "uploadSuccess": "Ressource erfolgreich hochgeladen",
+    "uploadError": "Fehler beim Hochladen der Ressource",
+    "cancel": "Upload abbrechen"
+  },
+  "access": {
+    "requesting": "Zugriff anfordern...",
+    "granted": "Zugriff gewährt",
+    "denied": "Zugriff verweigert",
+    "pending": "Zugriff ausstehend",
+    "reasonDenied": "Grund: {{reason}}",
+    "requestKey": "Entschlüsselungsschlüssel anfordern",
+    "keyReceived": "Entschlüsselungsschlüssel erhalten",
+    "decrypting": "Entschlüsseln...",
+    "decrypted": "Erfolgreich entschlüsselt"
+  },
+  "errors": {
+    "notFound": "Ressource nicht gefunden",
+    "accessDenied": "Sie haben keine Berechtigung, auf diese Ressource zuzugreifen",
+    "loadFailed": "Fehler beim Laden der Ressource",
+    "uploadFailed": "Fehler beim Hochladen der Ressource",
+    "deleteFailed": "Fehler beim Löschen der Ressource",
+    "insufficientClearance": "Unzureichende Freigabestufe",
+    "countryNotReleased": "Ressource nicht für Ihr Land freigegeben",
+    "coiNotMember": "Sie sind kein Mitglied der erforderlichen COI"
+  },
+  "breadcrumbs": {
+    "resources": "Ressourcen",
+    "upload": "Hochladen",
+    "detail": "Details"
+  },
+  "federation": {
+    "local": "Lokal",
+    "federated": "Föderiert"
+  },
+  "classifications": {
+    "unclassified": "OFFEN",
+    "restricted": "VS-NFD",
+    "confidential": "VS-VERTRAULICH",
+    "secret": "GEHEIM",
+    "topSecret": "STRENG GEHEIM"
+  },
+  "auth": {
+    "signInToView": "Anmelden, um Ressourcen zu sehen",
+    "needAuthentication": "Sie müssen authentifiziert sein, um auf Koalitionsressourcen zuzugreifen."
+  },
+  "sorting": {
+    "titleAZ": "Titel A-Z",
+    "titleZA": "Titel Z-A",
+    "newest": "Neueste",
+    "oldest": "Älteste"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Dokumente insgesamt",
+    "ztdfEncrypted": "ZTDF-verschlüsselt",
+    "local": "Lokal",
+    "federated": "Föderiert",
+    "classification": "Klassifizierung",
+    "instances": "Instanzen",
+    "accessRate": "Zugriffsrate",
+    "avgAge": "Durchschn. Alter",
+    "topCOIs": "Top COIs",
+    "coalition": "Koalition"
+  },
+  "viewModes": {
+    "grid": "Raster",
+    "list": "Liste",
+    "compact": "Kompakt"
+  },
+  "bulkActions": {
+    "selected": "ausgewählt",
+    "deselectAll": "Alle abwählen",
+    "selectAll": "Alle auswählen",
+    "export": "Exportieren",
+    "compare": "Vergleichen",
+    "compareTooltip": {
+      "selectMin": "Wählen Sie mindestens 2 Elemente zum Vergleichen aus",
+      "maxItems": "Kann nur bis zu 4 Elemente vergleichen",
+      "compareSelected": "Ausgewählte Elemente vergleichen"
+    }
+  },
+  "comparison": {
+    "title": "Ressourcen vergleichen",
+    "closeTooltip": "Schließen (Escape)",
+    "metadata": "Metadaten"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Noch keine Lesezeichen",
+      "description": "Markieren Sie Dokumente und Richtlinien für schnellen Zugriff. Klicken Sie auf das Lesezeichensymbol bei jeder Ressource, um sie hier zu speichern."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Erstellungsdatum",
+    "quickSelect": "Schnellauswahl",
+    "today": "Heute",
+    "last7Days": "Letzte 7 Tage",
+    "last30Days": "Letzte 30 Tage",
+    "last90Days": "Letzte 90 Tage",
+    "thisMonth": "Dieser Monat",
+    "lastMonth": "Letzter Monat",
+    "customRange": "Benutzerdefinierter Bereich",
+    "placeholder": "Nach Datumsbereich filtern",
+    "clickToStart": "Klicken Sie auf ein Datum, um die Auswahl zu starten",
+    "clickToComplete": "Klicken Sie auf ein anderes Datum, um den Bereich zu vervollständigen"
+  }
+}

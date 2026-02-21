@@ -72,16 +72,27 @@ export default function ComplianceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      router.push('/login');
+    }
+  }, [status, session, router]);
+
   useEffect(() => {
     if (status === 'loading') return;
     
+    // Only run on client-side
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     if (!session) {
-      router.push('/login');
       return;
     }
 
     async function fetchComplianceStatus() {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       
       try {
         const response = await fetch(`${backendUrl}/api/compliance/status`, {
@@ -143,76 +154,6 @@ export default function ComplianceDashboard() {
         { label: 'Compliance', href: null }
       ]}
     >
-      {/* Hero Section - PERFECT Compliance Achievement */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 80%, white 1px, transparent 1px)`,
-            backgroundSize: '50px 50px'
-          }} />
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-              <Shield className="w-12 h-12 text-white" />
-            </div>
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
-                {complianceData.badge} {complianceData.level} Compliance
-              </h1>
-              <p className="text-blue-100 text-lg">
-                NATO ACP-240 (A) Data-Centric Security
-              </p>
-            </div>
-          </div>
-
-          {/* Certification Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Target className="w-8 h-8 text-white/80" />
-                <span className="text-3xl font-bold text-white">{complianceData.percentage}%</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Compliance Rate</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <CheckCircle2 className="w-8 h-8 text-green-300" />
-                <span className="text-3xl font-bold text-white">{complianceData.compliantRequirements}/{complianceData.totalRequirements}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Requirements Met</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Award className="w-8 h-8 text-yellow-300" />
-                <span className="text-3xl font-bold text-white">{complianceData.testMetrics.total}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Tests Passing</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Server className="w-8 h-8 text-emerald-300" />
-                <span className="text-sm font-bold text-white uppercase">{complianceData.deploymentStatus.environment}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Deployment Status</p>
-            </div>
-          </div>
-
-          {/* Certification Badge */}
-          <div className="mt-8 inline-flex items-center gap-3 bg-white/20 backdrop-blur-md px-6 py-3 rounded-full border-2 border-white/30">
-            <Award className="w-5 h-5 text-yellow-300" />
-            <span className="text-white font-semibold">
-              Certificate ID: {complianceData.deploymentStatus.certificateId}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
@@ -220,11 +161,83 @@ export default function ComplianceDashboard() {
         </div>
       )}
 
-      {/* Key Achievements Section */}
+      {/* Quick Navigation Cards */}
+      <div className="mb-8 grid md:grid-cols-2 gap-6">
+        {/* Integration Guide Card */}
+        <Link href="/integration/federation-vs-object">
+          <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-amber-500 rounded-xl p-8 text-white shadow-2xl hover:shadow-3xl hover:scale-[1.03] transition-all duration-300 cursor-pointer h-full">
+            <div className="flex items-start gap-4">
+              <div className="p-4 bg-white/20 backdrop-blur-sm rounded-xl">
+                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-2xl font-bold">Standards Integration Guide</h3>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/30 backdrop-blur-sm animate-pulse">
+                    NEW
+                  </span>
+                </div>
+                <p className="text-white/90 mb-4 text-lg">
+                  Interactive tutorial: ADatP-5663 (Federation) × ACP-240 (Object)
+                </p>
+                <ul className="space-y-2 text-sm text-white/80 mb-4">
+                  <li className="flex items-center gap-2">
+                    <span className="text-white">✓</span>
+                    <span>8 interactive components</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-white">✓</span>
+                    <span>Side-by-side comparison views</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-white">✓</span>
+                    <span>Step-by-step decision replay</span>
+                  </li>
+                </ul>
+                <div className="flex items-center gap-2 text-lg font-bold">
+                  <span>Explore Now</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Classification Matrix Card */}
+        <Link href="/compliance/classifications">
+          <div className="bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl p-8 text-white shadow-2xl hover:shadow-3xl hover:scale-[1.03] transition-all duration-300 cursor-pointer h-full">
+            <div className="flex items-start gap-4">
+              <div className="p-4 bg-white/20 backdrop-blur-sm rounded-xl">
+                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-2xl font-bold mb-3">Classification Matrix</h3>
+                <p className="text-white/90 mb-4 text-lg">
+                  12-nation equivalency table (ACP-240 §4.3)
+                </p>
+                <div className="flex items-center gap-2 text-lg font-bold">
+                  <span>View Matrix</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Core Conformance Section */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
           <Zap className="w-7 h-7 text-yellow-500" />
-          Key Achievements
+          Core Conformance
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {complianceData.keyAchievements.map((achievement) => (
@@ -448,4 +461,3 @@ export default function ComplianceDashboard() {
     </PageLayout>
   );
 }
-

@@ -9,7 +9,9 @@
  * Collections optimized:
  * - idp_submissions: Status queries, SLA queries, tier filtering
  * - audit_logs: Time-series queries, event filtering
- * - resources: Resource lookup, classification filtering
+ * - resources: Resource lookup, classification filtering, COI filtering
+ * - decisions: User/resource decision history, allow/deny trending
+ * - key_releases: KAS event trending, per-resource audit, user key history
  * 
  * Expected improvements:
  * - 50-90% reduction in query time for indexed fields
@@ -17,8 +19,9 @@
  * - Improved performance under load
  */
 
-import { MongoClient, Db } from 'mongodb';
+import { Db } from 'mongodb';
 import dotenv from 'dotenv';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // Load environment variables
 dotenv.config();
@@ -144,6 +147,74 @@ const INDEX_DEFINITIONS = {
             keys: { encrypted: 1 },
             description: 'Filter encrypted vs plaintext resources',
         },
+        {
+            name: 'ztdf_policy_coi_idx',
+            keys: { 'ztdf.policy.securityLabel.COI': 1 },
+            description: 'Filter by COI membership (frequent search/filter pattern)',
+        },
+        {
+            name: 'ztdf_policy_classification_createdAt_idx',
+            keys: { 'ztdf.policy.securityLabel.classification': 1, createdAt: -1 },
+            description: 'Classification + time compound for dashboard and paginated queries',
+        },
+        {
+            name: 'ztdf_policy_releasabilityTo_createdAt_idx',
+            keys: { 'ztdf.policy.securityLabel.releasabilityTo': 1, createdAt: -1 },
+            description: 'Country releasability + time compound for search results',
+        },
+    ],
+
+    decisions: [
+        {
+            name: 'timestamp_ttl_idx',
+            keys: { timestamp: 1 },
+            expireAfterSeconds: 7776000, // 90 days
+            description: 'TTL index for decision log retention (90 days)',
+        },
+        {
+            name: 'subject_uniqueID_timestamp_idx',
+            keys: { 'subject.uniqueID': 1, timestamp: -1 },
+            description: 'User decision history (dashboard, audit trail)',
+        },
+        {
+            name: 'resource_resourceId_timestamp_idx',
+            keys: { 'resource.resourceId': 1, timestamp: -1 },
+            description: 'Resource access history (per-resource audit)',
+        },
+        {
+            name: 'decision_timestamp_idx',
+            keys: { decision: 1, timestamp: -1 },
+            description: 'Allow/deny trending and analytics',
+        },
+        {
+            name: 'subject_countryOfAffiliation_timestamp_idx',
+            keys: { 'subject.countryOfAffiliation': 1, timestamp: -1 },
+            description: 'Country-level access statistics',
+        },
+    ],
+
+    key_releases: [
+        {
+            name: 'timestamp_ttl_idx',
+            keys: { timestamp: 1 },
+            expireAfterSeconds: 7776000, // 90 days
+            description: 'TTL index for key release log retention (90 days)',
+        },
+        {
+            name: 'eventType_timestamp_idx',
+            keys: { eventType: 1, timestamp: -1 },
+            description: 'KAS event trending (KEY_RELEASED/KEY_DENIED)',
+        },
+        {
+            name: 'resourceId_timestamp_idx',
+            keys: { resourceId: 1, timestamp: -1 },
+            description: 'Per-resource KAS audit trail',
+        },
+        {
+            name: 'subjectUniqueID_timestamp_idx',
+            keys: { subjectUniqueID: 1, timestamp: -1 },
+            description: 'User key access history',
+        },
     ],
 };
 
@@ -153,7 +224,7 @@ const INDEX_DEFINITIONS = {
 async function createIndexesForCollection(
     db: Db,
     collectionName: string,
-    indexes: any[]
+    indexes: Record<string, unknown>[]
 ): Promise<void> {
     console.log(`\n📊 Optimizing collection: ${collectionName}`);
     console.log('─'.repeat(60));
@@ -184,7 +255,7 @@ async function createIndexesForCollection(
                 continue;
             }
 
-            const options: any = { name: indexDef.name };
+            const options: Record<string, unknown> = { name: indexDef.name };
             if (indexDef.unique) {
                 options.unique = true;
             }
@@ -274,15 +345,12 @@ async function optimizeDatabase(): Promise<void> {
     console.log('╚═════════════════════════════════════════════════════════╝');
     console.log(`\nConnecting to: ${MONGODB_URI}\n`);
 
-    let client: MongoClient | null = null;
-
     try {
-        // Connect to MongoDB
-        client = new MongoClient(MONGODB_URI);
-        await client.connect();
+        // Connect to MongoDB singleton
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db();
+        const db = getDb();
 
         // Create indexes for each collection
         for (const [collectionName, indexes] of Object.entries(INDEX_DEFINITIONS)) {
@@ -296,9 +364,9 @@ async function optimizeDatabase(): Promise<void> {
         console.log('║                  Optimization Complete                  ║');
         console.log('╚═════════════════════════════════════════════════════════╝');
         console.log('\n📋 Collections Optimized:');
-        console.log(`   • idp_submissions: ${INDEX_DEFINITIONS.idp_submissions.length} indexes`);
-        console.log(`   • audit_logs: ${INDEX_DEFINITIONS.audit_logs.length} indexes`);
-        console.log(`   • resources: ${INDEX_DEFINITIONS.resources.length} indexes`);
+        for (const [name, indexes] of Object.entries(INDEX_DEFINITIONS)) {
+            console.log(`   • ${name}: ${indexes.length} indexes`);
+        }
         console.log('\n💡 Tips:');
         console.log('   • Monitor query performance using .explain()');
         console.log('   • Check index usage with db.collection.aggregate([{$indexStats:{}}])');
@@ -309,10 +377,8 @@ async function optimizeDatabase(): Promise<void> {
         console.error('\n❌ Error during optimization:', error);
         process.exit(1);
     } finally {
-        if (client) {
-            await client.close();
-            console.log('Disconnected from MongoDB\n');
-        }
+        // Singleton manages lifecycle - no need to close
+        console.log('Optimization cleanup complete\n');
     }
 }
 
@@ -330,4 +396,3 @@ if (require.main === module) {
 }
 
 export { optimizeDatabase, INDEX_DEFINITIONS };
-

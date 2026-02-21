@@ -1,0 +1,47 @@
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install curl for health checks (required for Docker health check commands)
+# Best practice: Use proper HTTP client instead of BusyBox wget workarounds
+RUN apk add --no-cache curl ca-certificates
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# Don't copy source code - it will be mounted as volume
+# This allows hot reload during development
+
+# Create logs directory and set permissions
+RUN mkdir -p logs && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 kasuser && \
+    chown -R kasuser:nodejs /app
+
+USER kasuser
+
+EXPOSE 8080
+
+ENV KAS_PORT=8080
+ENV NODE_ENV=development
+
+# Development mode with hot reload (tsx watch)
+CMD ["npm", "run", "dev"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

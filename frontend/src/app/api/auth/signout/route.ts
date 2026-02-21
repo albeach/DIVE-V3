@@ -16,14 +16,24 @@ import { sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
     try {
         console.log('[DIVE] Server-side logout: Cleaning up database sessions');
 
         // Get session token from cookie
+        // CRITICAL FIX: Use correct cookie name that matches auth.ts config
         const cookieStore = await cookies();
-        const sessionToken = cookieStore.get('__Secure-next-auth.session-token')?.value ||
-            cookieStore.get('next-auth.session-token')?.value;
+        const sessionToken =
+            cookieStore.get('__Secure-authjs.session-token')?.value || // Production (secure)
+            cookieStore.get('authjs.session-token')?.value;            // Development
+
+        console.log('[DIVE] Cookie name lookup:', {
+            secureName: '__Secure-authjs.session-token',
+            regularName: 'authjs.session-token',
+            found: !!sessionToken
+        });
 
         if (sessionToken) {
             // Delete this specific session from database
@@ -32,13 +42,9 @@ export async function POST(request: NextRequest) {
                 .where(eq(sessions.sessionToken, sessionToken));
 
             console.log('[DIVE] Deleted session from database:', sessionToken.substring(0, 8) + '...');
+        } else {
+            console.warn('[DIVE] No session token found in cookies - cannot delete session');
         }
-
-        // Also delete ALL expired sessions (cleanup)
-        const now = new Date();
-        await db
-            .delete(sessions)
-            .where(eq(sessions.expires, now));  // This is a placeholder - need proper less-than comparison
 
         console.log('[DIVE] Logout cleanup complete');
 
@@ -57,5 +63,3 @@ export async function GET(request: NextRequest) {
     // Support GET for direct browser access if needed
     return POST(request);
 }
-
-

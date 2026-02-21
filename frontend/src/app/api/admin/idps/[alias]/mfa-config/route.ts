@@ -1,0 +1,109 @@
+/**
+ * Admin IdP MFA Config API Route
+ *
+ * Proxy for backend IdP MFA configuration endpoint
+ * GET - Get MFA configuration
+ * PUT - Update MFA configuration
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
+
+const BACKEND_URL = getBackendUrl();
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ alias: string }> }
+): Promise<NextResponse> {
+    try {
+        const { alias } = await params;
+
+        const validation = await validateSession();
+        if (!validation.isValid) {
+            return NextResponse.json(
+                { error: 'Unauthorized', message: validation.error || 'Session invalid' },
+                { status: 401 }
+            );
+        }
+
+        const tokens = await getSessionTokens();
+
+        const response = await fetch(`${BACKEND_URL}/api/admin/idps/${alias}/mfa-config`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${tokens.accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            cache: 'no-store',
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            return NextResponse.json(
+                { error: 'BackendError', message: error.message || `Backend returned ${response.status}` },
+                { status: response.status }
+            );
+        }
+
+        const data = await response.json();
+        return NextResponse.json(data);
+
+    } catch (error) {
+        console.error('[AdminIdPMFAConfigAPI] GET Error:', error);
+        return NextResponse.json(
+            { error: 'InternalError', message: error instanceof Error ? error.message : 'Internal server error' },
+            { status: 500 }
+        );
+    }
+}
+
+export async function PUT(
+    request: NextRequest,
+    { params }: { params: Promise<{ alias: string }> }
+): Promise<NextResponse> {
+    try {
+        const { alias } = await params;
+
+        const validation = await validateSession();
+        if (!validation.isValid) {
+            return NextResponse.json(
+                { error: 'Unauthorized', message: validation.error || 'Session invalid' },
+                { status: 401 }
+            );
+        }
+
+        const tokens = await getSessionTokens();
+        const body = await request.json();
+
+        const response = await fetch(`${BACKEND_URL}/api/admin/idps/${alias}/mfa-config`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${tokens.accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            return NextResponse.json(
+                { error: 'BackendError', message: error.message || `Backend returned ${response.status}` },
+                { status: response.status }
+            );
+        }
+
+        const data = await response.json();
+        return NextResponse.json(data);
+
+    } catch (error) {
+        console.error('[AdminIdPMFAConfigAPI] PUT Error:', error);
+        return NextResponse.json(
+            { error: 'InternalError', message: error instanceof Error ? error.message : 'Internal server error' },
+            { status: 500 }
+        );
+    }
+}
+

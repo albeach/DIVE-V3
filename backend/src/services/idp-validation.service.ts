@@ -1,14 +1,14 @@
 /**
  * @file idp-validation.service.ts
  * @description IdP configuration validation service
- * 
+ *
  * Phase 1: Automated security validation of IdP submissions
- * 
+ *
  * Validates:
  * - TLS version and cipher strength
  * - Cryptographic algorithms (JWKS for OIDC, XML signatures for SAML)
  * - Endpoint reachability
- * 
+ *
  * Rejects:
  * - TLS < 1.2
  * - Weak algorithms (MD5, SHA-1 in strict mode)
@@ -17,6 +17,7 @@
 
 import * as tls from 'tls';
 import * as https from 'https';
+import * as fs from 'fs';
 import axios from 'axios';
 import { URL } from 'url';
 import { logger } from '../utils/logger';
@@ -52,7 +53,7 @@ const TLS_VERSION_MAP: Record<string, number> = {
 
 /**
  * IdP Validation Service
- * 
+ *
  * Performs automated security checks on IdP configurations
  * before allowing submission for admin approval.
  */
@@ -64,17 +65,64 @@ class IdPValidationService {
   }
 
   /**
+   * Translate external URL to internal container address for validation
+   * In containerized environments, external localhost URLs need to be translated
+   * to internal container names for proper validation
+   *
+   * @param url - External URL to translate
+   * @param instanceCode - Instance code (e.g., 'PRT', 'FRA')
+   * @returns Translated URL for internal validation
+   */
+  private translateUrlForContainerValidation(url: string, instanceCode?: string): string {
+    // Check if we're in a containerized environment (has DIVE_CONTAINERIZED env var or is running in Docker)
+    const isContainerized = process.env.DIVE_CONTAINERIZED === 'true' ||
+      fs.existsSync('/.dockerenv') ||
+      process.env.HOSTNAME?.includes('dive-');
+
+    if (!isContainerized) {
+      return url; // Use original URL for non-containerized environments
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+
+      // If it's localhost with a port that matches spoke Keycloak pattern (8xxx)
+      if (parsedUrl.hostname === 'localhost' && parsedUrl.port && instanceCode) {
+        const port = parseInt(parsedUrl.port);
+        // Spoke Keycloak ports are typically 8xxx (e.g., 8467 for PRT)
+        if (port >= 8000 && port < 9000) {
+          // Translate to internal container name: {instanceCode}-keycloak-{instanceCode}-1
+          const containerName = `${instanceCode.toLowerCase()}-keycloak-${instanceCode.toLowerCase()}-1`;
+          const internalUrl = `https://${containerName}:8443${parsedUrl.pathname}`;
+          logger.debug('Translated URL for container validation', {
+            original: url,
+            translated: internalUrl,
+            instanceCode,
+            containerName
+          });
+          return internalUrl;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to translate URL for container validation', { url, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+
+    return url; // Fallback to original URL
+  }
+
+  /**
    * Validate TLS version and cipher strength
-   * 
+   *
    * @param url - The URL to check (IdP issuer or SSO endpoint)
+   * @param instanceCode - Optional instance code for container URL translation
    * @returns TLS validation results with scoring
-   * 
+   *
    * Scoring:
    * - TLS 1.3 = 15 points
    * - TLS 1.2 = 12 points
    * - TLS < 1.2 = 0 points (fail)
    */
-  async validateTLS(url: string): Promise<ITLSCheckResult> {
+  async validateTLS(url: string, instanceCode?: string): Promise<ITLSCheckResult> {
     const startTime = Date.now();
     logger.debug('Validating TLS for URL', { url });
 
@@ -89,10 +137,21 @@ class IdPValidationService {
     };
 
     try {
+      // Translate URL for containerized environments if needed
+      const translatedUrl = this.translateUrlForContainerValidation(url, instanceCode);
+
       // Parse URL to extract host and port
-      const parsedUrl = new URL(url);
+      const parsedUrl = new URL(translatedUrl);
       const host = parsedUrl.hostname;
       const port = parseInt(parsedUrl.port || '443', 10);
+
+      logger.debug('Validating TLS connection', {
+        originalUrl: url,
+        translatedUrl,
+        host,
+        port,
+        instanceCode
+      });
 
       // Perform TLS handshake
       const tlsResult = await this.performTLSHandshake(host, port);
@@ -119,7 +178,7 @@ class IdPValidationService {
         );
       } else {
         result.pass = true;
-        
+
         // Score based on TLS version
         if (tlsVersionNum >= 1.3) {
           result.score = 15;
@@ -173,13 +232,14 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error('TLS validation failed', { url, error: error.message, durationMs: duration });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('TLS validation failed', { url, error: errorMessage, durationMs: duration });
 
       result.pass = false;
       result.score = 0;
-      result.errors.push(`TLS connection failed: ${error.message}`);
+      result.errors.push(`TLS connection failed: ${errorMessage}`);
 
       return result;
     }
@@ -187,7 +247,7 @@ class IdPValidationService {
 
   /**
    * Perform TLS handshake with target host
-   * 
+   *
    * @private
    */
   private performTLSHandshake(
@@ -255,7 +315,7 @@ class IdPValidationService {
 
   /**
    * Check if cipher suite is considered weak
-   * 
+   *
    * @private
    */
   private isWeakCipher(cipher: string): boolean {
@@ -274,10 +334,10 @@ class IdPValidationService {
 
   /**
    * Validate cryptographic algorithms in OIDC JWKS
-   * 
+   *
    * @param jwksUrl - The JWKS endpoint URL
    * @returns Algorithm validation results with scoring
-   * 
+   *
    * Scoring:
    * - All SHA-256+ = 25 points
    * - Contains SHA-1 = 10 points (warning)
@@ -313,7 +373,7 @@ class IdPValidationService {
 
       // Extract algorithms from keys
       const algorithms: string[] = jwks.keys
-        .map((key: any) => key.alg)
+        .map((key: { alg: string }) => key.alg)
         .filter((alg: string | undefined): alg is string => !!alg); // Filter out undefined
 
       result.algorithms = algorithms;
@@ -328,7 +388,7 @@ class IdPValidationService {
         result.score = 0;
         result.violations = deniedFound.map(alg => `Denied algorithm: ${alg}`);
         result.recommendations.push('Remove weak algorithms and use RS256, RS512, ES256, or PS256');
-        
+
         const duration = Date.now() - startTime;
         logger.warn('OIDC algorithms validation failed - denied algorithms found', {
           jwksUrl,
@@ -378,17 +438,18 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('OIDC algorithms validation error', {
         jwksUrl,
-        error: error.message,
+        error: errorMessage,
         durationMs: duration,
       });
 
       result.pass = false;
       result.score = 0;
-      result.violations = [`Failed to fetch JWKS: ${error.message}`];
+      result.violations = [`Failed to fetch JWKS: ${errorMessage}`];
 
       return result;
     }
@@ -396,7 +457,7 @@ class IdPValidationService {
 
   /**
    * Validate cryptographic algorithms in SAML metadata
-   * 
+   *
    * @param signatureAlgorithm - Signature algorithm URI from SAML metadata
    * @returns Algorithm validation results with scoring
    */
@@ -477,7 +538,7 @@ class IdPValidationService {
 
   /**
    * Check endpoint reachability
-   * 
+   *
    * @param url - The endpoint URL to check
    * @returns Endpoint check results with scoring
    */
@@ -521,16 +582,17 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Unknown error';
       result.latency_ms = duration;
       result.reachable = false;
       result.score = 0;
-      result.errors.push(`Endpoint unreachable: ${error.message}`);
+      result.errors.push(`Endpoint unreachable: ${errorMessage}`);
 
       logger.error('Endpoint reachability check failed', {
         url,
-        error: error.message,
+        error: errorMessage,
         latencyMs: duration,
       });
 
@@ -539,6 +601,8 @@ class IdPValidationService {
   }
 }
 
-// Export singleton instance
-export const idpValidationService = new IdPValidationService();
+// Export class for testing with custom configs
+export { IdPValidationService };
 
+// Export singleton instance for production use
+export const idpValidationService = new IdPValidationService();

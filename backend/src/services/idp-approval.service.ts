@@ -11,11 +11,13 @@
  * - Auto-reject for high risk (<50 points) or detailed review
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 import { keycloakAdminService } from './keycloak-admin.service';
 import { IIdPSubmission, IApprovalResponse } from '../types/admin.types';
 import { IApprovalDecision, SLAStatus, IRiskScoringConfig } from '../types/risk-scoring.types';
+import { IIdPCreateRequest } from '../types/keycloak.types';
 
 /**
  * Default approval configuration
@@ -35,46 +37,17 @@ const DEFAULT_APPROVAL_CONFIG: IRiskScoringConfig = {
     maxPatchingDays: parseInt(process.env.MAX_PATCHING_DAYS || '90', 10),
 };
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = 'dive-v3';
 const SUBMISSIONS_COLLECTION = 'idp_submissions';
 
 class IdPApprovalService {
-    private client: MongoClient | null = null;
-    private db: Db | null = null;
     private config: IRiskScoringConfig = DEFAULT_APPROVAL_CONFIG;
-
-    /**
-     * Connect to MongoDB
-     */
-    private async connect(): Promise<void> {
-        if (this.client && this.db) {
-            return;
-        }
-
-        try {
-            this.client = new MongoClient(MONGODB_URL);
-            await this.client.connect();
-            this.db = this.client.db(DB_NAME);
-
-            logger.debug('Connected to MongoDB for IdP approvals');
-        } catch (error) {
-            logger.error('Failed to connect to MongoDB', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw new Error('Database connection failed');
-        }
-    }
 
     /**
      * Get submissions collection
      */
-    private async getCollection(): Promise<Collection> {
-        await this.connect();
-        if (!this.db) {
-            throw new Error('Database not initialized');
-        }
-        return this.db.collection(SUBMISSIONS_COLLECTION);
+    private getCollection(): Collection {
+        const db = getDb();
+        return db.collection(SUBMISSIONS_COLLECTION);
     }
 
     /**
@@ -83,7 +56,7 @@ class IdPApprovalService {
      */
     async submitIdPForApproval(submission: Omit<IIdPSubmission, 'submissionId' | 'submittedAt' | 'status'>): Promise<string> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submissionId = `sub-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
@@ -116,7 +89,7 @@ class IdPApprovalService {
      */
     async getPendingIdPs(): Promise<IIdPSubmission[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submissions = await collection
                 .find({ status: 'pending' })
@@ -137,7 +110,7 @@ class IdPApprovalService {
      */
     async getAllSubmissions(): Promise<IIdPSubmission[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submissions = await collection
                 .find({})
@@ -158,7 +131,7 @@ class IdPApprovalService {
      */
     async getSubmissionByAlias(alias: string): Promise<IIdPSubmission | null> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submission = await collection.findOne({ alias });
 
@@ -182,7 +155,7 @@ class IdPApprovalService {
      */
     async approveIdP(alias: string, reviewedBy: string): Promise<IApprovalResponse> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Get submission
             const submission = await collection.findOne({ alias, status: 'pending' }) as any;
@@ -197,7 +170,7 @@ class IdPApprovalService {
                 protocol: submission.protocol
             });
 
-            const createRequest: any = {
+            const createRequest: IIdPCreateRequest = {
                 alias: submission.alias,
                 displayName: submission.displayName,
                 description: submission.description,
@@ -217,6 +190,14 @@ class IdPApprovalService {
             }
 
             logger.info('IdP created in Keycloak', { alias: createdAlias });
+
+            // Federation relationships are now managed by hub-spoke-registry.service.ts
+            // Federation partners are registered via POST /api/federation/register
+            // No need to update static registry - MongoDB is the SSOT
+            logger.debug('Federation managed by hub-spoke-registry service', {
+                alias,
+                isFederationIdP: alias.includes('-federation') || alias.endsWith('-federation')
+            });
 
             // Update submission status
             await collection.updateOne(
@@ -255,7 +236,7 @@ class IdPApprovalService {
      */
     async rejectIdP(alias: string, reason: string, reviewedBy: string): Promise<IApprovalResponse> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Get submission
             const submission = await collection.findOne({ alias, status: 'pending' });
@@ -306,7 +287,7 @@ class IdPApprovalService {
      */
     async getApprovalHistory(alias: string): Promise<IIdPSubmission[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const history = await collection
                 .find({ alias })
@@ -333,7 +314,7 @@ class IdPApprovalService {
      */
     async processSubmission(submissionId: string): Promise<IApprovalDecision> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Get submission
             const submission = await collection.findOne({ submissionId }) as any;
@@ -446,8 +427,8 @@ class IdPApprovalService {
 
                 // Collect critical issues
                 const criticalIssues = riskScore.factors
-                    .filter((f: any) => f.score === 0 && f.maxScore > 0)
-                    .map((f: any) => `${f.factor}: ${f.concerns.join(', ')}`);
+                    .filter((f: { score: number; maxScore: number; factor: string; concerns: string[] }) => f.score === 0 && f.maxScore > 0)
+                    .map((f: { score: number; maxScore: number; factor: string; concerns: string[] }) => `${f.factor}: ${f.concerns.join(', ')}`);
 
                 decision = {
                     action: 'auto-reject',
@@ -533,7 +514,7 @@ class IdPApprovalService {
      */
     async updateSLAStatus(): Promise<number> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
             const now = new Date();
 
             // Get all pending submissions with SLA deadlines
@@ -602,7 +583,7 @@ class IdPApprovalService {
      */
     async getSubmissionsBySLAStatus(slaStatus: SLAStatus): Promise<IIdPSubmission[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submissions = await collection
                 .find({
@@ -629,7 +610,7 @@ class IdPApprovalService {
      */
     async getFastTrackSubmissions(): Promise<IIdPSubmission[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             const submissions = await collection
                 .find({
@@ -650,16 +631,12 @@ class IdPApprovalService {
 
     /**
      * Close database connection
+     * @deprecated MongoDB singleton handles connection lifecycle
      */
     async close(): Promise<void> {
-        if (this.client) {
-            await this.client.close();
-            this.client = null;
-            this.db = null;
-        }
+        // No-op: MongoDB singleton manages connection lifecycle
     }
 }
 
 // Export singleton instance
 export const idpApprovalService = new IdPApprovalService();
-

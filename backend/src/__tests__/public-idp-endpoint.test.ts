@@ -389,4 +389,3 @@ describe('Public IdP Endpoint - GET /api/idps/public', () => {
         });
     });
 });
-

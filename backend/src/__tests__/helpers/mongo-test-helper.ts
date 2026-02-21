@@ -77,28 +77,27 @@ export class MongoTestHelper {
             return;
         }
 
-        try {
-            // Drop ALL collections to ensure clean state
-            const collections = await this.db.listCollections().toArray();
-            for (const collection of collections) {
-                await this.db.collection(collection.name).drop().catch(() => {
-                    // Ignore errors if collection doesn't exist
-                });
-            }
-            console.log(`Database cleared - dropped ${collections.length} collections`);
+        // Only clear test-owned collections. Preserve globally-seeded infrastructure
+        // collections (trusted_issuers, coi_definitions, coi_keys) that parallel
+        // workers depend on.
+        const PRESERVED_COLLECTIONS = new Set([
+            'trusted_issuers',
+            'coi_definitions',
+            'coi_keys',
+            'clearance_equivalency',
+        ]);
 
-            // Recreate indexes after dropping
-            if (collections.length > 0) {
-                await this.createIndexes();
+        try {
+            const collections = await this.db.listCollections().toArray();
+            let cleared = 0;
+            for (const collection of collections) {
+                if (!PRESERVED_COLLECTIONS.has(collection.name)) {
+                    await this.db.collection(collection.name).deleteMany({});
+                    cleared++;
+                }
             }
         } catch (error) {
             console.error('Error clearing database:', error);
-            // Fallback: try deleteMany
-            const collections = await this.db.listCollections().toArray();
-            for (const collection of collections) {
-                await this.db.collection(collection.name).deleteMany({});
-            }
-            console.log('Database cleared using deleteMany fallback');
         }
     }
 
@@ -212,6 +211,3 @@ export async function teardownMongoDB(): Promise<void> {
     await helper.disconnect();
     globalHelper = null;
 }
-
-
-

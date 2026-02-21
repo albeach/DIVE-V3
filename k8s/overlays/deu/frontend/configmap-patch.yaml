@@ -1,0 +1,18 @@
+# =============================================================================
+# DIVE V3 Frontend - DEU ConfigMap Patch
+# =============================================================================
+# Patches frontend ConfigMap with DEU-specific values
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dive-v3-deu
+data:
+  nextauth_url: "https://deu-app.prosecurity.biz"
+  api_url: "https://deu-api.prosecurity.biz"
+  keycloak_url: "https://deu-idp.prosecurity.biz"
+  keycloak_realm: "dive-v3-broker-deu"
+  keycloak_client_id: "dive-v3-client-broker"
+  keycloak_issuer: "https://keycloak.dive-v3-deu.svc.cluster.local:8443/realms/dive-v3-broker-deu"

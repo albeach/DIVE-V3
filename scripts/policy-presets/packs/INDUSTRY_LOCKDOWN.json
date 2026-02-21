@@ -1,0 +1,100 @@
+{
+  "policyPack": "INDUSTRY_LOCKDOWN",
+  "version": "1.0",
+  "description": "Restrict industry partner access with CONFIDENTIAL cap and strict controls",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "tenantConfigs": {
+    "USA": {
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL",
+      "industry_allowed_cois": [
+        "INDUSTRY-USA",
+        "NATO-UNCLASS"
+      ],
+      "industry_require_mfa": true,
+      "industry_max_session_hours": 4
+    },
+    "FRA": {
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL",
+      "industry_allowed_cois": [
+        "INDUSTRY-FRA"
+      ],
+      "industry_require_mfa": true,
+      "industry_max_session_hours": 4
+    },
+    "GBR": {
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL",
+      "industry_allowed_cois": [
+        "INDUSTRY-GBR",
+        "INDUSTRY-UK"
+      ],
+      "industry_require_mfa": true,
+      "industry_max_session_hours": 4
+    },
+    "DEU": {
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL",
+      "industry_allowed_cois": [
+        "INDUSTRY-DEU"
+      ],
+      "industry_require_mfa": true,
+      "industry_max_session_hours": 4
+    }
+  },
+  "coiDefinitions": {
+    "INDUSTRY-USA": {
+      "name": "US Industry Partners",
+      "members": [
+        "USA"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "requires_mfa": true,
+      "max_session_hours": 4,
+      "description": "Defense contractors and industry partners (US)"
+    },
+    "INDUSTRY-FRA": {
+      "name": "French Industry Partners",
+      "members": [
+        "FRA"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "requires_mfa": true,
+      "max_session_hours": 4,
+      "description": "Defense contractors and industry partners (France)"
+    },
+    "INDUSTRY-GBR": {
+      "name": "UK Industry Partners",
+      "members": [
+        "GBR"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "requires_mfa": true,
+      "max_session_hours": 4,
+      "description": "Defense contractors and industry partners (United Kingdom)"
+    },
+    "INDUSTRY-DEU": {
+      "name": "German Industry Partners",
+      "members": [
+        "DEU"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "requires_mfa": true,
+      "max_session_hours": 4,
+      "description": "Defense contractors and industry partners (Germany)"
+    }
+  },
+  "metadata": {
+    "use_case": "Industry partner access control with strict classification and COI restrictions",
+    "target_tenants": [
+      "USA",
+      "FRA",
+      "GBR",
+      "DEU"
+    ],
+    "deployment_time": "< 10 seconds",
+    "reversible": true
+  }
+}

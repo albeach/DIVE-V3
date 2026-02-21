@@ -100,6 +100,7 @@ export const compressionStats = (req: Request, res: Response, next: NextFunction
 
     // Intercept res.write to track original size
     const originalWrite = res.write;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express res.write has complex overloaded signatures
     res.write = function (chunk: any, ...args: any[]): boolean {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
@@ -107,6 +108,7 @@ export const compressionStats = (req: Request, res: Response, next: NextFunction
         return originalWrite.apply(res, [chunk, ...args] as any);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express res.end has complex overloaded signatures
     res.end = function (chunk: any, ...args: any[]): any {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
@@ -151,4 +153,3 @@ export const getCompressionConfig = (): {
         strategy: 'default',
     };
 };
-

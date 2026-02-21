@@ -1,11 +1,16 @@
 /**
  * Session Status Indicator Component
- * 
+ *
  * Displays real-time session status to user:
  * - Time remaining until token expiry
  * - Visual color coding (green/yellow/red)
  * - Session health status
- * 
+ *
+ * SECURITY: Uses server-side database sessions (DrizzleAdapter)
+ * - No client-side JWT parsing
+ * - Session validation happens via heartbeat API
+ * - Database session expiry used as fallback
+ *
  * Week 3.4: Enhanced Session Management
  */
 
@@ -42,7 +47,7 @@ export function SessionStatusIndicator() {
 
         // Function to calculate session status using server-validated data
         const updateStatus = () => {
-            // Prefer server-validated session health
+            // PREFERRED: Use server-validated session health from heartbeat API
             if (sessionHealth && sessionHealth.isValid) {
                 const now = Date.now() - sessionHealth.serverTimeOffset; // Adjust for clock skew
                 const timeRemaining = Math.max(0, Math.floor((sessionHealth.expiresAt - now) / 1000));
@@ -67,41 +72,11 @@ export function SessionStatusIndicator() {
                 return;
             }
 
-            // Fallback to client-side JWT parsing
-            const accessToken = (session as any).accessToken;
-            if (!accessToken) {
-                setSessionStatus({
-                    timeRemaining: 0,
-                    expiresAt: null,
-                    status: 'expired',
-                });
-                return;
-            }
-
-            try {
-                const parts = accessToken.split('.');
-                if (parts.length !== 3) {
-                    setSessionStatus({
-                        timeRemaining: 0,
-                        expiresAt: null,
-                        status: 'expired',
-                    });
-                    return;
-                }
-
-                const payload = JSON.parse(atob(parts[1]));
-                const exp = payload.exp;
-
-                if (!exp) {
-                    setSessionStatus({
-                        timeRemaining: 0,
-                        expiresAt: null,
-                        status: 'unknown',
-                    });
-                    return;
-                }
-
-                const expiresAt = new Date(exp * 1000);
+            // FALLBACK: Use database session expiry (NextAuth session.expires)
+            // This is available when using database sessions with DrizzleAdapter
+            const sessionExpires = (session as any).expires;
+            if (sessionExpires) {
+                const expiresAt = new Date(sessionExpires);
                 const now = Date.now();
                 const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now) / 1000));
 
@@ -122,96 +97,66 @@ export function SessionStatusIndicator() {
                     expiresAt,
                     status,
                 });
-            } catch (error) {
-                console.error('[SessionStatus] Error parsing token:', error);
-                setSessionStatus({
-                    timeRemaining: 0,
-                    expiresAt: null,
-                    status: 'unknown',
-                });
+                return;
             }
+
+            // DEFAULT: If no session data yet, assume healthy (waiting for heartbeat)
+            // This prevents showing "expired" flash during initial load
+            setSessionStatus({
+                timeRemaining: 3600, // Assume 1 hour as default
+                expiresAt: null,
+                status: 'healthy',
+            });
         };
 
-        // Update immediately
         updateStatus();
 
-        // Only update every second when page is visible (performance optimization)
-        if (isPageVisible) {
-            const interval = setInterval(updateStatus, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [session, authStatus, sessionHealth, isPageVisible]);
+        // Update every second when page is visible
+        const interval = isPageVisible ? setInterval(updateStatus, 1000) : null;
 
-    // Don't render if not authenticated
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [authStatus, session, sessionHealth, isPageVisible]);
+
+    // Don't render anything if not authenticated
     if (authStatus !== 'authenticated') {
         return null;
     }
 
-    // Format time remaining as MM:SS
-    const formatTime = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    // Status colors and icons
-    const statusConfig = {
-        healthy: {
-            color: 'text-green-600',
-            bg: 'bg-green-100',
-            border: 'border-green-300',
-            icon: '🟢',
-            label: 'Active',
-        },
-        warning: {
-            color: 'text-yellow-600',
-            bg: 'bg-yellow-100',
-            border: 'border-yellow-300',
-            icon: '🟡',
-            label: 'Expiring Soon',
-        },
-        critical: {
-            color: 'text-red-600',
-            bg: 'bg-red-100',
-            border: 'border-red-300',
-            icon: '🔴',
-            label: 'Expiring!',
-        },
-        expired: {
-            color: 'text-gray-600',
-            bg: 'bg-gray-100',
-            border: 'border-gray-300',
-            icon: '⚫',
-            label: 'Expired',
-        },
-        unknown: {
-            color: 'text-gray-600',
-            bg: 'bg-gray-100',
-            border: 'border-gray-300',
-            icon: '❓',
-            label: 'Unknown',
-        },
-    };
-
-    const config = statusConfig[sessionStatus.status];
-
     return (
-        <div 
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md border ${config.bg} ${config.border} transition-all duration-300`}
-            title={sessionStatus.expiresAt ? `Expires at ${sessionStatus.expiresAt.toLocaleTimeString()}` : 'Session status unknown'}
-        >
-            <span className="text-sm">{config.icon}</span>
-            <div className="flex flex-col">
-                <span className={`text-xs font-medium ${config.color}`}>
-                    {config.label}
-                </span>
-                {sessionStatus.status !== 'unknown' && sessionStatus.status !== 'expired' && (
-                    <span className={`text-xs font-mono ${config.color}`}>
-                        {formatTime(sessionStatus.timeRemaining)}
-                    </span>
-                )}
-            </div>
+        <div className="flex items-center gap-2 text-sm">
+            <StatusDot status={sessionStatus.status} />
+            <span className="hidden sm:inline">
+                {formatTimeRemaining(sessionStatus.timeRemaining)}
+            </span>
         </div>
     );
 }
 
+function StatusDot({ status }: { status: SessionStatus['status'] }) {
+    const colors = {
+        healthy: 'bg-green-500',
+        warning: 'bg-yellow-500',
+        critical: 'bg-red-500 animate-pulse',
+        expired: 'bg-gray-500',
+        unknown: 'bg-gray-400',
+    };
+
+    return (
+        <span
+            className={`w-2 h-2 rounded-full ${colors[status]}`}
+            title={`Session status: ${status}`}
+        />
+    );
+}
+
+function formatTimeRemaining(seconds: number): string {
+    if (seconds <= 0) return 'Expired';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+// Export for testing
+export { formatTimeRemaining, StatusDot };

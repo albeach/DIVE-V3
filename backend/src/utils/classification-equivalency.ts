@@ -105,7 +105,30 @@ export const CLASSIFICATION_EQUIVALENCY_TABLE: IClassificationEquivalency[] = [
         },
         displayOrder: 1,
         accessControl: {
-            minClearanceRequired: 'CONFIDENTIAL'
+            minClearanceRequired: 'RESTRICTED'
+        }
+    },
+
+    // Level 1.5: Restricted (DIVE V3 standard)
+    {
+        natoLevel: 'RESTRICTED',
+        nationalEquivalents: {
+            NATO: 'NATO RESTRICTED',
+            USA: 'RESTRICTED', // For Official Use Only
+            GBR: 'OFFICIAL-SENSITIVE',
+            FRA: 'DIFFUSION RESTREINTE',
+            CAN: 'PROTECTED A',
+            DEU: 'VS-NUR FÜR DEN DIENSTGEBRAUCH',
+            AUS: 'OFFICIAL',
+            NZL: 'UNCLASSIFIED',
+            ITA: 'USO UFFICIALE',
+            ESP: 'DIFUSIÓN LIMITADA',
+            POL: 'UŻYTEK SŁUŻBOWY',
+            NLD: 'DEPARTEMENTAAL VERTROUWELIJK'
+        },
+        displayOrder: 2,
+        accessControl: {
+            minClearanceRequired: 'RESTRICTED'  // Same AAL as UNCLASSIFIED (AAL1)
         }
     },
 
@@ -126,7 +149,7 @@ export const CLASSIFICATION_EQUIVALENCY_TABLE: IClassificationEquivalency[] = [
             POL: 'POUFNE',
             NLD: 'CONFIDENTIEEL'
         },
-        displayOrder: 2,
+        displayOrder: 3,
         accessControl: {
             minClearanceRequired: 'CONFIDENTIAL'
         }
@@ -149,7 +172,7 @@ export const CLASSIFICATION_EQUIVALENCY_TABLE: IClassificationEquivalency[] = [
             POL: 'TAJNE',
             NLD: 'GEHEIM'
         },
-        displayOrder: 3,
+        displayOrder: 4,
         accessControl: {
             minClearanceRequired: 'SECRET'
         }
@@ -172,7 +195,7 @@ export const CLASSIFICATION_EQUIVALENCY_TABLE: IClassificationEquivalency[] = [
             POL: 'ŚCIŚLE TAJNE',
             NLD: 'ZEER GEHEIM'
         },
-        displayOrder: 4,
+        displayOrder: 5,
         accessControl: {
             minClearanceRequired: 'TOP_SECRET',
             coiRestrictions: ['NATO-COSMIC']
@@ -450,4 +473,3 @@ export function getEquivalencyTable(): IClassificationEquivalency[] {
 export const __testing__ = {
     CLASSIFICATION_EQUIVALENCY_TABLE
 };
-

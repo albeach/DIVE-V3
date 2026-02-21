@@ -1,27 +1,34 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
+# Install bash, curl, docker-cli, and su-exec for robust scripting and development
+# Best practice: Use bash for complex scripts, proper HTTP client instead of BusyBox wget
+# STANAG 4774/4778: FFmpeg required for multimedia watermarking
+RUN apk add --no-cache bash curl docker-cli su-exec ca-certificates tzdata jq \
+    ffmpeg \
+    && apk add --no-cache --virtual .build-deps python3 make g++ \
+    && apk del .build-deps
+
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci --no-audit --no-fund
 
 # Don't copy source code - it will be mounted as volume
 # This allows hot reload during development
 
-# Create logs directory and set permissions
-RUN mkdir -p logs && \
-    addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 expressjs && \
-    chown -R expressjs:nodejs /app
-
-USER expressjs
+# Create logs directory
+# Note: Running as root in development to allow docker exec for OPA tests
+# In production, use a restricted user and don't mount docker socket
+RUN mkdir -p logs
 
 EXPOSE 4000
 
 ENV PORT=4000
 ENV NODE_ENV=development
+# Enable polling for file watching in Docker (fixes hot-reload on macOS/Windows)
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
 
 # Development mode with hot reload (tsx watch)
 CMD ["npm", "run", "dev"]
-

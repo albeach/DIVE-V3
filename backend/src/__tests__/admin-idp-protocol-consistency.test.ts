@@ -344,4 +344,3 @@ describe('Admin IdP Protocol Field Consistency', () => {
         });
     });
 });
-

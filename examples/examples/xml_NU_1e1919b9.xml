@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DummyRecord>
+  <Marking>NATO UNCLASSIFIED</Marking>
+  <DocumentId>1e1919b9-6931-46fe-b348-84cb1b5d9724</DocumentId>
+  <Dummy>true</Dummy>
+  <Payload>This is dummy XML content for database ingestion.</Payload>
+</DummyRecord>

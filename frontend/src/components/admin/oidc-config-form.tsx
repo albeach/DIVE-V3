@@ -8,6 +8,8 @@
 
 import React from 'react';
 import { IOIDCConfig } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface IOIDCConfigFormProps {
     config: IOIDCConfig;
@@ -83,16 +85,16 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
     React.useEffect(() => {
         if (!readonly && config.issuer && accessToken) {
             const timer = setTimeout(() => {
-                validateOIDCDiscovery(config.issuer, accessToken);
+                validateOIDCDiscovery(config.issuer!, accessToken!);
             }, 1000); // Wait 1 second after user stops typing
 
             return () => clearTimeout(timer);
         }
     }, [config.issuer, readonly, accessToken]);
 
-    const handleChange = (field: keyof IOIDCConfig, value: string) => {
+    const handleChange = (field: string, value: string) => {
         // Validate ALL URLs in real-time
-        const urlFields = ['issuer', 'authorizationUrl', 'tokenUrl', 'userInfoUrl', 'jwksUrl'];
+        const urlFields = ['issuer', 'authorizationUrl', 'tokenUrl', 'userInfoUrl', 'jwksUri'];
         if (urlFields.includes(field) && value) {
             const error = validateURL(value);
             if (error) {
@@ -220,8 +222,14 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Issuer URL */}
             <div>
-                <label htmlFor="issuer" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="issuer" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Issuer URL <span className="text-red-500">*</span>
+                    <InlineHelp
+                        variant="info"
+                        size="sm"
+                        position="right"
+                        content={IdPHelpContent.oidcDiscoveryUrl}
+                    />
                 </label>
                 <div className="relative">
                     <input
@@ -297,9 +305,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Client ID */}
             <div>
-                <label htmlFor="clientId" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Client ID <span className="text-red-500">*</span>
                     {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
+                    {!readonly && (
+                        <InlineHelp
+                            variant="info"
+                            size="sm"
+                            position="right"
+                            content={IdPHelpContent.clientId}
+                        />
+                    )}
                 </label>
                 <input
                     type="text"
@@ -323,9 +339,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Client Secret */}
             <div>
-                <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Client Secret <span className="text-red-500">*</span>
                     {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
+                    {!readonly && (
+                        <InlineHelp
+                            variant="warning"
+                            size="sm"
+                            position="right"
+                            content={IdPHelpContent.clientSecret}
+                        />
+                    )}
                 </label>
                 <input
                     type={readonly ? 'text' : 'password'}
@@ -442,33 +466,33 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* JWKS URL (Optional) */}
             <div>
-                <label htmlFor="jwksUrl" className="block text-sm font-medium text-gray-700">
-                    JWKS URL
+                <label htmlFor="jwksUri" className="block text-sm font-medium text-gray-700">
+                    JWKS URI
                 </label>
                 <input
                     type="url"
-                    id="jwksUrl"
-                    value={config.jwksUrl || ''}
-                    onChange={(e) => handleChange('jwksUrl', e.target.value)}
+                    id="jwksUri"
+                    value={config.jwksUri || ''}
+                    onChange={(e) => handleChange('jwksUri', e.target.value)}
                     disabled={readonly}
                     placeholder="https://idp.example.com/certs"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
-                            : localErrors.jwksUrl
+                            : localErrors.jwksUri
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-                            : validationStatus.jwksUrl === 'valid'
+                            : validationStatus.jwksUri === 'valid'
                             ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {localErrors.jwksUrl && !readonly && (
-                    <p className="mt-1 text-sm text-red-600">{localErrors.jwksUrl}</p>
+                {localErrors.jwksUri && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{localErrors.jwksUri}</p>
                 )}
-                {!readonly && validationStatus.jwksUrl === 'valid' && (
+                {!readonly && validationStatus.jwksUri === 'valid' && (
                     <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
                 )}
-                {!readonly && !config.jwksUrl && (
+                {!readonly && !config.jwksUri && (
                     <p className="mt-1 text-xs text-gray-500">Optional: JSON Web Key Set URL</p>
                 )}
             </div>
@@ -480,9 +504,9 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                 </label>
                 <input
                     type="text"
-                    id="defaultScopes"
-                    value={config.defaultScopes || 'openid profile email'}
-                    onChange={(e) => handleChange('defaultScopes', e.target.value)}
+                    id="defaultScope"
+                    value={config.defaultScope || 'openid profile email'}
+                    onChange={(e) => handleChange('defaultScope', e.target.value)}
                     disabled={readonly}
                     placeholder="openid profile email"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
@@ -532,4 +556,3 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
         </div>
     );
 }
-

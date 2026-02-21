@@ -1,0 +1,52 @@
+{
+  "identity": {
+    "spokeId": "{{SPOKE_ID}}",
+    "instanceCode": "{{INSTANCE_CODE_UPPER}}",
+    "name": "{{INSTANCE_NAME}}",
+    "description": "DIVE V3 Spoke Instance for {{INSTANCE_NAME}}",
+    "country": "{{INSTANCE_CODE_UPPER}}",
+    "organizationType": "government",
+    "contactEmail": "{{CONTACT_EMAIL}}"
+  },
+  "endpoints": {
+    "hubUrl": "{{HUB_URL}}",
+    "hubApiUrl": "{{HUB_URL}}/api",
+    "hubOpalUrl": "{{HUB_OPAL_URL}}",
+    "baseUrl": "{{BASE_URL}}",
+    "apiUrl": "{{API_URL}}",
+    "idpUrl": "{{IDP_URL}}",
+    "kasUrl": "{{KAS_URL}}"
+  },
+  "certificates": {
+    "certificatePath": "{{SPOKE_DIR}}/certs/spoke.crt",
+    "privateKeyPath": "{{SPOKE_DIR}}/certs/spoke.key",
+    "csrPath": "{{SPOKE_DIR}}/certs/spoke.csr",
+    "caBundlePath": "{{SPOKE_DIR}}/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:{{INSTANCE_CODE_LOWER}}",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "{{SPOKE_DIR}}/cache/policies",
+    "auditQueuePath": "{{SPOKE_DIR}}/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "{{TIMESTAMP}}",
+    "lastModified": "{{TIMESTAMP}}",
+    "configHash": ""
+  }
+}
+

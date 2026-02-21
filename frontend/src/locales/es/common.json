@@ -1,0 +1,98 @@
+{
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Coalition-Friendly ICAM Pilot"
+    },
+    "nav": {
+        "home": "Inicio",
+        "docs": "Documentos",
+        "upload": "Subir",
+        "policies": "Políticas",
+        "more": "Más",
+        "dashboard": "Panel de control",
+        "dashboard.description": "Vista rápida general y estadísticas",
+        "resources": "Recursos",
+        "admin": "Admin",
+        "signOut": "Cerrar sesión",
+        "documents": {
+            "name": "Documentos",
+            "shortName": "Docs",
+            "description": "Biblioteca de recursos clasificados",
+            "browse": "Explorar",
+            "allDocuments": "Todos los documentos",
+            "recent": "Reciente",
+            "favorites": "Favoritos",
+            "actions": "Acciones",
+            "myActivity": "Mi actividad",
+            "requestAccess": "Solicitar acceso"
+        },
+        "upload": {
+            "name": "Subir",
+            "shortName": "Subir",
+            "description": "Subida segura de documentos"
+        },
+        "policyTools": {
+            "name": "Herramientas de política",
+            "shortName": "Políticas",
+            "description": "Políticas de autorización y cumplimiento",
+            "explore": "Explorar",
+            "policyLibrary": "Biblioteca de políticas",
+            "policySandbox": "Sandbox de políticas",
+            "sandboxWorkspaces": "Espacios de trabajo del sandbox",
+            "builder": "Constructor",
+            "myPolicies": "Mis políticas",
+            "test": "Prueba",
+            "reference": "Referencia",
+            "compliance": "Cumplimiento",
+            "standardsCompliance": "Cumplimiento de estándares"
+        },
+        "admin": {
+            "dashboard": "Panel de administración",
+            "dashboard.description": "Administración y monitoreo del sistema",
+            "spRegistry": "Registro de proveedores de servicios",
+            "spRegistry.description": "Administrar proveedores de servicios registrados",
+            "certificates": "Gestión de certificados",
+            "certificates.description": "Gestión del ciclo de vida de certificados PKI",
+            "idpGovernance": "Gobernanza IdP",
+            "idpGovernance.description": "Análisis y gobernanza de proveedores de identidad",
+            "idpManagement": "Gestión IdP",
+            "idpManagement.description": "Configurar y administrar proveedores de identidad",
+            "approvals": "Aprobaciones",
+            "approvals.description": "Revisar y aprobar solicitudes pendientes",
+            "auditLogs": "Registros de auditoría",
+            "auditLogs.description": "Registros de auditoría del sistema y registros de cumplimiento",
+            "opaPolicy": "Gestión de políticas OPA",
+            "opaPolicy.description": "Configuración de políticas del agente de política abierta",
+            "integrationGuide": "Guía de integración",
+            "integrationGuide.description": "Recursos de integración para desarrolladores"
+        }
+    },
+    "common": {
+        "loading": "Cargando...",
+        "error": "Error",
+        "success": "Éxito",
+        "cancel": "Cancelar",
+        "save": "Guardar",
+        "delete": "Eliminar",
+        "edit": "Editar",
+        "view": "Ver",
+        "test": "Probar",
+        "refresh": "Actualizar",
+        "export": "Exportar",
+        "import": "Importar",
+        "search": "Buscar",
+        "filter": "Filtrar",
+        "clearFilters": "Limpiar filtros",
+        "noResults": "No se encontraron resultados",
+        "confirm": "Confirmar"
+    },
+    "time": {
+        "justNow": "Ahora mismo",
+        "minuteAgo": "Hace 1 minuto",
+        "minutesAgo": "Hace {{count}} minutos",
+        "hourAgo": "Hace 1 hora",
+        "hoursAgo": "Hace {{count}} horas",
+        "dayAgo": "Hace 1 día",
+        "daysAgo": "Hace {{count}} días"
+    }
+}

@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 MongoDB - FRA Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: dive-v3-fra
+spec:
+  selector:
+    app: mongo

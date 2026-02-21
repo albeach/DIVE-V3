@@ -1,0 +1,111 @@
+{
+    "_updated": "2026-01-29T20:00:00Z",
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Coalition-Friendly ICAM Pilot"
+    },
+    "nav": {
+        "home": "Home",
+        "docs": "Docs",
+        "upload": "Upload",
+        "policies": "Policies",
+        "more": "More",
+        "dashboard": "Dashboard",
+        "dashboard.description": "Quick overview and statistics",
+        "resources": "Resources",
+        "admin": "Admin",
+        "signOut": "Sign Out",
+        "policyTools": "Policy",
+        "documents": {
+            "name": "Documents",
+            "shortName": "Docs",
+            "description": "Classified resource library",
+            "browse": "Browse",
+            "allDocuments": "All Documents",
+            "recent": "Recent",
+            "favorites": "Favorites",
+            "actions": "Actions",
+            "myActivity": "My Activity",
+            "requestAccess": "Request Access"
+        },
+        "upload": {
+            "name": "Upload",
+            "shortName": "Upload",
+            "description": "Secure document upload"
+        },
+        "policyTools": {
+            "name": "Policy",
+            "shortName": "Policy",
+            "description": "Authorization policies and tools",
+            "explore": "Explore",
+            "policyLibrary": "Policy Library",
+            "policySandbox": "Policy Sandbox",
+            "sandboxWorkspaces": "Sandbox Workspaces",
+            "builder": "Builder",
+            "myPolicies": "My Policies",
+            "test": "Test",
+            "reference": "Reference"
+        },
+        "compliance": {
+            "name": "Compliance",
+            "shortName": "Compliance",
+            "description": "Standards compliance and auditing",
+            "standards": "Standards",
+            "standardsCompliance": "Standards Compliance",
+            "security": "Security",
+            "kas": "KAS",
+            "cois": "COIs",
+            "pki": "PKI",
+            "classifications": "Classifications"
+        },
+        "admin": {
+            "dashboard": "Admin Dashboard",
+            "dashboard.description": "System administration and monitoring",
+            "spRegistry": "Service Provider Registry",
+            "spRegistry.description": "Manage registered service providers",
+            "certificates": "Certificate Management",
+            "certificates.description": "PKI certificate lifecycle management",
+            "idpGovernance": "IdP Governance",
+            "idpGovernance.description": "Identity provider analytics and governance",
+            "idpManagement": "IdP Management",
+            "idpManagement.description": "Configure and manage identity providers",
+            "approvals": "Approvals",
+            "approvals.description": "Review and approve pending requests",
+            "auditLogs": "Audit Logs",
+            "auditLogs.description": "System audit trails and compliance logs",
+            "opaPolicy": "OPA Policy Management",
+            "opaPolicy.description": "Open Policy Agent policy configuration",
+            "integrationGuide": "Integration Guide",
+            "integrationGuide.description": "Developer integration resources"
+        }
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "cancel": "Cancel",
+        "save": "Save",
+        "delete": "Delete",
+        "edit": "Edit",
+        "view": "View",
+        "test": "Test",
+        "refresh": "Refresh",
+        "retry": "Retry",
+        "export": "Export",
+        "import": "Import",
+        "search": "Search",
+        "filter": "Filter",
+        "clearFilters": "Clear Filters",
+        "noResults": "No results found",
+        "confirm": "Confirm"
+    },
+    "time": {
+        "justNow": "Just now",
+        "minuteAgo": "1 minute ago",
+        "minutesAgo": "{{count}} minutes ago",
+        "hourAgo": "1 hour ago",
+        "hoursAgo": "{{count}} hours ago",
+        "dayAgo": "1 day ago",
+        "daysAgo": "{{count}} days ago"
+    }
+}

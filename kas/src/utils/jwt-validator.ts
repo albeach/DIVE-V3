@@ -1,12 +1,12 @@
 /**
  * JWT Validator for KAS (Key Access Service)
- * 
+ *
  * Implements secure JWT signature verification using JWKS
  * Adapted from backend/src/middleware/authz.middleware.ts
- * 
+ *
  * CRITICAL SECURITY FIX: Gap #3 - KAS JWT Verification
  * Date: October 20, 2025
- * 
+ *
  * This module replaces the insecure jwt.decode() with proper signature verification
  * to prevent forged token attacks on the Key Access Service.
  */
@@ -37,6 +37,7 @@ export interface IKeycloakToken {
     exp?: number;
     iat?: number;
     jti?: string;  // JWT ID for revocation
+    iss?: string;  // Issuer URL
     // AAL2/FAL2 claims (NIST SP 800-63B/C)
     aud?: string | string[];
     acr?: string;
@@ -52,14 +53,14 @@ const getRealmFromToken = (token: string): string => {
     try {
         const decoded = jwt.decode(token, { complete: true });
         if (!decoded || !decoded.payload) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         const payload = decoded.payload as any;
         const issuer = payload.iss;
 
         if (!issuer) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         // Extract realm from issuer URL: http://localhost:8081/realms/{realm}
@@ -68,30 +69,107 @@ const getRealmFromToken = (token: string): string => {
             return match[1];
         }
 
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     } catch (error) {
         kasLogger.warn('Could not extract realm from token, using default', {
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     }
 };
 
 /**
- * Get signing key from JWKS with multi-realm support
+ * Get signing key from JWKS with FEDERATION support
  * Uses direct JWKS fetch with caching
- * 
- * Multi-Realm Migration (Oct 21, 2025):
- * - Dynamically determines JWKS URL based on token issuer
- * - Supports both dive-v3-pilot and dive-v3-broker realms
- * - Caches keys per kid (realm-independent caching)
+ *
+ * CRITICAL FIX (Dec 2, 2025):
+ * For cross-instance federation, the JWKS must be fetched from the TOKEN'S ISSUER,
+ * not the local Keycloak. A GBR-issued JWT needs GBR Keycloak's public key!
+ *
+ * Flow:
+ * 1. Extract issuer URL from JWT's `iss` claim
+ * 2. Fetch JWKS from issuer's /protocol/openid-connect/certs endpoint
+ * 3. Verify signature with issuer's public key
  */
 const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<string> => {
     const requestId = `kas-jwks-${Date.now()}`;
 
-    // Determine which realm to fetch JWKS from
-    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
-    const jwksUri = `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`;
+    // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
+    let issuerJwksUri: string | null = null;
+    const rewriteToInternal = (uri: string): string => {
+        // Map external/localhost URLs to Docker-internal Keycloak for JWKS fetching
+        const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
+
+        // Caddy external domains (e.g., dev-usa-idp.dive25.com) → internal Keycloak
+        // Matches: {env}-{country}-idp.{domain} or {country}-idp.{domain}
+        const caddyMatch = uri.match(/https:\/\/(?:\w+-)?([a-z]{2,3})-idp\.[^/]+/);
+        if (caddyMatch) {
+            const country = caddyMatch[1].toLowerCase();
+            const internalHost = country === 'usa'
+                ? keycloakUrl
+                : `https://keycloak-${country}:8443`;
+            return uri.replace(/https:\/\/[^/]+/, internalHost);
+        }
+
+        // Extract realm country for spoke-specific routing
+        const realmMatch = uri.match(/\/realms\/dive-v3-broker-([a-z]{3})/i);
+        const realmCountry = realmMatch ? realmMatch[1].toLowerCase() : null;
+        const keycloakHost = realmCountry ? `https://keycloak-${realmCountry}:8443` : keycloakUrl;
+
+        // Spoke-specific external ports: 8453 (FRA), 8454 (GBR), 8455 (DEU)
+        const portMap: Record<string, string> = {
+            '8453': 'https://keycloak-fra:8443',
+            '8454': 'https://keycloak-gbr:8443',
+            '8455': 'https://keycloak-deu:8443',
+        };
+        for (const [port, host] of Object.entries(portMap)) {
+            if (uri.startsWith(`https://localhost:${port}/`)) {
+                return uri.replace(`https://localhost:${port}`, host);
+            }
+        }
+
+        // localhost:8443 → realm-specific or default Keycloak
+        if (uri.startsWith('https://localhost:8443/')) {
+            return uri.replace('https://localhost:8443', keycloakHost);
+        }
+        if (uri.startsWith('http://localhost:8081/')) {
+            return uri.replace('http://localhost:8081', keycloakHost);
+        }
+
+        return uri;
+    };
+
+    if (token) {
+        try {
+            const decoded = jwt.decode(token, { complete: true }) as jwt.Jwt | null;
+            const payload = decoded?.payload as jwt.JwtPayload;
+            if (payload?.iss) {
+                // The issuer is the Keycloak realm URL, append JWKS path
+                // e.g., https://gbr-idp.dive25.com/realms/dive-v3-broker-usa -> https://gbr-idp.dive25.com/realms/dive-v3-broker-usa/protocol/openid-connect/certs
+                issuerJwksUri = rewriteToInternal(`${payload.iss}/protocol/openid-connect/certs`);
+                kasLogger.debug('Using issuer JWKS for federation', { issuer: payload.iss, jwksUri: issuerJwksUri });
+            }
+        } catch (err) {
+            kasLogger.warn('Failed to extract issuer from token, falling back to local JWKS', { error: (err as Error).message });
+        }
+    }
+
+    // Determine which realm to fetch JWKS from (fallback for local tokens)
+    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa');
+
+    // Try JWKS URLs in priority order:
+    // 1. Issuer's JWKS (for federated tokens) - CRITICAL for cross-instance!
+    // 2. Local Keycloak internal (Docker network)
+    // 3. Local Keycloak external (localhost)
+    const jwksUris = [
+        ...(issuerJwksUri ? [issuerJwksUri] : []),  // Priority: issuer's JWKS
+        `${process.env.KEYCLOAK_URL || 'https://keycloak:8443'}/realms/${realm}/protocol/openid-connect/certs`,  // Internal service
+        `http://keycloak:8080/realms/${realm}/protocol/openid-connect/certs`,        // Internal HTTP
+        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // Host-exposed HTTP
+        `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // Host-exposed HTTPS
+    ].map(rewriteToInternal);
+
+    const jwksUri = jwksUris[0]; // Primary URI for logging
 
     kasLogger.debug('Getting signing key for token', {
         requestId,
@@ -114,9 +192,25 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
             return cachedKey;
         }
 
-        // Fetch JWKS directly from Keycloak
-        const response = await axios.get(jwksUri, { timeout: 5000 });
-        const jwks = response.data;
+        // Fetch JWKS directly from Keycloak (try multiple URIs)
+        let jwks: any = null;
+        let lastError: Error | null = null;
+
+        for (const uri of jwksUris) {
+            try {
+                const response = await axios.get(uri, { timeout: 5000 });
+                jwks = response.data;
+                kasLogger.debug('Successfully fetched JWKS', { uri, realm });
+                break;
+            } catch (err) {
+                lastError = err as Error;
+                kasLogger.debug('JWKS fetch failed, trying next URI', { uri, error: lastError.message });
+            }
+        }
+
+        if (!jwks) {
+            throw new Error(`Failed to fetch JWKS from all URIs. Last error: ${lastError?.message}`);
+        }
 
         // Find the key with matching kid and use="sig"
         const key = jwks.keys.find((k: any) => k.kid === header.kid && k.use === 'sig');
@@ -161,15 +255,14 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
 /**
  * Verify JWT token with signature verification and dual-issuer support
- * 
+ *
  * SECURITY FIX: This replaces jwt.decode() with proper signature verification
- * 
- * Multi-Realm Migration (Oct 21, 2025):
- * - Supports both dive-v3-pilot (legacy single-realm) AND dive-v3-broker (multi-realm federation)
- * - Backward compatible: Existing tokens from dive-v3-pilot still work
- * - Forward compatible: New tokens from dive-v3-broker federation accepted
- * - Dual audience support: dive-v3-client AND dive-v3-client-broker
- * 
+ *
+ * Multi-Realm Federation:
+ * - Each instance has its own realm: dive-v3-broker-{countrycode} (e.g., dive-v3-broker-usa, dive-v3-broker-fra)
+ * - Hub realm: dive-v3-broker-usa; Spoke realms: dive-v3-broker-{spoke_country}
+ * - Dual audience support: dive-v3-client AND dive-v3-broker-{countrycode}
+ *
  * @param token - JWT bearer token from request
  * @returns Decoded and verified token payload
  * @throws Error if token is invalid, expired, or signature verification fails
@@ -195,20 +288,68 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Get the signing key from JWKS (pass token for realm detection)
         const publicKey = await getSigningKey(decoded.header, token);
 
-        // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
-        // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
+        // Multi-realm: Accept tokens from all federated partner Keycloak instances
+        // Each KAS must accept JWTs from ALL coalition partners for cross-instance access
+        //
+        // CRITICAL: Federation requires accepting JWTs from ANY partner IdP
+        // A GBR user accessing FRA resources presents a GBR-issued JWT to FRA KAS
+        //
+        // Valid issuers include:
+        // 1. Local instance Keycloak (process.env.KEYCLOAK_URL)
+        // 2. All coalition partner public IdPs (dive25.com domain)
+        // 3. DEU uses prosecurity.biz domain
+        // 4. Legacy/dev issuers for backward compatibility
+        // Get current realm (supports both instance-specific and base realms)
+        const currentRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+
+        // Build valid issuers dynamically from env vars + static known issuers
+        const dynamicIssuers: string[] = [];
+
+        // KEYCLOAK_ISSUER: external Caddy URL (e.g., https://dev-usa-idp.dive25.com/realms/...)
+        if (process.env.KEYCLOAK_ISSUER) {
+            dynamicIssuers.push(process.env.KEYCLOAK_ISSUER);
+        }
+
+        // TRUSTED_ISSUERS: comma-separated list from hub deployment
+        if (process.env.TRUSTED_ISSUERS) {
+            const envIssuers = process.env.TRUSTED_ISSUERS.split(',').map(s => s.trim()).filter(Boolean);
+            dynamicIssuers.push(...envIssuers);
+        }
+
         const validIssuers: [string, ...string[]] = [
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-pilot',          // External: dive-v3-pilot
-            'http://localhost:8081/realms/dive-v3-broker',         // External: dive-v3-broker
+            // Local instance (dynamic based on deployment)
+            `${process.env.KEYCLOAK_URL}/realms/${currentRealm}`,
+
+            // Dynamic env-configured issuers (Caddy external domains, etc.)
+            ...dynamicIssuers,
+
+            // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
+            'https://usa-idp.dive25.com/realms/dive-v3-broker-usa',
+            'https://fra-idp.dive25.com/realms/dive-v3-broker-fra',
+            'https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr',
+            'https://deu-idp.prosecurity.biz/realms/dive-v3-broker-deu',
+
+            // === LOCAL/DEV ISSUERS ===
+            'http://localhost:8081/realms/dive-v3-broker-usa',
+            'https://localhost:8443/realms/dive-v3-broker-usa',
+            'https://localhost:8443/realms/dive-v3-broker-fra',
+            'https://localhost:8443/realms/dive-v3-broker-gbr',
+            'https://localhost:8443/realms/dive-v3-broker-deu',
+            'https://localhost:8453/realms/dive-v3-broker-fra',
+            'https://localhost:8454/realms/dive-v3-broker-gbr',
+            'https://localhost:8455/realms/dive-v3-broker-deu',
+            // Internal container names
+            'https://keycloak:8443/realms/dive-v3-broker-usa',
         ];
 
-        // Multi-realm: Accept tokens for both clients + Keycloak default audience
+        // Multi-realm: Accept tokens for both clients + Keycloak default audience + backend service accounts
         const validAudiences: [string, ...string[]] = [
-            'dive-v3-client',         // Legacy client
-            'dive-v3-client-broker',  // Multi-realm broker client
+            'dive-v3-client',         // Legacy client (broker realm)
+            'dive-v3-broker-usa',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
+            'kas',                    // Backend service account for KAS calls (Issue B fix)
+            'dive-v3-backend-client', // Backend service account client ID
         ];
 
         // Verify the token with the public key
@@ -260,4 +401,3 @@ export const clearJWKSCache = (): void => {
     jwksCache.flushAll();
     kasLogger.info('JWKS cache cleared');
 };
-

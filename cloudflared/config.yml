@@ -1,0 +1,109 @@
+# ============================================================================
+# Cloudflare Tunnel Configuration - USA Instance (United States)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:43Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh usa
+#   3. Restart tunnel: docker compose -p usa up -d --force-recreate cloudflared
+#
+# ============================================================================
+
+tunnel: f8e6c558-847b-4952-b8b2-27f98a85e36c
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
+# Metrics endpoint for monitoring (accessible at localhost:9126)
+metrics: 0.0.0.0:9126
+
+ingress:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: dive-hub-frontend
+  # Host Port: 3000
+  # Hostname:       usa-app.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-app.dive25.com
+    service: https://localhost:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-app.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: dive-hub-backend
+  # Host Port: 4000
+  # Hostname:       usa-api.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-api.dive25.com
+    service: https://localhost:4000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-api.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: dive-hub-keycloak
+  # Host Port: 8443
+  # Hostname:       usa-idp.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-idp.dive25.com
+    service: https://localhost:8443
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-idp.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: dive-hub-kas
+  # Host Port: 8085
+  # Hostname:       usa-kas.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-kas.dive25.com
+    service: https://localhost:8085
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-kas.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-hub-opa
+  # Host Port: 8181
+  # Hostname:       usa-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-opa.dive25.com
+    service: https://localhost:8181
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-opa.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Server (Policy Distribution Hub)
+  # Docker Service: dive-hub-opal-server
+  # Host Port: 7002
+  # Hostname:       usa-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-opal.dive25.com
+    service: https://localhost:7002
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-opal.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
+  - service: http_status:404

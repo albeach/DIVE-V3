@@ -2,79 +2,199 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================ */
+/* ✅ SECURITY: System Font Stacks - No External Dependencies */
+/* Optimized for secure/air-gapped environments */
+/* ============================================ */
+
+@layer base {
+    :root {
+        /* Sans-serif font stack - excellent cross-platform support */
+        --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+        /* Monospace font stack - for code/technical content */
+        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+        /* ============================================ */
+        /* Instance Theme CSS Variables */
+        /* These are dynamically injected by ThemeProvider */
+        /* Default values below for USA instance */
+        /* ============================================ */
+
+        /* Primary instance colors */
+        --instance-primary: #1a365d;
+        --instance-secondary: #2b6cb0;
+        --instance-accent: #3182ce;
+        --instance-text: #ffffff;
+
+        /* RGB versions for alpha compositing */
+        --instance-primary-rgb: 26, 54, 93;
+        --instance-secondary-rgb: 43, 108, 176;
+        --instance-accent-rgb: 49, 130, 206;
+
+        /* Gradient backgrounds */
+        --instance-banner-bg: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+        --instance-hero-bg: linear-gradient(135deg, rgba(26, 54, 93, 0.95) 0%, rgba(43, 108, 176, 0.9) 100%);
+
+        /* Semantic colors derived from instance colors */
+        --instance-button-bg: var(--instance-primary);
+        --instance-button-hover: var(--instance-secondary);
+        --instance-link: var(--instance-accent);
+        --instance-border: var(--instance-primary);
+    }
+
+    body {
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    code,
+    pre,
+    kbd,
+    samp {
+        font-family: var(--font-mono);
+    }
+}
+
 /* Modern 2025 Animations & Effects */
 @layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.6s ease-out forwards;
-  }
-
-  .animate-slide-up {
-    animation: slideUp 0.5s ease-out forwards;
-  }
-
-  .animate-gradient {
-    background-size: 200% 200%;
-    animation: gradient 8s ease infinite;
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
+    .animate-fade-in {
+        animation: fadeIn 0.6s ease-out forwards;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
 
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(30px);
+    .animate-slide-up {
+        animation: slideUp 0.5s ease-out forwards;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
 
-  @keyframes gradient {
-    0%, 100% {
-      background-position: 0% 50%;
+    .animate-gradient {
+        background-size: 200% 200%;
+        animation: gradient 8s ease infinite;
     }
-    50% {
-      background-position: 100% 50%;
+
+    /* Fluid Typography - 2025 Modern Pattern */
+    .fluid-heading-1 {
+        font-size: clamp(2rem, 5vw + 1rem, 4rem);
+        line-height: 1.1;
     }
-  }
 
-  /* Glassmorphism */
-  .glass {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  /* 3D Transform */
-  .transform-3d {
-    transform-style: preserve-3d;
-    perspective: 1000px;
-  }
-
-  @keyframes slideDown {
-    from {
-      opacity: 0;
-      transform: translateY(-20px);
+    .fluid-heading-2 {
+        font-size: clamp(1.5rem, 3vw + 1rem, 2.5rem);
+        line-height: 1.2;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
 
-  .animate-slide-down {
-    animation: slideDown 0.3s ease-out forwards;
-  }
+    .fluid-text-xs {
+        font-size: clamp(0.75rem, 0.5vw + 0.5rem, 0.875rem);
+    }
+
+    .fluid-text-sm {
+        font-size: clamp(0.875rem, 0.75vw + 0.5rem, 1rem);
+    }
+
+    .fluid-text-base {
+        font-size: clamp(1rem, 1vw + 0.5rem, 1.125rem);
+    }
+
+    .fluid-text-lg {
+        font-size: clamp(1.125rem, 1.5vw + 0.5rem, 1.25rem);
+    }
+
+    .fluid-text-xl {
+        font-size: clamp(1.25rem, 2vw + 0.5rem, 1.5rem);
+    }
+
+    .fluid-text-2xl {
+        font-size: clamp(1.5rem, 3vw + 1rem, 2rem);
+    }
+
+    .fluid-text-3xl {
+        font-size: clamp(2rem, 4vw + 1rem, 3rem);
+    }
+
+    .fluid-text-4xl {
+        font-size: clamp(2.5rem, 6vw + 1rem, 4rem);
+    }
+
+    .fluid-body {
+        font-size: clamp(1rem, 1vw + 0.5rem, 1.125rem);
+        line-height: 1.6;
+    }
+
+    /* Background Scroll Animation */
+    @keyframes backgroundScroll {
+        from {
+            background-position: 0 0;
+        }
+
+        to {
+            background-position: 50px 50px;
+        }
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes gradient {
+
+        0%,
+        100% {
+            background-position: 0% 50%;
+        }
+
+        50% {
+            background-position: 100% 50%;
+        }
+    }
+
+    /* Glassmorphism */
+    .glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* 3D Transform */
+    .transform-3d {
+        transform-style: preserve-3d;
+        perspective: 1000px;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-slide-down {
+        animation: slideDown 0.3s ease-out forwards;
+    }
 }
 
 :root {
@@ -321,4 +441,970 @@ body {
 .hover-lift:hover {
     transform: translateY(-4px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Gradient X animation - horizontal gradient shift */
+@keyframes gradientX {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.animate-gradient-x {
+    background-size: 200% 200%;
+    animation: gradientX 3s ease infinite;
+}
+
+/* Floating animation without opacity change - for logos */
+@keyframes floatLogo {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.animate-float-logo {
+    animation: floatLogo 3s ease-in-out infinite;
+}
+
+/* Floating particles animation with variations */
+@keyframes floatParticles {
+
+    0%,
+    100% {
+        transform: translateY(0px) translateX(0px);
+        opacity: 0.4;
+    }
+
+    25% {
+        transform: translateY(-15px) translateX(5px);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: translateY(-20px) translateX(-5px);
+        opacity: 0.4;
+    }
+
+    75% {
+        transform: translateY(-10px) translateX(5px);
+        opacity: 0.6;
+    }
+}
+
+.animate-float {
+    animation: floatParticles 4s ease-in-out infinite;
+}
+
+/* Enhanced button hover effects */
+.btn-hover-glow {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.btn-hover-glow::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+}
+
+.btn-hover-glow:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+/* Card hover lift with subtle shadow */
+.card-lift {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0, 154, 179, 0.15), 0 10px 20px rgba(121, 216, 90, 0.1);
+}
+
+/* Glow pulse for interactive elements */
+@keyframes glowPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 5px rgba(0, 154, 179, 0.3), 0 0 10px rgba(121, 216, 90, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 20px rgba(0, 154, 179, 0.6), 0 0 30px rgba(121, 216, 90, 0.4);
+    }
+}
+
+.animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Spin slow animation for rings */
+@keyframes spinSlow {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin-slow {
+    animation: spinSlow 3s linear infinite;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+    outline: 2px solid #4497ac;
+    outline-offset: 2px;
+}
+
+/* Enhanced button press effect */
+.active:active {
+    transform: scale(0.98);
+}
+
+/* Shake animation for error states - 2025 modern pattern */
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-10px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(10px);
+    }
+}
+
+.animate-shake {
+    animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* ============================================ */
+/* 🥚 EASTER EGG ANIMATIONS - 2025 Hacker Terminal */
+/* ============================================ */
+
+/* Matrix rain effect */
+@keyframes matrixRain {
+    0% {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    90% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(100vh);
+        opacity: 0;
+    }
+}
+
+.animate-matrix-rain {
+    animation: matrixRain linear infinite;
+}
+
+/* Terminal line typing effect */
+@keyframes terminalLine {
+    0% {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.animate-terminal-line {
+    animation: terminalLine 0.3s ease-out forwards;
+}
+
+/* Glitch effect 1 */
+@keyframes glitch1 {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+        opacity: 0.8;
+    }
+
+    33% {
+        transform: translate(-2px, 2px);
+        opacity: 0.9;
+    }
+
+    66% {
+        transform: translate(2px, -2px);
+        opacity: 0.7;
+    }
+}
+
+.animate-glitch-1 {
+    animation: glitch1 0.3s infinite;
+}
+
+/* Glitch effect 2 */
+@keyframes glitch2 {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+        opacity: 0.8;
+    }
+
+    33% {
+        transform: translate(2px, -2px);
+        opacity: 0.7;
+    }
+
+    66% {
+        transform: translate(-2px, 2px);
+        opacity: 0.9;
+    }
+}
+
+.animate-glitch-2 {
+    animation: glitch2 0.4s infinite;
+}
+
+/* Scan line effect */
+@keyframes scanLine {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+.animate-scan-line {
+    animation: scanLine 4s linear infinite;
+}
+
+/* Neon glow pulse for admin access */
+@keyframes neonPulse {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 0 10px rgba(0, 255, 65, 0.6));
+    }
+
+    50% {
+        filter: drop-shadow(0 0 30px rgba(0, 255, 65, 1));
+    }
+}
+
+.animate-neon-pulse {
+    animation: neonPulse 2s ease-in-out infinite;
+}
+
+/* CRT screen flicker effect */
+@keyframes crtFlicker {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.95;
+    }
+
+    51% {
+        opacity: 1;
+    }
+
+    52% {
+        opacity: 0.98;
+    }
+
+    53% {
+        opacity: 1;
+    }
+}
+
+.animate-crt-flicker {
+    animation: crtFlicker 0.1s infinite;
+}
+
+/* Access granted text reveal */
+@keyframes accessGranted {
+    0% {
+        opacity: 0;
+        letter-spacing: 1em;
+        transform: scale(0.5);
+    }
+
+    50% {
+        letter-spacing: 0.5em;
+    }
+
+    100% {
+        opacity: 1;
+        letter-spacing: normal;
+        transform: scale(1);
+    }
+}
+
+.animate-access-granted {
+    animation: accessGranted 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Cyber grid background pulse */
+@keyframes cyberGrid {
+
+    0%,
+    100% {
+        background-position: 0 0;
+        opacity: 0.3;
+    }
+
+    50% {
+        background-position: 50px 50px;
+        opacity: 0.5;
+    }
+}
+
+.animate-cyber-grid {
+    animation: cyberGrid 4s ease infinite;
+}
+
+/* Hologram flicker */
+@keyframes hologramFlicker {
+
+    0%,
+    100% {
+        opacity: 1;
+        filter: brightness(1);
+    }
+
+    45% {
+        opacity: 0.8;
+        filter: brightness(1.1);
+    }
+
+    50% {
+        opacity: 0.9;
+        filter: brightness(0.9);
+    }
+
+    55% {
+        opacity: 1;
+        filter: brightness(1.05);
+    }
+}
+
+.animate-hologram {
+    animation: hologramFlicker 3s ease-in-out infinite;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+
+    .animate-matrix-rain,
+    .animate-glitch-1,
+    .animate-glitch-2,
+    .animate-scan-line,
+    .animate-neon-pulse,
+    .animate-crt-flicker,
+    .animate-hologram,
+    .animate-cyber-grid {
+        animation: none !important;
+    }
+
+    .animate-access-granted {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+}
+
+/* ============================================ */
+/* ZTDF Inspector Animations - 2025 Modern Design */
+/* ============================================ */
+
+/* Slide down smooth animation */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        max-height: 5000px;
+        transform: translateY(0);
+    }
+}
+
+.animate-slideDown {
+    animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Fade in smooth */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Scale hover interaction */
+.hover\:scale-102:hover {
+    transform: scale(1.02);
+}
+
+/* Custom tab transitions */
+@layer components {
+    [role="tabpanel"] {
+        animation: fadeInUp 0.4s ease-out forwards;
+    }
+}
+
+/* ============================================ */
+/* Modern Dashboard 2025 - Additional Animations */
+/* ============================================ */
+
+/* Background scroll animation */
+@keyframes backgroundScroll {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 60px 60px;
+    }
+}
+
+/* Shadow expand on hover for cards */
+.shadow-3xl {
+    box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
+}
+
+/* Smooth all transitions */
+* {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Bento grid responsive layout utilities */
+.bento-container {
+    display: grid;
+    gap: 1.5rem;
+    grid-auto-flow: dense;
+}
+
+/* Enhanced glassmorphism for modern cards */
+.glass-modern {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark-modern {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================ */
+/* Landing Page 2025 - IdP Selector Animations */
+/* ============================================ */
+
+/* 3D card lift effect */
+@keyframes cardLift {
+    from {
+        transform: translateY(0) rotateX(0deg);
+    }
+
+    to {
+        transform: translateY(-8px) rotateX(2deg);
+    }
+}
+
+.animate-card-lift {
+    animation: cardLift 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Glow pulse for active cards */
+@keyframes glowPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px var(--accent-color, #009ab3);
+    }
+
+    50% {
+        box-shadow: 0 0 40px var(--accent-color, #009ab3);
+    }
+}
+
+.animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Staggered grid reveal */
+@keyframes gridReveal {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.animate-grid-reveal {
+    animation: gridReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+}
+
+/* Smooth scale on hover */
+.hover\:scale-102:hover {
+    transform: scale(1.02);
+}
+
+/* Transform GPU acceleration */
+.transform-gpu {
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Gradient animation for text */
+@keyframes gradientX {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.animate-gradient-x {
+    background-size: 200% auto;
+    animation: gradientX 3s ease infinite;
+}
+
+/* ============================================ */
+/* Phase 4: Enhanced Dark Mode Optimization */
+/* DIVE V3 - 2025 */
+/* ============================================ */
+
+@layer base {
+
+    /* Dark mode semantic colors with enhanced contrast */
+    .dark {
+        --color-background: 17 24 39;
+        /* gray-900 */
+        --color-surface: 31 41 55;
+        /* gray-800 */
+        --color-surface-elevated: 55 65 81;
+        /* gray-700 */
+        --color-border: 75 85 99;
+        /* gray-600 */
+        --color-text-primary: 249 250 251;
+        /* gray-50 */
+        --color-text-secondary: 156 163 175;
+        /* gray-400 */
+        --color-text-muted: 107 114 128;
+        /* gray-500 */
+
+        /* Enhanced accent colors for dark mode */
+        --color-accent-blue: 96 165 250;
+        /* blue-400 */
+        --color-accent-green: 74 222 128;
+        /* green-400 */
+        --color-accent-amber: 251 191 36;
+        /* amber-400 */
+        --color-accent-red: 248 113 113;
+        /* red-400 */
+        --color-accent-purple: 192 132 252;
+        /* purple-400 */
+    }
+}
+
+/* Dark mode specific enhancements */
+@layer utilities {
+
+    /* Improved dark mode shadows with colored glow */
+    .dark .shadow-dark-glow {
+        box-shadow:
+            0 4px 6px -1px rgba(0, 0, 0, 0.4),
+            0 2px 4px -1px rgba(0, 0, 0, 0.3),
+            0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .dark .shadow-dark-glow-lg {
+        box-shadow:
+            0 10px 15px -3px rgba(0, 0, 0, 0.5),
+            0 4px 6px -2px rgba(0, 0, 0, 0.4),
+            0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .dark .shadow-dark-glow-xl {
+        box-shadow:
+            0 20px 25px -5px rgba(0, 0, 0, 0.5),
+            0 10px 10px -5px rgba(0, 0, 0, 0.4),
+            0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    /* Dark mode colored shadows */
+    .dark .shadow-blue-glow {
+        box-shadow: 0 0 20px rgba(96, 165, 250, 0.15);
+    }
+
+    .dark .shadow-green-glow {
+        box-shadow: 0 0 20px rgba(74, 222, 128, 0.15);
+    }
+
+    .dark .shadow-amber-glow {
+        box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+    }
+
+    .dark .shadow-red-glow {
+        box-shadow: 0 0 20px rgba(248, 113, 113, 0.15);
+    }
+
+    .dark .shadow-purple-glow {
+        box-shadow: 0 0 20px rgba(192, 132, 252, 0.15);
+    }
+
+    /* Dark mode gradients */
+    .dark .gradient-dark-primary {
+        background: linear-gradient(135deg, rgb(31, 41, 55) 0%, rgb(17, 24, 39) 100%);
+    }
+
+    .dark .gradient-dark-blue {
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(29, 78, 216, 0.1) 100%);
+    }
+
+    .dark .gradient-dark-card {
+        background: linear-gradient(180deg, rgb(31, 41, 55) 0%, rgb(24, 32, 46) 100%);
+    }
+
+    /* Dark mode borders with subtle glow */
+    .dark .border-dark-glow {
+        border-color: rgba(75, 85, 99, 0.6);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    /* Dark mode hover states */
+    .dark .hover-dark-lift:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 8px 25px -5px rgba(0, 0, 0, 0.4),
+            0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    /* Dark mode focus rings */
+    .dark .focus-ring-dark:focus-visible {
+        outline: none;
+        box-shadow:
+            0 0 0 2px rgb(17, 24, 39),
+            0 0 0 4px rgb(96, 165, 250);
+    }
+
+    /* Dark mode scrollbar styling */
+    .dark ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .dark ::-webkit-scrollbar-track {
+        background: rgb(31, 41, 55);
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+        background: rgb(75, 85, 99);
+        border-radius: 4px;
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+        background: rgb(107, 114, 128);
+    }
+}
+
+/* Dark mode specific animation adjustments */
+@media (prefers-color-scheme: dark) {
+
+    /* Reduce animation intensity in dark mode for eye comfort */
+    .animate-pulse-glow {
+        animation: pulseGlowDark 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlowDark {
+
+        0%,
+        100% {
+            box-shadow: 0 0 5px rgba(96, 165, 250, 0.3);
+        }
+
+        50% {
+            box-shadow: 0 0 15px rgba(96, 165, 250, 0.5), 0 0 25px rgba(96, 165, 250, 0.3);
+        }
+    }
+}
+
+/* Safe area insets for mobile devices */
+.safe-area-pb {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.safe-area-pt {
+    padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+/* Touch-friendly hit targets */
+@media (pointer: coarse) {
+
+    button,
+    [role="button"],
+    a {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Touch manipulation optimization for mobile (2025 pattern) */
+.touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .dark {
+        --color-border: 156 163 175;
+        /* Increased border contrast */
+    }
+
+    .dark .shadow-dark-glow,
+    .dark .shadow-dark-glow-lg,
+    .dark .shadow-dark-glow-xl {
+        box-shadow: 0 0 0 2px currentColor;
+    }
+}
+
+/* ============================================ */
+/* 2025 Modern Mobile Header Animations */
+/* ============================================ */
+
+/* Gradient shift animation for text */
+@keyframes gradient-shift {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+/* Shimmer effect for modern UI */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Underline expand animation */
+@keyframes underline-expand {
+    0% {
+        transform: scaleX(0);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scaleX(1);
+        opacity: 0.6;
+    }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    /* Disable complex animations for reduced motion */
+    @keyframes gradient-shift {
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
+
+    @keyframes shimmer {
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
+
+    @keyframes underline-expand {
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
+}
+
+/* ============================================ */
+/* Hide Next.js Dev Indicator on Mobile */
+/* ============================================ */
+@media (max-width: 768px) {
+
+    /* Next.js development indicator (the "N" circle) */
+    [data-nextjs-dialog-overlay],
+    [data-nextjs-toast],
+    nextjs-portal,
+    #__next-build-indicator,
+    /* React Query Devtools */
+    .ReactQueryDevtools,
+    /* Any devtools floating indicator */
+    [class*="devtools"],
+    [class*="Devtools"],
+    [id*="devtools"],
+    [id*="Devtools"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+}
+
+/* ============================================ */
+/* Custom Scrollbar Utilities - 2025 Modern UX */
+/* ============================================ */
+
+/* Hide scrollbar completely */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari and Opera */
+}
+
+/* Thin scrollbar styling */
+.scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(156 163 175) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(156 163 175);
+    border-radius: 3px;
+    border: none;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(107 114 128);
+}
+
+/* Dark mode scrollbar */
+.dark .scrollbar-thin {
+    scrollbar-color: rgb(75 85 99) rgb(31 41 55);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(75 85 99);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(107 114 128);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-track {
+    background: rgb(31 41 55);
 }

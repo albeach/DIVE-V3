@@ -132,7 +132,7 @@ describe('AuthzCacheService', () => {
     });
 
     describe('Cache Expiration', () => {
-        it.skip('should expire entries after TTL (TOP_SECRET - 15s)', async () => {
+        it('should expire entries after TTL (TOP_SECRET - 15s)', async () => {
             // Skipped: Timing-dependent test, behavior validated by node-cache library
             // Manual verification: Cache entries do expire based on TTL
             // This is validated in integration testing and production monitoring
@@ -463,5 +463,156 @@ describe('AuthzCacheService', () => {
             });
         });
     });
-});
 
+    describe('TTL Statistics Tracking', () => {
+        it('should track TOP_SECRET in ttlStats correctly', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'TOP_SECRET');
+
+            const stats = authzCacheService.getStats();
+            expect(stats.ttlStats.topSecret).toBe(1);
+        });
+
+        it('should handle TOP SECRET with spaces', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'TOP SECRET');
+
+            const stats = authzCacheService.getStats();
+            expect(stats.ttlStats.topSecret).toBe(1);
+        });
+
+        it('should track multiple classification types in ttlStats', () => {
+            authzCacheService.cacheDecision(
+                { subject: 'user1', resource: 'doc1', action: 'view' },
+                mockDecision,
+                'TOP_SECRET'
+            );
+            authzCacheService.cacheDecision(
+                { subject: 'user2', resource: 'doc2', action: 'view' },
+                mockDecision,
+                'SECRET'
+            );
+            authzCacheService.cacheDecision(
+                { subject: 'user3', resource: 'doc3', action: 'view' },
+                mockDecision,
+                'CONFIDENTIAL'
+            );
+            authzCacheService.cacheDecision(
+                { subject: 'user4', resource: 'doc4', action: 'view' },
+                mockDecision,
+                'UNCLASSIFIED'
+            );
+
+            const stats = authzCacheService.getStats();
+            expect(stats.ttlStats.topSecret).toBe(1);
+            expect(stats.ttlStats.secret).toBe(1);
+            expect(stats.ttlStats.confidential).toBe(1);
+            expect(stats.ttlStats.unclassified).toBe(1);
+        });
+
+        it('should not double-count TOP SECRET as SECRET', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'TOP_SECRET');
+
+            const stats = authzCacheService.getStats();
+            expect(stats.ttlStats.topSecret).toBe(1);
+            expect(stats.ttlStats.secret).toBe(0); // Should not count as SECRET
+        });
+    });
+
+    describe('Prune Expired Entries', () => {
+        it('should call pruneExpired without error', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+
+            const pruned = authzCacheService.pruneExpired();
+            expect(pruned).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should return 0 when no entries are pruned', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+
+            const pruned = authzCacheService.pruneExpired();
+            expect(pruned).toBe(0);
+        });
+    });
+
+    describe('Error Handling', () => {
+        it('should handle cache get errors gracefully', () => {
+            // Force an error by manipulating the cache
+            const mockCache = authzCacheService['cache'];
+            const originalGet = mockCache.get.bind(mockCache);
+            mockCache.get = jest.fn().mockImplementation(() => {
+                throw new Error('Cache error');
+            });
+
+            const result = authzCacheService.getCachedDecision(testKey);
+            expect(result).toBeNull();
+
+            const stats = authzCacheService.getStats();
+            expect(stats.misses).toBeGreaterThan(0);
+
+            // Restore original method
+            mockCache.get = originalGet;
+        });
+
+        it('should handle cache set errors gracefully', () => {
+            const mockCache = authzCacheService['cache'];
+            const originalSet = mockCache.set.bind(mockCache);
+            mockCache.set = jest.fn().mockImplementation(() => {
+                throw new Error('Cache set error');
+            });
+
+            // Should not throw
+            expect(() => {
+                authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+            }).not.toThrow();
+
+            // Restore original method
+            mockCache.set = originalSet;
+        });
+
+        it('should handle cache set failure (returns false)', () => {
+            const mockCache = authzCacheService['cache'];
+            const originalSet = mockCache.set.bind(mockCache);
+            mockCache.set = jest.fn().mockReturnValue(false);
+
+            // Should not throw and should log warning
+            authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+
+            // Restore original method
+            mockCache.set = originalSet;
+        });
+    });
+
+    describe('Cache Events', () => {
+        it('should handle flush event', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+            authzCacheService.getCachedDecision(testKey);
+
+            expect(authzCacheService.getStats().hits).toBe(1);
+
+            authzCacheService.invalidateAll();
+
+            // Stats should be reset after flush
+            const stats = authzCacheService.getStats();
+            expect(stats.hits).toBe(0);
+            expect(stats.misses).toBe(0);
+            expect(stats.size).toBe(0);
+        });
+    });
+
+    describe('Detailed Info Edge Cases', () => {
+        it('should filter out null entries in getDetailedInfo', () => {
+            authzCacheService.cacheDecision(testKey, mockDecision, 'SECRET');
+
+            const info = authzCacheService.getDetailedInfo();
+
+            expect(info.entries).toBeInstanceOf(Array);
+            expect(info.entries.every(e => e !== null && e !== undefined)).toBe(true);
+        });
+
+        it('should handle empty cache in getDetailedInfo', () => {
+            const info = authzCacheService.getDetailedInfo();
+
+            expect(info.stats.size).toBe(0);
+            expect(info.entries.length).toBe(0);
+        });
+    });
+});

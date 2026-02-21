@@ -1,0 +1,1312 @@
+# =============================================================================
+# DIVE V3 - Hub Stack (OPAL + Core Services)
+# =============================================================================
+# Purpose:
+#   Minimal hub footprint for policy distribution (OPAL Server) plus the
+#   supporting identity/policy services required to serve policy data.
+# Usage:
+#   ./dive hub deploy       # uses this compose file (loads env automatically)
+#   ./dive hub up           # start services
+#
+#   Manual usage (when not using dive CLI):
+#   RECOMMENDED: Create symlink for Docker Compose default behavior
+#   ln -sf .env.hub .env
+#   docker compose -f docker-compose.hub.yml up
+#
+#   OR: Use --env-file flag (all commands must include it):
+#   docker compose -f docker-compose.hub.yml --env-file .env.hub up
+#   docker compose -f docker-compose.hub.yml --env-file .env.hub restart backend
+#
+# Environment Variable Loading (Docker Compose Behavior):
+#   Docker Compose interpolates ${VARIABLES} in TWO phases:
+#   1. PARSE PHASE: Loads .env (default filename) OR --env-file for ${VAR} interpolation
+#   2. CONTAINER PHASE: Loads service-level env_file: entries into container environment
+#
+#   CRITICAL: ${MONGO_PASSWORD_USA} in this file needs to exist in PARSE PHASE:
+#   - Option A (Recommended): ln -sf .env.hub .env
+#   - Option B: Always use --env-file .env.hub flag
+#   - Option C: Export vars to shell: export $(cat .env.hub | xargs)
+#
+# Notes:
+#   - Secrets come from ./dive load_secrets (GCP or local defaults).
+#   - Certificates are expected in instances/hub/certs (SSOT via ./dive certs).
+#   - No spoke/partner services are included here.
+# =============================================================================
+
+name: dive-hub
+
+networks:
+  hub-internal:
+    driver: bridge
+    labels:
+      dive.network.type: "internal"
+      dive.network.scope: "hub"
+      dive.network.description: "Hub internal service communication"
+  # Shared network for federation, monitoring, and cross-instance communication
+  # Used by: Hub ↔ Spokes, Monitoring (Prometheus/Grafana), Shared Blacklist
+  # In production, instances communicate via external domains
+  dive-shared:
+    external: true
+
+volumes:
+  postgres_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "postgres"
+      dive.resource.purpose: "database"
+  mongodb_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.purpose: "database"
+  mongodb_config:  # MongoDB replica set configuration
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.purpose: "config"
+  redis_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "redis"
+      dive.resource.purpose: "cache"
+  # redis_blacklist_data: MOVED to shared stack (shared-blacklist-redis-data)
+  authzforce_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "data"
+  authzforce_server:        # Prevent anonymous volume from base image
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "server"
+  authzforce_tomcat_conf:   # Prevent anonymous volume from base image
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "config"
+  vault_seal_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-seal"
+      dive.resource.purpose: "data"
+  vault_data_1:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-1"
+      dive.resource.purpose: "data"
+  vault_data_2:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-2"
+      dive.resource.purpose: "data"
+  vault_data_3:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-3"
+      dive.resource.purpose: "data"
+  vault_transit_token:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-seal"
+      dive.resource.purpose: "transit-token-share"
+  vault_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "logs"
+  opal_cache:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.purpose: "cache"
+  opal_backup:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.purpose: "backup"
+  caddy_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.purpose: "certificates"
+  caddy_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.purpose: "config"
+
+services:
+  # ---------------------------------------------------------------------------
+  # HashiCorp Vault HA Cluster — Transit Auto-Unseal + 3-Node Raft
+  # ---------------------------------------------------------------------------
+  # Architecture:
+  #   vault-seal  → Lightweight file-backed vault, hosts Transit engine
+  #   vault-1/2/3 → 3-node Raft cluster, auto-unseal via Transit
+  #   vault-1 has network alias "dive-hub-vault" for backward compatibility
+  # ---------------------------------------------------------------------------
+
+  # Seal Vault — Transit engine for auto-unseal (no application secrets)
+  vault-seal:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Vault Transit seal for auto-unseal"
+    profiles: ["vault-ha"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-seal
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    volumes:
+      - vault_seal_data:/vault/data
+      - vault_transit_token:/vault/transit  # Shared: cluster nodes read token from here
+      - ./vault_config/seal:/vault/config:ro
+    ports:
+      - "127.0.0.1:8210:8200"  # Debug/admin access only
+    networks:
+      - hub-internal
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/transit
+        exec su-exec vault /bin/sh /vault/config/entrypoint.sh
+    healthcheck:
+      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # Vault Node 1 — Primary entry point (alias: dive-hub-vault)
+  vault-1:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 1 (primary entry)"
+    profiles: ["vault-ha"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-1
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "${VAULT_SCHEME:-https}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-https}://vault-1:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-https}://vault-1:8201"
+      SKIP_CHOWN: "true"
+    volumes:
+      - vault_data_1:/vault/data
+      - vault_logs:/vault/logs
+      - vault_transit_token:/vault/transit:ro  # Read transit token from seal vault
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node1:/vault/config:ro
+      - ./certs/vault/node1:/vault/certs:ro    # TLS certs (production: VAULT_SCHEME=https)
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${VAULT_API_PORT:-8200}:8200"  # Primary API port
+    networks:
+      hub-internal:
+      dive-shared:
+        aliases:
+          - dive-hub-vault  # Backward-compatible DNS for all existing clients
+    depends_on:
+      vault-seal:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        # Read Transit auto-unseal token from shared volume
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "sh", "-c", "if [ -f /vault/certs/ca.pem ]; then export VAULT_CACERT=/vault/certs/ca.pem; fi; vault status -address=${VAULT_SCHEME:-https}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Vault Node 2 — HA follower
+  vault-2:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 2 (follower)"
+    profiles: ["vault-ha"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-2
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "${VAULT_SCHEME:-https}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-https}://vault-2:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-https}://vault-2:8201"
+      SKIP_CHOWN: "true"
+    volumes:
+      - vault_data_2:/vault/data
+      - vault_logs:/vault/logs
+      - vault_transit_token:/vault/transit:ro
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node2:/vault/config:ro
+      - ./certs/vault/node2:/vault/certs:ro    # TLS certs (production)
+    ports:
+      - "127.0.0.1:8202:8200"  # Debug access
+    networks:
+      - hub-internal
+      - dive-shared
+    depends_on:
+      vault-seal:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "sh", "-c", "if [ -f /vault/certs/ca.pem ]; then export VAULT_CACERT=/vault/certs/ca.pem; fi; vault status -address=${VAULT_SCHEME:-https}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Vault Node 3 — HA follower
+  vault-3:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 3 (follower)"
+    profiles: ["vault-ha"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-3
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "${VAULT_SCHEME:-https}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-https}://vault-3:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-https}://vault-3:8201"
+      SKIP_CHOWN: "true"
+    volumes:
+      - vault_data_3:/vault/data
+      - vault_logs:/vault/logs
+      - vault_transit_token:/vault/transit:ro
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node3:/vault/config:ro
+      - ./certs/vault/node3:/vault/certs:ro    # TLS certs (production)
+    ports:
+      - "127.0.0.1:8204:8200"  # Debug access
+    networks:
+      - hub-internal
+      - dive-shared
+    depends_on:
+      vault-seal:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "sh", "-c", "if [ -f /vault/certs/ca.pem ]; then export VAULT_CACERT=/vault/certs/ca.pem; fi; vault status -address=${VAULT_SCHEME:-https}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Vault Dev Mode — single node, in-memory, instant startup (<10s)
+  # Activated via DIVE_ENV=dev (profile: vault-dev)
+  # Uses same DNS alias as vault-1 so all clients work unchanged
+  vault-dev:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Vault dev mode (single node, in-memory, root token)"
+    profiles: ["vault-dev"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-dev
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_LOG_LEVEL: "WARN"
+    command: ["server", "-dev"]
+    ports:
+      - "127.0.0.1:8200:8200"
+    networks:
+      hub-internal:
+      dive-shared:
+        aliases:
+          - dive-hub-vault
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 3s
+      timeout: 2s
+      retries: 3
+      start_period: 3s
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - backing store for Keycloak / NextAuth
+  # ---------------------------------------------------------------------------
+  postgres:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "PostgreSQL database for Keycloak user/realm storage"
+    image: postgres:18.1-alpine3.23
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.hub
+    # TLS: Copy certs with correct ownership (PG Alpine runs as uid 70)
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/postgresql/certs &&
+        cp /certs/fullchain.pem /var/lib/postgresql/certs/server.crt &&
+        cp /certs/key.pem /var/lib/postgresql/certs/server.key &&
+        cp /certs/ca/rootCA.pem /var/lib/postgresql/certs/ca.crt &&
+        chown 70:70 /var/lib/postgresql/certs/server.key &&
+        chmod 600 /var/lib/postgresql/certs/server.key &&
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/var/lib/postgresql/certs/server.crt \
+          -c ssl_key_file=/var/lib/postgresql/certs/server.key \
+          -c ssl_ca_file=/var/lib/postgresql/certs/ca.crt
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_USA}
+      POSTGRES_DB: keycloak_db
+    volumes:
+      - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
+      - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+      - ./scripts/postgres-init:/scripts/postgres-init:ro
+      - ./instances/hub/certs:/certs:ro
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - policy/resource data backing store for backend
+  # CONFIGURED AS SINGLE-NODE REPLICA SET for OPAL CDC change streams
+  # ---------------------------------------------------------------------------
+  mongodb:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "MongoDB database for resource metadata and audit logs"
+    image: mongo:8.0.17
+    container_name: ${COMPOSE_PROJECT_NAME}-mongodb
+    restart: unless-stopped
+    # Production-grade replica set: keyFile auth + TLS encryption
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # MEMORY LEAK FIX (2026-02-16): Hard limit prevents host OOM
+        reservations:
+          memory: 512M  # Minimum guaranteed memory
+    entrypoint:
+      - bash
+      - -c
+      - |
+        echo 'Preparing MongoDB replica set with keyFile authentication and TLS'
+        cp /data/keyfile/mongo-keyfile /tmp/mongo-keyfile
+        chmod 400 /tmp/mongo-keyfile
+        chown 999:999 /tmp/mongo-keyfile
+        cat /certs/certificate.pem /certs/key.pem > /tmp/mongodb.pem
+        cp /certs/ca/rootCA.pem /tmp/ca.pem
+        chown 999:999 /tmp/mongodb.pem /tmp/ca.pem
+        chmod 600 /tmp/mongodb.pem
+        chmod 644 /tmp/ca.pem
+        exec /usr/local/bin/docker-entrypoint.sh mongod \
+          --replSet rs0 \
+          --keyFile /tmp/mongo-keyfile \
+          --bind_ip_all \
+          --tlsMode requireTLS \
+          --tlsCertificateKeyFile /tmp/mongodb.pem \
+          --tlsCAFile /tmp/ca.pem \
+          --tlsAllowConnectionsWithoutCertificates \
+          --wiredTigerCacheSizeGB 1
+    env_file:
+      - .env.hub
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_USA}
+      MONGO_INITDB_DATABASE: dive-v3
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      # Mount replica set keyFile (will be copied to /tmp with correct permissions)
+      - ./instances/hub/mongo-keyfile:/data/keyfile/mongo-keyfile:ro
+      - ./instances/hub/certs:/certs:ro
+      # NOTE: Replica set initialization happens POST-START via deployment script
+      # docker-entrypoint-initdb.d/ runs BEFORE --replSet is applied, so it cannot work
+      # See: scripts/init-mongo-replica-set-post-start.sh (called by hub_deploy())
+    networks:
+      - hub-internal
+    healthcheck:
+      # MEMORY LEAK FIX (2026-02-16): TCP-based health check eliminates mongosh connection churn
+      # OLD: mongosh creates new connection every 10s (8,640 connections/day)
+      # NEW: TCP socket check (zero MongoDB connections)
+      # IMPACT: Eliminates health check connection overhead entirely
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis - session/blacklist cache (Hardened)
+  # ---------------------------------------------------------------------------
+  redis:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Redis cache for session state and policy decisions"
+    image: redis:7.2-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+    restart: unless-stopped
+    env_file:
+      - .env.hub
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_USA}
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /certs/fullchain.pem
+      --tls-key-file /certs/key.pem
+      --tls-ca-cert-file /certs/ca/rootCA.pem
+      --tls-auth-clients no
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    environment:
+      REDIS_PASSWORD_USA: ${REDIS_PASSWORD_USA}
+    ports:
+      # Changed from 6379:6379 to avoid conflict with local redis-server
+      # Internal Docker network still uses :6379, only host port changed
+      - "127.0.0.1:6380:6379"
+    networks:
+      - hub-internal
+      - dive-shared
+    volumes:
+      - redis_data:/data
+      - ./instances/hub/certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca/rootCA.pem", "-a", "${REDIS_PASSWORD_USA}", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # Token Revocation Store - CENTRALIZED IN SHARED STACK
+  # ---------------------------------------------------------------------------
+  # Token revocation is now in docker/instances/shared/docker-compose.yml
+  # Service name: shared-token-store (was: shared-blacklist-redis)
+  # Network: dive-shared
+  # Rationale: Cross-instance token revocation for federation (USA/FRA/GBR/DEU)
+  #
+  # Backend connects via: shared-token-store:6379
+  # Requires: shared stack running (`cd docker/instances/shared && docker compose up -d`)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Redis Exporter - Prometheus metrics
+
+  # ---------------------------------------------------------------------------
+  # Keycloak - Identity Broker
+  # ---------------------------------------------------------------------------
+  keycloak:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Keycloak IdP broker for multi-nation SSO"
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-keycloak
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1536M  # MEMORY LEAK FIX (2026-02-16): 1.5GB (1GB heap + 512MB native)
+        reservations:
+          memory: 512M
+    env_file:
+      - .env.hub
+    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
+    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_USA}}
+      KC_DB_POOL_INITIAL_SIZE: 5
+      KC_DB_POOL_MIN_SIZE: 5
+      KC_DB_POOL_MAX_SIZE: 20  # MEMORY LEAK FIX: Reduced from default 100
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/fullchain.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
+      # X.509 Client Certificate Authentication (request mode - allows but not requires)
+      KC_HTTPS_CLIENT_AUTH: request
+      # SSOT CA bundle for federation with spoke Keycloaks (mkcert + Vault PKI)
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/ca-bundle/rootCA.pem
+      KC_LOG_LEVEL: "info"  # MEMORY LEAK FIX: Reduced from debug (saves heap memory)
+      KC_METRICS_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: scripts
+      KC_ADMIN: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # MEMORY LEAK FIX (2026-02-16): Aggressive session pruning
+      # OLD: Default session cleanup (1 hour interval, long idle timeout)
+      # NEW: 15-minute cleanup, reduced cache sizes
+      # IMPACT: Reduces Keycloak growth rate by 50-100 MB/hour
+      KC_SPI_USER_SESSIONS_INFINISPAN_USER_SESSIONS_IDLE_TIMEOUT: "900"  # 15 min (was 1 hour)
+      KC_SPI_USER_SESSIONS_INFINISPAN_OFFLINE_SESSION_IDLE_TIMEOUT: "43200"  # 12 hours
+      KC_SPI_USER_SESSIONS_INFINISPAN_MAX_CACHE_SIZE: "10000"  # Limit cache growth
+      # Bootstrap realm for Terraform provider authentication
+      SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
+      # Legacy realm import variables (kept for compatibility, but not used)
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA:-bootstrap-will-be-replaced}
+      APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
+      API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
+      USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
+      USA_IDP_CLIENT_SECRET: ${USA_IDP_CLIENT_SECRET:-default-usa-idp-secret}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-hub-users.sh
+      INSTANCE_CODE: ${INSTANCE:-USA}
+      # MEMORY LEAK FIX (2026-02-16): JVM heap tuning
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx1024m
+        -XX:MetaspaceSize=128m
+        -XX:MaxMetaspaceSize=256m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=100
+        -XX:+UseStringDeduplication
+        -Djava.net.preferIPv4Stack=true
+      # OpenTelemetry integration (Keycloak 26.5.2)
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: "keycloak-${INSTANCE:-usa}"
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_MGMT_PORT:-9000}:9000"
+    volumes:
+      - ./instances/hub/certs:/opt/keycloak/certs:ro
+      - ./certs/ca-bundle:/opt/keycloak/ca-bundle:ro  # SSOT CA bundle for federation
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+      # ADDED (Dec 2025): Mount scripts to pick up local fixes without rebuilding image
+      - ./keycloak/scripts:/opt/keycloak/scripts:ro
+    networks:
+      - hub-internal
+      - dive-shared  # Required for federation (Keycloak needs to reach spoke Keycloaks)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master >/dev/null"]
+      interval: 5s         # Check every 5 seconds (was 10s)
+      timeout: 8s
+      retries: 10          # Allow 10 failures (was 10, unchanged)
+      start_period: 45s    # Start checking after 45s (was 90s)
+
+  # ---------------------------------------------------------------------------
+  # OPA - Policy Decision Point
+  # ---------------------------------------------------------------------------
+  # Policies and data loaded exclusively via OPAL (proper GitOps):
+  #   - Policies: OPAL Client pulls from GitHub via OPAL Server
+  #   - Data: OPAL Client fetches from Backend API (MongoDB SSOT)
+  #   - No local policy mount — same architecture as spokes
+  # ---------------------------------------------------------------------------
+  opa:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Open Policy Agent for ABAC authorization decisions"
+    image: openpolicyagent/opa:1.12.3
+    container_name: ${COMPOSE_PROJECT_NAME}-opa
+    restart: unless-stopped
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --tls-cert-file=/certs/fullchain.pem
+      - --tls-private-key-file=/certs/key.pem
+      - --set=decision_logs.console=true
+      - --set=data_api_enabled=true
+      - --set=policies_api_enabled=true
+      - --log-level=debug
+    ports:
+      - "127.0.0.1:${OPA_PORT:-8181}:8181"
+      - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
+    volumes:
+      - ./instances/hub/certs:/certs:ro
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # OPAL Client - Bridges OPAL Server to OPA (policies + data)
+  # ---------------------------------------------------------------------------
+  # Syncs policies from GitHub (via OPAL Server) and dynamic data from
+  # Backend API (trusted issuers, federation matrix, etc.) to OPA.
+  # Same architecture as spoke OPAL clients.
+  # ---------------------------------------------------------------------------
+  opal-client:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "OPAL client - syncs policies and data from OPAL Server to OPA"
+    build:
+      context: ./docker
+      dockerfile: opal-client.Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-opal-client
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["/usr/local/bin/opal-entrypoint.sh"]
+    environment:
+      OPAL_SERVER_URL: https://opal-server:7002
+      OPAL_CLIENT_TOKEN: ${HUB_OPAL_TOKEN}
+      OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_POLICY_STORE_URL: https://opa:8181
+      OPAL_SUBSCRIPTION_ID: hub
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints,classification_equivalency
+      OPAL_LOG_LEVEL: INFO
+      OPAL_DATA_UPDATER_ENABLED: "true"
+      OPAL_KEEP_ALIVE_TIMEOUT: 60
+      OPAL_RECONNECT_INTERVAL: 5
+      OPAL_RECONNECT_MAX_INTERVAL: 300
+      OPAL_POLICY_REFRESH_INTERVAL: 60
+    profiles:
+      - opal
+    depends_on:
+      opal-server:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    networks:
+      - hub-internal
+    volumes:
+      - opal_cache:/var/opal/cache
+      - opal_backup:/opal/backup
+      - ./instances/hub/certs:/var/opal/certs:ro
+      - ./instances/hub/certs:/var/opal/hub-certs:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Backend API - serves policy data for OPAL and Hub admin APIs
+  # ---------------------------------------------------------------------------
+  backend:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Express.js API with PEP for authorization enforcement"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME}-backend
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env.hub
+    environment:
+      NODE_ENV: development  # Development mode for better debugging
+      LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
+      PORT: "4000"
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      # Docker-internal Vault address (never use localhost — that's the host CLI address)
+      VAULT_ADDR: https://dive-hub-vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      # Vault database secrets engine role (dynamic MongoDB credentials)
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE:-}
+      # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
+      # --use-openssl-ca: Forces Node.js to load NODE_EXTRA_CA_CERTS (required for mkcert trust)
+      NODE_OPTIONS: "--max-old-space-size=4096 --use-openssl-ca"
+      INSTANCE_CODE: USA
+      INSTANCE_NAME: "United States"
+      INSTANCE_REALM: USA
+      IS_HUB: "true"
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&directConnection=true&tls=true
+      MONGODB_HOST: mongodb:27017
+      MONGODB_DATABASE: dive-v3-hub
+      # PostgreSQL audit persistence (authorization_log, federation_log, audit_log)
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app?sslmode=require
+      OPA_URL: https://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker-usa
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
+      KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak:8443/realms/dive-v3-broker-usa}
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-https://keycloak:8443/realms/dive-v3-broker-usa,https://localhost:8443/realms/dive-v3-broker-usa}
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Redis configuration
+      REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
+      REDIS_URL: rediss://:${REDIS_PASSWORD_USA}@redis:6379
+      # Shared token revocation store (cross-instance)
+      # Requires shared stack: cd docker/instances/shared && docker compose up -d
+      # Optional: blacklist features degrade gracefully when unavailable
+      BLACKLIST_REDIS_URL: rediss://:${REDIS_PASSWORD_BLACKLIST}@shared-token-store:6379
+      # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
+      # The spoke provides its password during registration, stored in MongoDB
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      OPAL_SERVER_URL: https://opal-server:7002
+      OPAL_DATA_BACKEND_URL: https://backend:4000
+      OPAL_DATA_TOPICS: policy_data
+      # OPAL JWT Auth: Backend obtains its own JWT via opalTokenService (see opal-client.ts)
+      # The OPAL_AUTH_MASTER_TOKEN is used internally by opalTokenService to request JWTs
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # OPAL data source token for service-to-service auth (backend validates this)
+      OPAL_DATA_SOURCE_TOKEN: ${OPAL_DATA_SOURCE_TOKEN}
+      # Docker exec configuration for running OPA tests
+      OPA_CONTAINER: ${COMPOSE_PROJECT_NAME}-opa
+      OPA_POLICIES_PATH: /policies
+      # KAS URL for key requests (use container name since KAS is manually started)
+      KAS_URL: https://kas:8080
+      # Enable polling for file watching in Docker (fixes hot-reload)
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+    # Full stack/heap diagnostic on fatal errors (OOM) - report written to ./backend/logs
+    # On-demand report: docker kill -s SIGUSR2 dive-hub-backend
+    command:
+      - node
+      - --report-on-fatalerror
+      - --report-uncaught-exception
+      - --report-on-signal
+      - --report-signal=SIGUSR2
+      - --report-directory=/app/logs
+      - --report-filename=node-report.%e.%p.%h.%t.json
+      - node_modules/.bin/tsx
+      - watch
+      - src/https-server.ts
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      - ./instances/hub/certs:/app/certs:rw  # SSOT: /app/certs (rw for CRL cache)
+      - ./policies:/app/policies:rw  # rw: backend creates data/ subdirectory
+      - ./certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+      - ./examples/examples:/app/examples/examples:ro  # Multi-format seeding templates
+      - ./NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
+      - ./backend/logs:/app/logs
+      - ./config:/app/config:ro
+      # Docker socket for running OPA tests via docker exec
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - hub-internal
+      - dive-shared  # Access to shared-blacklist-redis + federation
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # AuthzForce - XACML Policy Decision Point (EXCLUDED - See ADR-001)
+  # ---------------------------------------------------------------------------
+  # STATUS: Disabled via docker-compose profile (not started by default)
+  # REASON: Tomcat context startup failure causes 90s timeout on every deployment
+  # IMPACT: Zero functional loss - OPA provides all authorization (XACML not required)
+  # RE-ENABLE: docker compose --profile xacml up -d authzforce
+  #
+  # Technical Details:
+  #   - Tomcat starts but WAR deployment fails ("listeners failed to start")
+  #   - Root cause unclear, investigation not justified (OPTIONAL service, no clients)
+  #   - Excluding saves 90s deployment time (59% reduction: 153s → 63s)
+  #
+  # Alternative XACML Support:
+  #   - Option A: Re-enable this service if XACML requirement emerges
+  #   - Option B: Implement OPA XACML compatibility layer (Rego policies)
+  #   - Option C: Evaluate alternative XACML PDPs (AT&T, WSO2 Balana)
+  #
+  # Platform Note (ARM64 hosts):
+  #   AuthzForce image is linux/amd64 only. On ARM64 hosts (Apple Silicon, ARM servers),
+  #   Docker uses QEMU emulation which adds ~20% performance overhead but works reliably.
+  #   This is acceptable for dev/test environments. For production ARM64, consider:
+  #   - Building a native ARM64 image from source, OR
+  #   - Using an alternative XACML PDP with ARM64 support
+  #
+  # See: docs/ADR/ADR-001-AUTHZFORCE-EXCLUSION.md
+  # ---------------------------------------------------------------------------
+  authzforce:
+    image: authzforce/server:12.0.1
+    platform: linux/amd64  # Explicit for ARM64 hosts (runs via QEMU emulation)
+    container_name: ${COMPOSE_PROJECT_NAME}-authzforce
+    restart: unless-stopped
+    # EXCLUDED from default deployment (ADR-001: Tomcat context failure, 90s timeout)
+    # Re-enable: docker compose --profile xacml up
+    profiles: ["xacml"]
+    # NOTE: Exposing port for debugging only. In production, remove this.
+    ports:
+      - "127.0.0.1:${AUTHZFORCE_PORT:-8282}:8080"
+    volumes:
+      # Named volumes to prevent anonymous volumes from base image
+      - authzforce_server:/opt/authzforce-ce-server
+      - authzforce_tomcat_conf:/usr/local/tomcat/conf
+      # Application-specific mounts (override subdirs of authzforce_server)
+      - ./authzforce/conf:/opt/authzforce-ce-server/conf:ro
+      - authzforce_data:/opt/authzforce-ce-server/data
+      - ./policies/uploads:/policies:ro
+    environment:
+      JAVA_OPTS: -Xms256m -Xmx512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/authzforce-ce/domains"]
+      interval: 10s
+      timeout: 8s
+      retries: 8
+      start_period: 45s
+    networks:
+      - hub-internal
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector - Metrics and Tracing
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    labels:
+      dive.service.class: "optional"
+      dive.service.description: "OpenTelemetry collector for traces/metrics (optional)"
+    image: otel/opentelemetry-collector:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"  # OTLP gRPC
+      - "127.0.0.1:4318:4318"  # OTLP HTTP
+      - "127.0.0.1:8889:8889"  # Prometheus exporter (for Grafana)
+      - "127.0.0.1:13133:13133"  # Health check endpoint
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    networks:
+      - hub-internal
+    # Note: No Docker health check for distroless image
+    # The collector's health_check extension runs on port 13133 for external monitoring
+    # Classification: OPTIONAL (observability enhancement, not core functionality)
+    # Relies on restart policy for failure recovery
+    depends_on:
+      - keycloak
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # KAS - Key Access Service (Stretch Goal)
+  # ---------------------------------------------------------------------------
+  kas:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Key Access Service for TDF encrypted resources (CRITICAL for policy-bound decryption)"
+    build:
+      context: ./kas
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-kas
+    restart: unless-stopped
+    env_file:
+      - .env.hub
+    healthcheck:
+      # FIX: Fall back to HTTP if HTTPS fails (KAS falls back to HTTP when certs unavailable)
+      test: ["CMD-SHELL", "curl -kfs https://localhost:8080/health || curl -fs http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 8s
+      retries: 8
+      start_period: 20s
+    environment:
+      NODE_ENV: development
+      KAS_PORT: 8080
+      HTTPS_ENABLED: "true"
+      CERT_PATH: /app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: fullchain.pem
+      BACKEND_URL: https://backend:4000
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      OPA_URL: https://opa:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&replicaSet=rs0&directConnection=true&tls=true
+      MONGODB_HOST: mongodb:27017
+      MONGODB_DATABASE: dive-v3-hub
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      # Docker-internal Vault address (never use localhost — that's the host CLI address)
+      VAULT_ADDR: https://dive-hub-vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE_KAS:-}
+      REDIS_URL: rediss://:${REDIS_PASSWORD_USA}@redis:6379
+      LOG_LEVEL: debug
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker-usa
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak:8443/realms/dive-v3-broker-usa}
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-https://keycloak:8443/realms/dive-v3-broker-usa,https://localhost:8443/realms/dive-v3-broker-usa}
+    ports:
+      - "127.0.0.1:8085:8080"
+    depends_on:
+      opa:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - hub-internal
+      - dive-shared  # For federation with spokes
+    volumes:
+      - ./instances/hub/certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
+      - ./certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+      - ./kas/logs:/app/logs
+      - ./config:/app/config:ro
+    # Use built version instead of dev mode
+    command: node dist/server.js
+
+  # ---------------------------------------------------------------------------
+  # Frontend - Next.js Application
+  # ---------------------------------------------------------------------------
+  frontend:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Next.js React application with NextAuth.js"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod.optimized
+    container_name: ${COMPOSE_PROJECT_NAME}-frontend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Prevent frontend from exceeding 1GB
+        reservations:
+          memory: 256M
+    env_file:
+      - .env.hub
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 5s         # Check every 5 seconds (was 10s)
+      timeout: 8s
+      retries: 10          # Allow 10 failures (was 12)
+      start_period: 30s    # Start checking after 30s (was 90s)
+    environment:
+      NODE_ENV: production
+      PORT: "3000"  # Frontend listens on 3000 (override .env.hub PORT=4000 which is for backend)
+      # Instance identification for frontend theme/branding
+      NEXT_PUBLIC_INSTANCE: USA
+      NEXT_PUBLIC_INSTANCE_NAME: "United States"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
+      BACKEND_URL: https://backend:4000
+      KEYCLOAK_BASE_URL: https://keycloak:8443
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker-usa}
+      NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}
+      NEXT_PUBLIC_KEYCLOAK_REALM: ${NEXT_PUBLIC_KEYCLOAK_REALM:-dive-v3-broker-usa}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
+      AUTH_URL: ${AUTH_URL:-${NEXTAUTH_URL:-https://localhost:3000}}
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: ${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}
+      AUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
+      NEXTAUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
+      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
+      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
+      AUTH_TRUST_HOST: "true"
+      # TLS Certificate Paths (SSOT: /app/certs for all Node.js services)
+      CERT_PATH: /app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
+      # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
+      # Makes Node.js fetch() API use system CA trust store (mkcert CA installed via entrypoint)
+      # See: docs/TLS_BEST_PRACTICES_2026.md
+      NODE_OPTIONS: "--use-openssl-ca"
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
+      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app?sslmode=require}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - hub-internal
+    extra_hosts:
+      - "localhost:host-gateway"
+    volumes:
+      - ./instances/hub/certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
+      - ./certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+
+  # ---------------------------------------------------------------------------
+  # OPAL Server - Policy distribution hub
+  # ---------------------------------------------------------------------------
+  opal-server:
+    labels:
+      dive.service.class: "stretch"
+      dive.service.description: "OPAL server for real-time policy distribution (stretch goal)"
+    build:
+      context: ./docker
+      dockerfile: opal-server.Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-opal-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - .env.hub
+    environment:
+      # Use Redis as broadcast backend for pub/sub
+      OPAL_BROADCAST_URI: rediss://:${REDIS_PASSWORD_USA}@redis:6379
+      # ============================================================
+      # PHASE 5: Git Repository Tracking (Official OPAL Architecture)
+      # ============================================================
+      # Following official OPAL architecture: Admin → Git → OPAL → Clients → OPA
+      # Source: https://docs.opal.ac/overview/architecture
+      OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git
+      OPAL_POLICY_REPO_MAIN_BRANCH: master
+      OPAL_REPO_WATCHER_ENABLED: "true"
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30  # Poll GitHub every 30 seconds
+      # Clone to temporary directory (OPAL will manage)
+      OPAL_POLICY_REPO_CLONE_PATH: /tmp/opal_repo
+      OPAL_POLICY_REPO_REUSE_CLONE_PATH: "false"
+      # Authentication for private repository (if needed)
+      # OPAL_POLICY_REPO_AUTH_TOKEN: ${GITHUB_TOKEN}
+      # Policy paths to include (all .rego files in repository)
+      OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat,data
+      # Multiple data topics for real-time policy data distribution (Phase 2-3)
+      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints,classification_equivalency
+      OPAL_INLINE_OPA_CONFIG: "false"
+      OPAL_LOG_LEVEL: DEBUG
+      OPAL_LOG_FORMAT: text
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+      OPAL_SERVER_WORKERS: 1
+      UVICORN_SSL_CERTFILE: /certs/fullchain.pem
+      UVICORN_SSL_KEYFILE: /certs/key.pem
+      OPAL_STATISTICS_ENABLED: "true"
+      # SSOT CA bundle for HTTPS data fetching from backend
+      SSL_CERT_FILE: /ca-bundle/rootCA.pem
+      REQUESTS_CA_BUNDLE: /ca-bundle/rootCA.pem
+      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
+      # Data source URLs with multiple topics (Phase 2: Real-Time Policy Data)
+      # Each endpoint serves dynamic data from MongoDB (with file fallback)
+      # - policy_data: Combined policy data (legacy, for compatibility)
+      # - trusted_issuers: Dynamic trusted IdP issuers from MongoDB
+      # - federation_matrix: Dynamic federation trust relationships
+      # - tenant_configs: Per-nation tenant configurations
+      OPAL_DATA_CONFIG_SOURCES: |
+        {
+          "config": {
+            "entries": [
+              {
+                "url": "https://backend:4000/api/opal/policy-data",
+                "topics": ["policy_data"],
+                "dst_path": "dive/federation",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              },
+              {
+                "url": "https://backend:4000/api/opal/trusted-issuers",
+                "topics": ["trusted_issuers"],
+                "dst_path": "trusted_issuers",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              },
+              {
+                "url": "https://backend:4000/api/opal/federation-matrix",
+                "topics": ["federation_matrix"],
+                "dst_path": "federation_matrix",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              },
+              {
+                "url": "https://backend:4000/api/opal/tenant-configs",
+                "topics": ["tenant_configs"],
+                "dst_path": "tenant_configs",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              },
+              {
+                "url": "https://backend:4000/api/opal/coi-definitions",
+                "topics": ["coi_definitions"],
+                "dst_path": "coi_definitions",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              },
+              {
+                "url": "https://backend:4000/api/opal/federation-constraints",
+                "topics": ["federation_constraints"],
+                "dst_path": "federation_constraints",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}},
+                "description": "Phase 2: Tenant-controlled federation constraints (bilateral)"
+              },
+              {
+                "url": "https://backend:4000/api/opal/classification-equivalency",
+                "topics": ["classification_equivalency"],
+                "dst_path": "classification_equivalency",
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
+              }
+            ]
+          }
+        }
+      # OPAL Authentication - JWT token verification for spoke clients
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # Key files loaded by entrypoint (private=PEM, public=SSH format)
+      # Entrypoint reads: /opal-keys/jwt-signing-key.pem + /opal-keys/jwt-signing-key.pub.ssh
+      OPAL_AUTH_PRIVATE_KEY_PATH: /opal-keys/jwt-signing-key.pem
+      OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/jwt-signing-key.pub.ssh
+      OPAL_AUTH_JWT_ALGORITHM: RS256
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${OPAL_PORT:-7002}:7002"
+    networks:
+      - hub-internal
+      - dive-shared  # Allow spoke OPAL clients to connect via federation network
+    volumes:
+      # OPAL will clone policy repo from GitHub (no local mount needed)
+      # Keep data source and certificates for backend integration
+      - ./opal-data-source:/opal-data-source:ro
+      - ./instances/hub/certs:/certs:ro
+      - ./certs/ca-bundle:/ca-bundle:ro  # SSOT CA bundle for cross-instance TLS
+      - ./certs/opal:/opal-keys:ro
+    # Uses custom entrypoint from Dockerfile that validates auth keys and starts uvicorn
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
+      interval: 5s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Caddy Reverse Proxy — Auto Let's Encrypt via Cloudflare DNS-01
+  # ---------------------------------------------------------------------------
+  # Activated via profile: docker compose --profile caddy up -d
+  # Auto-activated on EC2 when DIVE_DOMAIN_SUFFIX is set.
+  # Terminates public TLS (Let's Encrypt) and proxies to internal services.
+  # ---------------------------------------------------------------------------
+  caddy:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Caddy reverse proxy with auto Let's Encrypt (DNS-01)"
+    profiles: ["caddy"]
+    build:
+      context: ./docker/caddy
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-dive-hub}-caddy
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN_APP: ${CADDY_DOMAIN_APP:-localhost}
+      CADDY_DOMAIN_API: ${CADDY_DOMAIN_API:-localhost}
+      CADDY_DOMAIN_IDP: ${CADDY_DOMAIN_IDP:-localhost}
+      CADDY_DOMAIN_OPAL: ${CADDY_DOMAIN_OPAL:-localhost}
+      CADDY_DOMAIN_VAULT: ${CADDY_DOMAIN_VAULT:-localhost}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/caddy/spokes:/etc/caddy/spokes:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - hub-internal
+      - dive-shared
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_healthy

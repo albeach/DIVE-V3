@@ -8,15 +8,19 @@
 
 import React from 'react';
 import { ISAMLConfig } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface ISAMLConfigFormProps {
     config: ISAMLConfig;
     onChange: (config: ISAMLConfig) => void;
     errors?: Record<string, string>;
+    accessToken?: string;  // For backend validation
 }
 
-export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLConfigFormProps) {
+export default function SAMLConfigForm({ config, onChange, errors = {}, accessToken }: ISAMLConfigFormProps) {
     const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
+    const [validationStatus, setValidationStatus] = React.useState<Record<string, 'validating' | 'valid' | 'invalid' | null>>({});
 
     const validateURL = (url: string): string | null => {
         if (!url) return null;
@@ -32,17 +36,53 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
         }
     };
 
+    // Upload SAML metadata XML file
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            // Use proxy route (handles auth server-side)
+            const response = await fetch(`/api/admin/idps/parse/saml-metadata`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({ metadataXml: text })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.formData) {
+                // Auto-populate form with parsed data
+                onChange({
+                    ...config,
+                    ...result.formData
+                });
+                setValidationStatus(prev => ({ ...prev, entityId: 'valid', singleSignOnServiceUrl: 'valid' }));
+            } else {
+                setLocalErrors(prev => ({ ...prev, file: result.error || 'Failed to parse metadata' }));
+            }
+        } catch (error) {
+            setLocalErrors(prev => ({ ...prev, file: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+        }
+    };
+
     const handleChange = (field: keyof ISAMLConfig, value: string) => {
         // Validate URLs in real-time
         if (field === 'singleSignOnServiceUrl' || field === 'singleLogoutServiceUrl') {
             const error = validateURL(value);
             if (error) {
                 setLocalErrors(prev => ({ ...prev, [field]: error }));
+                setValidationStatus(prev => ({ ...prev, [field]: 'invalid' }));
             } else {
                 setLocalErrors(prev => {
                     const { [field]: removed, ...rest } = prev;
                     return rest;
                 });
+                setValidationStatus(prev => ({ ...prev, [field]: 'valid' }));
             }
         }
 
@@ -60,6 +100,33 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
                     Configure SAML 2.0 settings for this identity provider.
                 </p>
             </div>
+
+            {/* Upload Metadata File */}
+            {accessToken && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label className="block text-sm font-semibold text-blue-900 mb-2">
+                        📄 Quick Setup: Upload SAML Metadata XML
+                    </label>
+                    <p className="text-xs text-blue-700 mb-3">
+                        Upload your IdP's SAML metadata XML file to auto-populate all fields.
+                    </p>
+                    <input
+                        type="file"
+                        accept=".xml,application/xml,text/xml"
+                        onChange={handleFileUpload}
+                        className="block w-full text-sm text-blue-900
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-600 file:text-white
+                            hover:file:bg-blue-700
+                            file:cursor-pointer cursor-pointer"
+                    />
+                    {localErrors.file && (
+                        <p className="mt-2 text-sm text-red-600">{localErrors.file}</p>
+                    )}
+                </div>
+            )}
 
             {/* Entity ID */}
             <div>
@@ -88,8 +155,14 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
 
             {/* SSO Service URL */}
             <div>
-                <label htmlFor="singleSignOnServiceUrl" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="singleSignOnServiceUrl" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Single Sign-On Service URL <span className="text-red-500">*</span>
+                    <InlineHelp
+                        variant="info"
+                        size="sm"
+                        position="right"
+                        content={IdPHelpContent.samlMetadataUrl}
+                    />
                 </label>
                 <input
                     type="url"
@@ -131,14 +204,14 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
 
             {/* Certificate */}
             <div>
-                <label htmlFor="certificate" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="signingCertificate" className="block text-sm font-medium text-gray-700">
                     X.509 Certificate
                 </label>
                 <textarea
-                    id="certificate"
+                    id="signingCertificate"
                     rows={8}
-                    value={config.certificate || ''}
-                    onChange={(e) => handleChange('certificate', e.target.value)}
+                    value={config.signingCertificate || ''}
+                    onChange={(e) => handleChange('signingCertificate', e.target.value)}
                     placeholder="-----BEGIN CERTIFICATE-----&#10;MIIDXTCCAkWgAwIBAgIJAKZ...&#10;-----END CERTIFICATE-----"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
                 />
@@ -176,10 +249,10 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
                 <select
                     id="nameIDFormat"
                     value={
-                        config.nameIDFormat ||
+                        config.nameIDPolicyFormat ||
                         'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified'
                     }
-                    onChange={(e) => handleChange('nameIDFormat', e.target.value)}
+                    onChange={(e) => handleChange('nameIDPolicyFormat', e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                     <option value="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified">
@@ -260,9 +333,9 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
                     <input
                         id="validateSignature"
                         type="checkbox"
-                        checked={config.validateSignature !== false}
+                        checked={config.validateSignature !== 'false'}
                         onChange={(e) =>
-                            onChange({ ...config, validateSignature: e.target.checked })
+                            onChange({ ...config, validateSignature: e.target.checked ? 'true' : 'false' })
                         }
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -338,4 +411,3 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
         </div>
     );
 }
-

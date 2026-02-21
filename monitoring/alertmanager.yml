@@ -1,0 +1,72 @@
+#
+# AlertManager Configuration for DIVE V3
+# Phase 5 Task 5.2: Production Monitoring
+#
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'dive-v3-alerts@example.com'
+  smtp_require_tls: false
+
+# Alert routing configuration
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+
+# Alert receivers
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:5001/alerts'  # Webhook for logging/integration
+
+  - name: 'critical-alerts'
+    # Production: Configure PagerDuty, Slack, email, etc.
+    # Pilot: Log to console
+    webhook_configs:
+      - url: 'http://localhost:5001/alerts/critical'
+
+  - name: 'warning-alerts'
+    # Production: Configure Slack channel, email list
+    # Pilot: Log to console
+    webhook_configs:
+      - url: 'http://localhost:5001/alerts/warning'
+
+# Inhibition rules (suppress certain alerts when others are firing)
+inhibit_rules:
+  # If backend is down, don't alert on authorization latency
+  - source_match:
+      alertname: 'BackendAPIDown'
+    target_match:
+      service: 'backend'
+    equal: ['service']
+
+  # If MongoDB is down, don't alert on decision logging failures
+  - source_match:
+      alertname: 'MongoDBDown'
+    target_match:
+      alertname: 'DecisionLoggingFailures'
+    equal: ['service']
+
+  # If OPA is down, don't alert on authorization latency
+  - source_match:
+      alertname: 'OPAServiceDown'
+    target_match:
+      alertname: 'HighAuthorizationLatency'
+
+  # If Redis is down, don't alert on MFA enrollment failures
+  - source_match:
+      alertname: 'RedisDown'
+    target_match:
+      alertname: 'HighMFAEnrollmentFailures'

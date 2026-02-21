@@ -1,0 +1,98 @@
+{
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Coalition-Friendly ICAM Pilot"
+    },
+    "nav": {
+        "home": "Startseite",
+        "docs": "Dokumente",
+        "upload": "Hochladen",
+        "policies": "Richtlinien",
+        "more": "Mehr",
+        "dashboard": "Dashboard",
+        "dashboard.description": "Schneller Überblick und Statistiken",
+        "resources": "Ressourcen",
+        "admin": "Admin",
+        "signOut": "Abmelden",
+        "documents": {
+            "name": "Dokumente",
+            "shortName": "Dokumente",
+            "description": "Klassifizierte Ressourcenbibliothek",
+            "browse": "Durchsuchen",
+            "allDocuments": "Alle Dokumente",
+            "recent": "Kürzlich",
+            "favorites": "Favoriten",
+            "actions": "Aktionen",
+            "myActivity": "Meine Aktivität",
+            "requestAccess": "Zugriff anfordern"
+        },
+        "upload": {
+            "name": "Hochladen",
+            "shortName": "Hochladen",
+            "description": "Sicheres Dokument hochladen"
+        },
+        "policyTools": {
+            "name": "Richtlinientools",
+            "shortName": "Richtlinien",
+            "description": "Autorisierungsrichtlinien und Compliance",
+            "explore": "Erkunden",
+            "policyLibrary": "Richtlinienbibliothek",
+            "policySandbox": "Richtlinien-Sandbox",
+            "sandboxWorkspaces": "Sandbox-Arbeitsbereiche",
+            "builder": "Builder",
+            "myPolicies": "Meine Richtlinien",
+            "test": "Test",
+            "reference": "Referenz",
+            "compliance": "Compliance",
+            "standardsCompliance": "Standards-Compliance"
+        },
+        "admin": {
+            "dashboard": "Admin-Dashboard",
+            "dashboard.description": "Systemadministration und -überwachung",
+            "spRegistry": "Service-Provider-Registrierung",
+            "spRegistry.description": "Registrierte Service-Provider verwalten",
+            "certificates": "Zertifikatsverwaltung",
+            "certificates.description": "PKI-Zertifikatslebenszyklusverwaltung",
+            "idpGovernance": "IdP-Governance",
+            "idpGovernance.description": "Identitätsanbieter-Analysen und -Governance",
+            "idpManagement": "IdP-Verwaltung",
+            "idpManagement.description": "Identitätsanbieter konfigurieren und verwalten",
+            "approvals": "Genehmigungen",
+            "approvals.description": "Ausstehende Anfragen prüfen und genehmigen",
+            "auditLogs": "Audit-Logs",
+            "auditLogs.description": "System-Audit-Trails und Compliance-Logs",
+            "opaPolicy": "OPA-Richtlinienverwaltung",
+            "opaPolicy.description": "Open Policy Agent-Richtlinienkonfiguration",
+            "integrationGuide": "Integrationsleitfaden",
+            "integrationGuide.description": "Entwickler-Integrationsressourcen"
+        }
+    },
+    "common": {
+        "loading": "Laden...",
+        "error": "Fehler",
+        "success": "Erfolg",
+        "cancel": "Abbrechen",
+        "save": "Speichern",
+        "delete": "Löschen",
+        "edit": "Bearbeiten",
+        "view": "Ansehen",
+        "test": "Testen",
+        "refresh": "Aktualisieren",
+        "export": "Exportieren",
+        "import": "Importieren",
+        "search": "Suchen",
+        "filter": "Filtern",
+        "clearFilters": "Filter löschen",
+        "noResults": "Keine Ergebnisse gefunden",
+        "confirm": "Bestätigen"
+    },
+    "time": {
+        "justNow": "Gerade eben",
+        "minuteAgo": "Vor 1 Minute",
+        "minutesAgo": "Vor {{count}} Minuten",
+        "hourAgo": "Vor 1 Stunde",
+        "hoursAgo": "Vor {{count}} Stunden",
+        "dayAgo": "Vor 1 Tag",
+        "daysAgo": "Vor {{count}} Tagen"
+    }
+}

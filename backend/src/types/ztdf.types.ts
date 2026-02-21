@@ -1,9 +1,9 @@
 /**
  * Zero Trust Data Format (ZTDF) Type Definitions
- * 
+ *
  * Implements NATO ACP-240 Data-Centric Security requirements
  * Reference: ACP240-llms.txt sections 5 (ZTDF & Cryptography) and 4 (Data Markings)
- * 
+ *
  * ZTDF Structure:
  * 1. Manifest: Object metadata and versioning
  * 2. Policy: Security labels and assertions (STANAG 4774/5636)
@@ -20,6 +20,7 @@
  */
 export type ClassificationLevel =
     | 'UNCLASSIFIED'
+    | 'RESTRICTED'
     | 'CONFIDENTIAL'
     | 'SECRET'
     | 'TOP_SECRET';
@@ -34,10 +35,33 @@ export type COIOperator = 'ALL' | 'ANY';
 /**
  * STANAG 4774 Security Label
  * Mandatory labeling for all objects per ACP-240 section 4.1
+ *
+ * ACP-240 Section 4.3 Compliance:
+ * "Carry original + standardized tags for recipients to enforce equivalents"
  */
 export interface ISTANAG4774Label {
-    /** Classification level (confidentiality) */
+    /** Classification level (DIVE V3 canonical: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET) */
     classification: ClassificationLevel;
+
+    /**
+     * Original national classification (ACP-240 Section 4.3)
+     * Example: "GEHEIM" (Germany), "SECRET DÉFENSE" (France)
+     * Preserves classification provenance from originating nation
+     */
+    originalClassification?: string;
+
+    /**
+     * Country that issued the original classification (ACP-240 Section 4.3)
+     * ISO 3166-1 alpha-3 code (e.g., "DEU", "FRA", "USA")
+     */
+    originalCountry?: string;
+
+    /**
+     * NATO standard equivalent classification (ACP-240 Section 4.3)
+     * Example: "SECRET", "NATO_SECRET", "COSMIC_TOP_SECRET"
+     * Enables NATO-wide interoperability
+     */
+    natoEquivalent?: string;
 
     /** Release countries (ISO 3166-1 alpha-3) */
     releasabilityTo: string[];
@@ -57,7 +81,10 @@ export interface ISTANAG4774Label {
     /** Creation timestamp (ISO 8601) */
     creationDate: string;
 
-    /** Classification equivalence mapping (for coalition) */
+    /**
+     * Classification equivalence mapping (for coalition)
+     * @deprecated Use originalClassification, originalCountry, natoEquivalent instead (ACP-240 Section 4.3)
+     */
     equivalentClassifications?: Array<{
         country: string;
         classification: string;
@@ -65,6 +92,13 @@ export interface ISTANAG4774Label {
 
     /** Display marking (computed from above fields) */
     displayMarking?: string;
+
+    /**
+     * Industry Access Control (ACP-240 Section 4.2)
+     * Optional: true = accessible to industry partners, false/undefined = government-only
+     * Used in conjunction with subject.organizationType attribute
+     */
+    releasableToIndustry?: boolean;
 }
 
 // ============================================
@@ -117,7 +151,7 @@ export interface IPolicyAssertion {
     type: string;
 
     /** Assertion value */
-    value: any;
+    value: unknown;
 
     /** Optional condition expression */
     condition?: string;
@@ -209,8 +243,14 @@ export interface IEncryptedPayloadChunk {
     /** Chunk sequence number */
     chunkId: number;
 
-    /** Encrypted data (Base64-encoded) */
-    encryptedData: string;
+    /** Encrypted data (Base64-encoded) - ONLY for files <10MB */
+    encryptedData?: string;
+
+    /** GridFS file ID - ONLY for large files (>=10MB) stored in GridFS */
+    gridfsFileId?: string;
+
+    /** Storage mode: 'inline' for small files, 'gridfs' for large files */
+    storageMode: 'inline' | 'gridfs';
 
     /** Chunk size in bytes */
     size: number;
@@ -250,7 +290,7 @@ export interface IZTDFPayload {
 /**
  * Zero Trust Data Format (ZTDF) Object
  * Self-contained encrypted object with embedded policy
- * 
+ *
  * CRITICAL: Integrity validation required before decryption
  * - Verify policyHash against policy section
  * - Verify payloadHash against payload chunks
@@ -305,6 +345,85 @@ export interface IZTDFResource {
         encrypted: boolean;
         content?: string;
         encryptedContent?: string;
+        /** Industry Access Control (ACP-240 Section 4.2) */
+        releasableToIndustry?: boolean;
+    };
+
+    /** STANAG 4774/4778 metadata for marking rendering */
+    stanag?: {
+        /** Binding Data Object (STANAG 4778) */
+        bdo?: {
+            originatorConfidentialityLabel: {
+                policyIdentifier: string;
+                classification: string;
+                categories?: Array<{
+                    tagSetId: string;
+                    tagName: string;
+                    values: string[];
+                }>;
+                creationDateTime?: string;
+                originatorId?: string;
+            };
+            dataReferences?: Array<{
+                uri: string;
+                portion?: string;
+            }>;
+        };
+        /** Portion markings for text sections */
+        portionMarkings?: Record<string, string>;
+        /** Watermark text */
+        watermarkText: string;
+        /** Full display marking string */
+        displayMarking: string;
+        /** Original classification (before NATO mapping) */
+        originalClassification?: string;
+        /** Original country of classification */
+        originalCountry?: string;
+        /** NATO equivalent classification */
+        natoEquivalent?: string;
+    };
+
+    /**
+     * Multimedia metadata for audio/video files
+     * Added for STANAG 4774/4778 multimedia support
+     */
+    multimedia?: {
+        /** Duration in seconds */
+        duration?: number;
+        /** Bitrate in kbps */
+        bitrate?: number;
+        /** Primary codec (e.g., 'h264', 'aac', 'mp3') */
+        codec?: string;
+        /** Video resolution (e.g., '1920x1080') */
+        resolution?: string;
+        /** Sample rate in Hz (audio) */
+        sampleRate?: number;
+        /** Number of audio channels (1=mono, 2=stereo) */
+        channels?: number;
+        /** Whether file contains audio stream */
+        hasAudio?: boolean;
+        /** Whether file contains video stream */
+        hasVideo?: boolean;
+        /** Container format (e.g., 'mp4', 'webm', 'mp3') */
+        format?: string;
+        /** Video width in pixels */
+        width?: number;
+        /** Video height in pixels */
+        height?: number;
+        /** Frame rate (video) */
+        frameRate?: number;
+        /** Aspect ratio (e.g., '16:9') */
+        aspectRatio?: string;
+        /** Video codec name */
+        videoCodec?: string;
+        /** Audio codec name */
+        audioCodec?: string;
+        /** XMP sidecar filename (for formats that don't support embedding) */
+        xmpSidecarFilename?: string;
+        /** Whether XMP is embedded or in sidecar */
+        xmpEmbedded?: boolean;
+        /** GridFS file ID for XMP sidecar (if applicable) */
+        xmpSidecarFileId?: string;
     };
 
     /** MongoDB timestamps */
@@ -407,4 +526,3 @@ export function mapClassification(country: string, nationalLevel: string): Class
 
     return commonLevel as ClassificationLevel;
 }
-

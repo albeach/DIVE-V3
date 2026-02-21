@@ -25,6 +25,10 @@ jest.mock('../middleware/admin-auth.middleware', () => ({
     },
     logAdminAction: jest.fn()
 }));
+jest.mock('../middleware/admin.middleware', () => ({
+    requireAdmin: (_req: any, _res: any, next: any) => next(),
+    requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
+}));
 
 describe('Admin IdP Enable/Disable Feature', () => {
     let app: Application;
@@ -374,4 +378,3 @@ describe('Admin IdP Enable/Disable Feature', () => {
         });
     });
 });
-

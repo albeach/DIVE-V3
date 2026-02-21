@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 Redis - FRA Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: dive-v3-fra
+spec:
+  selector:
+    app: redis

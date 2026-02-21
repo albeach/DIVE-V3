@@ -1,0 +1,39 @@
+# Generic spoke tfvars example using modules/federated-instance
+# Copy/rename per instance (e.g., gbr.tfvars) and fill CHANGE_ME from GCP secrets.
+
+instance_code = "GBR"
+instance_name = "United Kingdom"
+app_url       = "https://gbr-app.dive25.com"
+api_url       = "https://gbr-api.dive25.com"
+idp_url       = "https://gbr-idp.dive25.com"
+
+client_id     = "dive-v3-client-broker"
+client_secret = "CHANGE_ME"
+
+login_theme   = "dive-v3"
+webauthn_rp_id = "dive25.com"
+
+create_test_users   = false
+create_admin_user   = true
+test_user_password  = "CHANGE_ME"
+admin_user_password = "CHANGE_ME"
+
+federation_partners = {
+  usa = {
+    instance_code = "USA"
+    instance_name = "United States"
+    idp_url       = "https://usa-idp.dive25.com"
+    enabled       = true
+    client_secret = "placeholder-sync-after-terraform"
+  }
+}
+
+incoming_federation_secrets = {
+  usa = "secret-from-dive-v3-federation-gbr-usa"
+}
+
+
+
+
+
+

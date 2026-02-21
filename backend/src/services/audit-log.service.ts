@@ -6,11 +6,15 @@
  */
 
 import { logger } from '../utils/logger';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Collection, Document } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
-const LOGS_COLLECTION = 'audit_logs';
+/**
+ * Get collection name (allows test override for parallel test isolation)
+ */
+function getLogsCollection(): string {
+    return process.env.AUDIT_LOGS_COLLECTION || 'audit_logs';
+}
 
 interface IAuditLogQuery {
     eventType?: string;
@@ -32,10 +36,10 @@ interface IAuditLogEntry {
     resourceId: string;
     outcome: 'ALLOW' | 'DENY';
     reason: string;
-    subjectAttributes?: any;
-    resourceAttributes?: any;
-    policyEvaluation?: any;
-    context?: any;
+    subjectAttributes?: Record<string, unknown>;
+    resourceAttributes?: Record<string, unknown>;
+    policyEvaluation?: Record<string, unknown>;
+    context?: Record<string, unknown>;
     latencyMs?: number;
 }
 
@@ -50,40 +54,14 @@ interface IAuditLogStats {
 }
 
 class AuditLogService {
-    private client: MongoClient | null = null;
-    private db: Db | null = null;
-
-    /**
-     * Connect to MongoDB
-     */
-    private async connect(): Promise<void> {
-        if (this.client && this.db) {
-            return;
-        }
-
-        try {
-            this.client = new MongoClient(MONGODB_URL);
-            await this.client.connect();
-            this.db = this.client.db(DB_NAME);
-
-            logger.debug('Connected to MongoDB for audit log queries');
-        } catch (error) {
-            logger.error('Failed to connect to MongoDB', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw new Error('Database connection failed');
-        }
-    }
+    // MongoDB is connected via singleton at server startup - no per-service connection needed
 
     /**
      * Get logs collection
      */
-    private async getCollection(): Promise<Collection> {
-        await this.connect();
-        if (!this.db) {
-            throw new Error('Database not initialized');
-        }
-        return this.db.collection(LOGS_COLLECTION);
+    private getCollection(): Collection {
+        const db = getDb();
+        return db.collection(getLogsCollection());
     }
 
     /**
@@ -91,10 +69,10 @@ class AuditLogService {
      */
     async queryLogs(query: IAuditLogQuery): Promise<{ logs: IAuditLogEntry[]; total: number }> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Build MongoDB filter
-            const filter: any = {};
+            const filter: Document = {};
 
             if (query.eventType) {
                 filter['acp240EventType'] = query.eventType;
@@ -134,7 +112,7 @@ class AuditLogService {
                 .toArray();
 
             return {
-                logs: logs.map((log: any) => ({
+                logs: logs.map((log) => ({
                     timestamp: log.timestamp,
                     eventType: log.acp240EventType,
                     requestId: log.requestId,
@@ -204,7 +182,7 @@ class AuditLogService {
      */
     async getLogStatistics(days: number = 7): Promise<IAuditLogStats> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Calculate start date
             const startDate = new Date();
@@ -225,8 +203,8 @@ class AuditLogService {
                 .toArray();
 
             const eventsByType: Record<string, number> = {};
-            eventsByTypeResult.forEach((item: any) => {
-                eventsByType[item._id] = item.count;
+            eventsByTypeResult.forEach((item) => {
+                eventsByType[item._id as string] = item.count as number;
             });
 
             // Denied vs successful access
@@ -250,9 +228,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const topDeniedResources = topDeniedResult.map((item: any) => ({
-                resourceId: item._id,
-                count: item.count
+            const topDeniedResources = topDeniedResult.map((item) => ({
+                resourceId: item._id as string,
+                count: item.count as number
             }));
 
             // Top users
@@ -265,9 +243,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const topUsers = topUsersResult.map((item: any) => ({
-                subject: item._id,
-                count: item.count
+            const topUsers = topUsersResult.map((item) => ({
+                subject: item._id as string,
+                count: item.count as number
             }));
 
             // Violation trend (by day)
@@ -284,9 +262,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const violationTrend = violationTrendResult.map((item: any) => ({
-                date: item._id,
-                count: item.count
+            const violationTrend = violationTrendResult.map((item) => ({
+                date: item._id as string,
+                count: item.count as number
             }));
 
             return {
@@ -313,19 +291,7 @@ class AuditLogService {
         const result = await this.queryLogs({ ...query, limit: 10000 });
         return JSON.stringify(result.logs, null, 2);
     }
-
-    /**
-     * Close database connection
-     */
-    async close(): Promise<void> {
-        if (this.client) {
-            await this.client.close();
-            this.client = null;
-            this.db = null;
-        }
-    }
 }
 
 // Export singleton instance
 export const auditLogService = new AuditLogService();
-

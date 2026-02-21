@@ -1,0 +1,18 @@
+# =============================================================================
+# DIVE V3 OPA - DEU Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-deu
+  namespace: dive-v3-deu
+spec:
+  selector:
+    matchLabels:
+      app: opa-deu
+  template:
+    metadata:
+      labels:
+        app: opa-deu
+        app.kubernetes.io/instance: deu

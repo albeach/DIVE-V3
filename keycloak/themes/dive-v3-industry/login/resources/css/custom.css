@@ -1,0 +1,119 @@
+/**
+ * Industry Keycloak Theme
+ * Auto-generated from instance.json
+ * Generated: 2025-12-01T01:00:00Z
+ *
+ * Primary: #1E3A8A
+ * Secondary: #7C3AED
+ * Accent: #3B82F6
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #1E3A8A;
+    --instance-secondary: #7C3AED;
+    --instance-accent: #3B82F6;
+    --instance-primary-rgb: 30, 58, 138;
+    --instance-secondary-rgb: 124, 58, 237;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: #1E3A8A;
+}
+
+.dive-header .logo {
+    border-color: #1E3A8A;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #3B82F6;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #1E3A8A;
+}
+
+.dive-link:hover {
+    color: #7C3AED;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #3B82F6;
+}
+
+.dive-accent-bg {
+    background-color: #3B82F6;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(30, 58, 138, 0.1);
+    border: 1px solid #1E3A8A;
+    color: #1E3A8A;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #3B82F6;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #3B82F6;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #1E3A8A;
+}
+
+.dive-footer a:hover {
+    color: #7C3AED;
+}
+/* Enhanced background prominence */
+.dive-background-image {
+    filter: blur(0.5px) saturate(1.6) brightness(0.95) contrast(1.2);
+}

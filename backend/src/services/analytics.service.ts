@@ -1,5 +1,15 @@
-import { MongoClient, Db } from 'mongodb';
+/**
+ * Analytics Service (Phase 3)
+ * 
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() instance with connection caching (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during analytics aggregation operations
+ */
+
+import { Db } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 import NodeCache from 'node-cache';
 
 // ============================================
@@ -12,10 +22,6 @@ import NodeCache from 'node-cache';
 // - SLA performance metrics
 // - Authorization decision metrics
 // - Security posture overview
-
-// MongoDB configuration
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
 
 /**
  * Cache for analytics data (5-minute TTL)
@@ -85,60 +91,17 @@ export interface IDateRange {
  * Analytics Service Class
  */
 class AnalyticsService {
-    private mongoClient: MongoClient | null = null;
-    private db: Db | null = null;
+    // REFACTORED: Removed mongoClient and db properties - now using singleton via getDb()
 
     constructor() {
         logger.info('Analytics service initialized');
     }
 
     /**
-     * Connect to MongoDB
+     * Get MongoDB database instance using singleton
      */
-    private async connect(): Promise<void> {
-        if (this.mongoClient && this.db) {
-            // Try to ping to check if still connected
-            try {
-                await this.mongoClient.db().admin().ping();
-                return;
-            } catch {
-                // Connection lost, will reconnect below
-                this.mongoClient = null;
-                this.db = null;
-            }
-        }
-
-        try {
-            this.mongoClient = new MongoClient(MONGODB_URL);
-            await this.mongoClient.connect();
-            this.db = this.mongoClient.db(DB_NAME);
-
-            logger.debug('Analytics service connected to MongoDB');
-        } catch (error) {
-            logger.error('Analytics service failed to connect to MongoDB', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw new Error('Database connection failed');
-        }
-    }
-
-    /**
-     * Set MongoDB client (for testing)
-     */
-    setMongoClient(client: MongoClient): void {
-        this.mongoClient = client;
-        this.db = client.db();
-    }
-
-    /**
-     * Get MongoDB database instance
-     */
-    private async getDb(): Promise<Db> {
-        await this.connect();
-        if (!this.db) {
-            throw new Error('MongoDB client not initialized');
-        }
-        return this.db;
+    private getDatabase(): Db {
+        return getDb();
     }
 
     /**
@@ -155,7 +118,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = await this.getDb();
+            const db = this.getDatabase();
             const collection = db.collection('idp_submissions');
 
             // Count submissions by tier
@@ -199,7 +162,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = await this.getDb();
+            const db = this.getDatabase();
             const collection = db.collection('idp_submissions');
 
             // Default to last 30 days
@@ -292,7 +255,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = await this.getDb();
+            const db = this.getDatabase();
             const collection = db.collection('idp_submissions');
 
             // Get completed submissions (approved or rejected)
@@ -379,7 +342,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = await this.getDb();
+            const db = this.getDatabase();
             const collection = db.collection('audit_logs');
 
             // Default to last 7 days
@@ -454,7 +417,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = await this.getDb();
+            const db = this.getDatabase();
             const collection = db.collection('idp_submissions');
 
             // Get approved submissions
@@ -546,6 +509,8 @@ class AnalyticsService {
     }
 }
 
+// Export class for testing
+export { AnalyticsService };
+
 // Export singleton instance
 export const analyticsService = new AnalyticsService();
-

@@ -1,0 +1,311 @@
+{
+  "$schema": "./kas-registry.schema.json",
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-12-05T00:00:00Z",
+    "description": "DIVE V3 KAS Federation Registry - Multi-Instance Key Access Service Configuration",
+    "compliance": [
+      "ACP-240",
+      "STANAG 4778"
+    ],
+    "managedBy": "dive-v3-hub"
+  },
+  "kasInstances": [
+    {
+      "kasId": "kas-usa",
+      "organization": "United States",
+      "kasUrl": "https://usa-kas.dive25.com/request-key",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "USA",
+        "CAN",
+        "GBR",
+        "AUS",
+        "NZL"
+      ],
+      "supportedCOIs": [
+        "US-ONLY",
+        "CAN-US",
+        "GBR-US",
+        "FVEY",
+        "NATO",
+        "NATO-COSMIC",
+        "AUKUS",
+        "QUAD",
+        "SOCOM"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "TOP_SECRET": "TOP_SECRET",
+          "SECRET": "SECRET",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "UNCLASSIFIED": "UNCLASSIFIED"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "acp240",
+          "ztdf",
+          "multi-kao",
+          "policy-reeval"
+        ],
+        "contact": "kas-admin@usa.mil",
+        "lastVerified": "2025-12-05T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "kas-fra",
+      "organization": "France",
+      "kasUrl": "https://fra-kas.dive25.com/request-key",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker-fra"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "FRA",
+        "DEU",
+        "BEL",
+        "ESP",
+        "ITA"
+      ],
+      "supportedCOIs": [
+        "FRA-US",
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "TRES_SECRET_DEFENSE": "TOP_SECRET",
+          "SECRET_DEFENSE": "SECRET",
+          "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
+          "DIFFUSION_RESTREINTE": "CONFIDENTIAL",
+          "NON_PROTEGE": "UNCLASSIFIED",
+          "TOP_SECRET": "TOP_SECRET",
+          "SECRET": "SECRET",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "UNCLASSIFIED": "UNCLASSIFIED"
+        },
+        "countryMapping": {
+          "FR": "FRA"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "acp240",
+          "ztdf",
+          "igi1300"
+        ],
+        "contact": "kas-admin@defense.gouv.fr",
+        "lastVerified": "2025-12-05T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "kas-gbr",
+      "organization": "United Kingdom",
+      "kasUrl": "https://gbr-kas.dive25.com/request-key",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "GBR",
+        "USA",
+        "CAN",
+        "AUS",
+        "NZL"
+      ],
+      "supportedCOIs": [
+        "GBR-US",
+        "FVEY",
+        "NATO",
+        "NATO-COSMIC",
+        "AUKUS"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "TOP_SECRET": "TOP_SECRET",
+          "SECRET": "SECRET",
+          "OFFICIAL_SENSITIVE": "CONFIDENTIAL",
+          "OFFICIAL": "UNCLASSIFIED"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "acp240",
+          "ztdf",
+          "multi-kao"
+        ],
+        "contact": "kas-admin@mod.uk",
+        "lastVerified": "2025-12-05T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "kas-deu",
+      "organization": "Germany",
+      "kasUrl": "https://deu-kas.dive25.com/request-key",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://deu-idp.dive25.com/realms/dive-v3-broker-deu"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "DEU",
+        "FRA",
+        "GBR",
+        "BEL",
+        "NLD"
+      ],
+      "supportedCOIs": [
+        "DEU-US",
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "STRENG_GEHEIM": "TOP_SECRET",
+          "GEHEIM": "SECRET",
+          "VS_VERTRAULICH": "CONFIDENTIAL",
+          "VS_NUR_FUER_DEN_DIENSTGEBRAUCH": "CONFIDENTIAL",
+          "OFFEN": "UNCLASSIFIED",
+          "TOP_SECRET": "TOP_SECRET",
+          "SECRET": "SECRET",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "UNCLASSIFIED": "UNCLASSIFIED"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "acp240",
+          "ztdf"
+        ],
+        "contact": "kas-admin@bundeswehr.de",
+        "lastVerified": "2025-12-05T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "kas-local",
+      "organization": "Local Development",
+      "kasUrl": "http://localhost:8080/request-key",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://localhost:8443/realms/dive-v3-broker-usa"
+      },
+      "trustLevel": "medium",
+      "supportedCountries": [
+        "USA",
+        "FRA",
+        "GBR",
+        "DEU"
+      ],
+      "supportedCOIs": [
+        "US-ONLY",
+        "FRA-US",
+        "GBR-US",
+        "DEU-US",
+        "FVEY",
+        "NATO"
+      ],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "acp240",
+          "ztdf",
+          "dev-mode"
+        ],
+        "contact": "dev@dive25.com",
+        "lastVerified": "2025-12-05T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "nzl-kas",
+      "organization": "New Zealand",
+      "countryCode": "NZL",
+      "kasUrl": "https://localhost:10033",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://localhost:8476/realms/dive-v3-broker-nzl"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "NZL",
+        "USA",
+        "GBR",
+        "AUS",
+        "CAN"
+      ],
+      "supportedCOIs": [
+        "FVEY",
+        "AUKUS",
+        "QUAD"
+      ],
+      "enabled": true
+    }
+  ],
+  "federationAgreements": {
+    "USA": {
+      "trustedKAS": [
+        "kas-fra",
+        "kas-gbr",
+        "kas-deu"
+      ],
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "FVEY"
+      ]
+    },
+    "FRA": {
+      "trustedKAS": [
+        "kas-usa",
+        "kas-gbr",
+        "kas-deu"
+      ],
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ]
+    },
+    "GBR": {
+      "trustedKAS": [
+        "kas-usa",
+        "kas-fra",
+        "kas-deu"
+      ],
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "FVEY",
+        "AUKUS"
+      ]
+    },
+    "DEU": {
+      "trustedKAS": [
+        "kas-usa",
+        "kas-fra",
+        "kas-gbr"
+      ],
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ]
+    }
+  }
+}

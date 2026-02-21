@@ -1,0 +1,87 @@
+# =============================================================================
+# Production Dockerfile for DIVE V3 Frontend with HTTPS (mTLS support)
+# =============================================================================
+# Strategy:
+#   - Multi-stage build with production-only dependencies
+#   - Custom HTTPS server.js for mTLS support
+#   - Standard Next.js build (not standalone - incompatible with custom server)
+#   - Optimized for security and performance while maintaining mTLS capability
+# =============================================================================
+
+FROM node:24-alpine AS base
+RUN apk add --no-cache libc6-compat tzdata ca-certificates curl
+WORKDIR /app
+
+# =============================================================================
+# STAGE 1: Install production dependencies
+# =============================================================================
+FROM base AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production --no-audit --no-fund && \
+    npm cache clean --force
+
+# =============================================================================
+# STAGE 2: Build application
+# =============================================================================
+FROM base AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+RUN npm run build
+
+# PRODUCTION FIX: Remove next.config.ts to prevent TypeScript requirement at runtime
+# Next.js has already compiled and bundled the config during build
+# Keeping .ts file causes Next.js to try loading TypeScript at runtime
+RUN rm -f next.config.ts
+
+# =============================================================================
+# STAGE 3: Production runtime with HTTPS
+# =============================================================================
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy production dependencies (no test frameworks)
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Copy built application
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+# NOTE: Do NOT copy next.config.ts - it was removed after build to prevent TypeScript runtime dependency
+
+# Copy custom HTTPS server (required for mTLS)
+COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
+
+# Create certs directory for mTLS certificates
+RUN mkdir -p /app/certs && chown -R nextjs:nodejs /app
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Use custom HTTPS server
+CMD ["node", "server.js"]
+
+# =============================================================================
+# Expected Image Size: ~600-800MB (larger than standalone but supports mTLS)
+# Components:
+#   - Base alpine: ~50MB
+#   - Node.js runtime: ~150MB
+#   - Production node_modules: ~300MB (no test deps, has react/next)
+#   - Built .next: ~100MB
+#   - Static assets: ~50MB
+#   - Total: ~650MB
+# =============================================================================

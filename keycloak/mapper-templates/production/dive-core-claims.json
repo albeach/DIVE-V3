@@ -1,0 +1,68 @@
+{
+  "description": "DIVE V3 Production Protocol Mappers - PII Minimized",
+  "version": "1.0.0",
+  "security": {
+    "piiMinimization": true,
+    "dataClassification": "CONTROLLED UNCLASSIFIED",
+    "purpose": "Production use - NO personally identifiable information"
+  },
+  "claims": {
+    "required": ["uniqueID", "clearance", "countryOfAffiliation"],
+    "optional": ["acpCOI"]
+  },
+  "protocolMappers": [
+    {
+      "name": "uniqueID",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "uniqueID",
+        "claim.name": "uniqueID",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "clearance",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "clearance",
+        "claim.name": "clearance",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "countryOfAffiliation",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "countryOfAffiliation",
+        "claim.name": "countryOfAffiliation",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "acpCOI",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "acpCOI",
+        "claim.name": "acpCOI",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String",
+        "multivalued": "true"
+      }
+    }
+  ]
+}

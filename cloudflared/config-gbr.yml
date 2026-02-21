@@ -1,0 +1,107 @@
+# ============================================================================
+# Cloudflare Tunnel Configuration - GBR Instance (United Kingdom)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:44Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh gbr
+#   3. Restart tunnel: docker compose -p gbr up -d --force-recreate cloudflared
+#
+# ============================================================================
+
+tunnel: 375d2bed-2002-4604-9fa6-22ca251ac957
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
+# Metrics endpoint for monitoring (accessible at localhost:9128)
+metrics: 0.0.0.0:9128
+
+ingress:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: dive-spoke-gbr-frontend
+  # Host Port: 3031
+  # Hostname:       gbr-app.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-app.dive25.com
+    service: https://localhost:3031
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: gbr-app.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: dive-spoke-gbr-backend
+  # Host Port: 4031
+  # Hostname:       gbr-api.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-api.dive25.com
+    service: https://localhost:4031
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: gbr-api.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: dive-spoke-gbr-keycloak
+  # Host Port: 8474 (HTTPS)
+  # Hostname:       gbr-idp.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-idp.dive25.com
+    service: https://localhost:8474
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: gbr-idp.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: dive-spoke-gbr-kas
+  # Host Port: 9031
+  # Hostname:       gbr-kas.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-kas.dive25.com
+    service: https://localhost:9031
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: gbr-kas.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-spoke-gbr-opa
+  # Host Port: 8491
+  # Hostname:       gbr-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-opa.dive25.com
+    service: http://localhost:8491
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: gbr-opa.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Client (Policy Sync from Hub)
+  # Docker Service: dive-spoke-gbr-opal-client
+  # Host Port: 9212 (OPAL client exposes inline OPA on 8181, mapped to 9212)
+  # Hostname:       gbr-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-opal.dive25.com
+    service: http://localhost:9212
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: gbr-opal.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
+  - service: http_status:404

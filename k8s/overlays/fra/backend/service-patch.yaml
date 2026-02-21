@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 Backend - FRA Service Patch
+# NOTE: Kustomize patches must use base resource names, not modified names
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app: backend

@@ -1,0 +1,53 @@
+{
+  "policyPack": "BILATERAL_RESTRICTED",
+  "version": "1.0",
+  "description": "Restrictive bilateral sharing with CONFIDENTIAL cap and bilateral COI tags only",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "note": "This pack is designed for tenant-pair specific deployment. Apply with --owner-tenant and --partner-tenant flags.",
+  "federationConstraintsTemplate": {
+    "maxClassification": "CONFIDENTIAL",
+    "allowedCOIs": [
+      "{{OWNER}}-{{PARTNER}}"
+    ],
+    "deniedCOIs": [
+      "NATO",
+      "FVEY",
+      "US-ONLY",
+      "COSMIC_TOP_SECRET"
+    ],
+    "coiOperator": "ALL",
+    "relationshipType": "spoke_spoke",
+    "description": "Bilateral restricted sharing between {{OWNER}} and {{PARTNER}}"
+  },
+  "exampleDeployment": {
+    "description": "Example: Apply BILATERAL_RESTRICTED for FRA↔DEU relationship",
+    "command": "./scripts/policy-presets/apply-pack.sh BILATERAL_RESTRICTED --owner-tenant FRA --partner-tenant DEU --effective-date 2026-02-01 --expiration-date 2026-12-31"
+  },
+  "coiDefinitions": {
+    "FRA-DEU": {
+      "name": "France-Germany Bilateral Cooperation",
+      "members": [
+        "FRA",
+        "DEU"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "description": "Bilateral exercises and joint operations"
+    },
+    "USA-GBR": {
+      "name": "US-UK Bilateral Cooperation",
+      "members": [
+        "USA",
+        "GBR"
+      ],
+      "classification_cap": "CONFIDENTIAL",
+      "description": "Bilateral operations and intelligence sharing"
+    }
+  },
+  "metadata": {
+    "use_case": "Conservative bilateral sharing for exercises or limited partnerships",
+    "target_tenants": "Any bilateral pair",
+    "deployment_time": "< 5 seconds",
+    "reversible": true
+  }
+}

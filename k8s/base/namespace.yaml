@@ -1,0 +1,15 @@
+# =============================================================================
+# DIVE V3 - Kubernetes Namespace
+# =============================================================================
+# Base namespace for all DIVE V3 resources
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dive-v3
+  labels:
+    app.kubernetes.io/name: dive-v3
+    app.kubernetes.io/part-of: dive-v3
+    app.kubernetes.io/managed-by: argocd
+

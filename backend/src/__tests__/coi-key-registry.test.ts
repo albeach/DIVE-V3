@@ -203,4 +203,3 @@ describe('COI Key Integration', () => {
         expect(fveyEncrypted).not.toBe(natoEncrypted);
     });
 });
-

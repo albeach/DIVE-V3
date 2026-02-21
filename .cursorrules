@@ -68,14 +68,134 @@ dive-v3/
 - **Interfaces**: PascalCase with `I` prefix (`IOPAInput`, `IResourceMetadata`)
 
 ### Environment Variables
-All sensitive data in `.env.local`:
-- Database connections (MongoDB, PostgreSQL)
-- Keycloak client secrets
-- JWT signing keys
-- OPA auth tokens
-- KAS endpoints
+All sensitive data must be stored in **GCP Secret Manager** - NOT in `.env.local` or hardcoded!
 
-Never commit `.env.local` or `.env.production` to Git.
+Never commit secrets to Git - use GCP Secret Manager for ALL environments.
+
+## 🔐 SECRETS MANAGEMENT - CRITICAL SECURITY REQUIREMENT
+
+### ABSOLUTE RULE: NO HARDCODED SECRETS
+**NEVER hardcode passwords, API keys, tokens, or any sensitive values in:**
+- ❌ TypeScript/JavaScript files (`.ts`, `.js`, `.tsx`)
+- ❌ Docker Compose files (`docker-compose*.yml`)
+- ❌ Configuration files (`.json`, `.yaml`)
+- ❌ Shell scripts (`.sh`)
+- ❌ Environment files (`.env*`)
+
+### GCP Secret Manager Integration
+ALL secrets MUST be stored in Google Cloud Secret Manager:
+
+**Project:** `dive25`
+
+**Naming Conventions:**
+- **Hub (USA)**: `dive-v3-<type>-usa` (shortened format)
+- **Spokes**: `dive-v3-<type>-password-<instance>` (explicit format)
+
+**CRITICAL: Dual Format for USA**
+USA must have BOTH formats because:
+- Hub uses: `dive-v3-postgres-usa` (via `configuration/secrets.sh`)
+- Spokes use: `dive-v3-postgres-password-usa` (via `spoke/pipeline/spoke-secrets.sh`)
+- Federation link has fallback: tries `-admin-password-` first, then falls back to shortened
+
+**Required Secrets (Spoke Format):**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-postgres-password-usa` | USA PostgreSQL password |
+| `dive-v3-postgres-password-fra` | FRA PostgreSQL password |
+| `dive-v3-mongo-password-usa` | USA MongoDB root password (note: mongo not mongodb) |
+| `dive-v3-mongo-password-fra` | FRA MongoDB root password |
+| `dive-v3-redis-password-usa` | USA Redis password |
+| `dive-v3-redis-password-fra` | FRA Redis password |
+| `dive-v3-keycloak-admin-password-usa` | USA Keycloak admin password |
+| `dive-v3-keycloak-admin-password-fra` | FRA Keycloak admin password |
+| `dive-v3-keycloak-client-secret-usa` | USA Keycloak client secret |
+| `dive-v3-keycloak-client-secret-fra` | FRA Keycloak client secret |
+| `dive-v3-auth-secret-usa` | USA NextAuth secret |
+| `dive-v3-auth-secret-fra` | FRA NextAuth secret |
+
+**Hub Shortened Format (USA only for backward compatibility):**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-postgres-usa` | USA PostgreSQL password (Hub format) |
+| `dive-v3-mongodb-usa` | USA MongoDB root password (Hub format - note: mongodb) |
+| `dive-v3-redis-usa` | USA Redis password (Hub format) |
+| `dive-v3-keycloak-usa` | USA Keycloak admin password (Hub format) |
+
+**Shared Secrets:**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-redis-blacklist` | Shared blacklist Redis password |
+| `dive-v3-grafana` | Grafana admin password |
+| `dive-v3-kas-signing-key` | KAS JWT signing key |
+| `dive-v3-federation-<src>-<tgt>` | Federation secrets (bidirectional) |
+
+### How to Use GCP Secrets in Code
+```typescript
+// ✅ CORRECT: Use the GCP secrets utility
+import { getMongoDBPassword, getKeycloakPassword, getSecret } from '../utils/gcp-secrets';
+
+const mongoPassword = await getMongoDBPassword('USA');
+const keycloakPassword = await getKeycloakPassword('USA');
+const authSecret = await getSecret('auth-secret', 'USA');
+
+// ❌ WRONG: Never hardcode secrets
+const password = 'DivePilot2025!'; // FORBIDDEN!
+const mongoUrl = 'mongodb://admin:password@mongo:27017'; // FORBIDDEN!
+```
+
+### How to Use GCP Secrets in Docker Compose
+```yaml
+# ✅ CORRECT: Reference environment variables (loaded from GCP at runtime)
+environment:
+  MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongo:27017?authSource=admin
+  KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+  AUTH_SECRET: ${AUTH_SECRET}
+
+# ❌ WRONG: Never hardcode in docker-compose
+environment:
+  MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017  # FORBIDDEN!
+  KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin       # FORBIDDEN!
+```
+
+### Setting Up GCP Secrets
+```bash
+# Create a new secret
+gcloud secrets create dive-v3-mongodb-usa --project=dive25
+
+# Add secret value
+echo -n "your-secure-password" | gcloud secrets versions add dive-v3-mongodb-usa --data-file=-
+
+# Verify secret exists
+gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25
+
+# List all DIVE secrets
+gcloud secrets list --project=dive25 --filter="name:dive-v3"
+```
+
+### Environment Variables for GCP Integration
+```bash
+# Enable GCP secrets in the application
+USE_GCP_SECRETS=true
+GCP_PROJECT_ID=dive25
+
+# Ensure gcloud is authenticated
+gcloud auth application-default login
+```
+
+### Fallback Behavior (Development Only)
+The `gcp-secrets.ts` utility will:
+1. First try GCP Secret Manager
+2. Fall back to environment variables if GCP fails
+3. Log a warning if using default passwords (NOT FOR PRODUCTION)
+
+### Creating New Secrets Checklist
+When adding a new service that needs secrets:
+1. [ ] Create secret in GCP: `gcloud secrets create dive-v3-<name> --project=dive25`
+2. [ ] Add initial value: `echo -n "value" | gcloud secrets versions add dive-v3-<name> --data-file=-`
+3. [ ] Update `backend/src/utils/gcp-secrets.ts` with getter function
+4. [ ] Update docker-compose to use `${VAR_NAME}` syntax
+5. [ ] Document in this section
+6. [ ] NEVER commit the actual secret value anywhere
 
 ### Security Requirements
 
@@ -96,6 +216,43 @@ Never commit `.env.local` or `.env.production` to Git.
 - **Secrets**: Use environment variables, never hardcode
 - **Input validation**: Validate all inputs against schemas (Joi/Zod)
 - **Output sanitization**: Filter sensitive fields based on clearance
+
+### Session Management Configuration
+
+**Critical Settings**:
+- **Access Token**: 15 minutes (short-lived for security)
+- **Refresh Token**: Single-use (rotation enabled via `refresh_token_max_reuse = 1`)
+- **Session Max**: 8 hours (Keycloak + NextAuth aligned)
+- **Session Idle**: 15 minutes (activity resets timer)
+- **Remember Me**: Disabled (consistent 8-hour sessions for all users)
+
+**Token Lifecycle**:
+1. **Login** → Access Token (15m) + Refresh Token (v1)
+2. **At 7-8 min remaining** → Auto-refresh → New Access Token (15m) + Refresh Token (v2, v1 revoked)
+3. **Repeat** until 8-hour max lifespan
+4. **At 3 min remaining** → Warning modal displayed to user
+5. **At 0 min** → Expired modal, force logout
+
+**Security Features**:
+- All tokens checked against Redis blacklist (logout revocation)
+- Refresh tokens are single-use (rotation prevents replay attacks)
+- Logout revokes all user tokens immediately
+- Token blacklist integrated into `authenticateJWT()` middleware
+- Fail-open pattern for blacklist checks (availability prioritized)
+
+**Frontend Session Monitoring**:
+- Heartbeat interval: 2 minutes (normal), 30 seconds (critical < 5 min)
+- Auto-refresh threshold: 7 minutes remaining
+- Warning threshold: 3 minutes remaining
+- Cross-tab synchronization via Broadcast Channel API
+
+**Configuration Files**:
+- Keycloak: `terraform/modules/federated-instance/main.tf`
+- NextAuth: `frontend/src/auth.ts`
+- Session API: `frontend/src/app/api/session/refresh/route.ts`
+- Backend Auth: `backend/src/middleware/authz.middleware.ts`
+
+**Documentation**: See `docs/session-management.md` for complete architecture details, troubleshooting, and testing procedures.
 
 ### OPA Policy Conventions
 
@@ -291,7 +448,7 @@ When implementing DIVE V3:
 ### Week 1 Focus (Current)
 Priority tasks for immediate implementation:
 1. ✅ Initialize project structure (frontend, backend, policies, terraform)
-2. ✅ Deploy Keycloak with dive-v3-pilot realm (adapt from keycloak-react-main)
+2. ✅ Deploy Keycloak with dive-v3-broker realm (adapt from keycloak-react-main)
 3. ✅ Configure U.S. IdP (OIDC) with protocol mappers
 4. ✅ Deploy Next.js with IdP selection page
 5. ✅ Deploy MongoDB and seed sample resources
@@ -348,9 +505,14 @@ docker-compose down -v && ./scripts/dev-start.sh
 6. ❌ Don't mix SAML and OIDC claim names - normalize in Keycloak mappers
 7. ❌ Don't allow empty `releasabilityTo` - empty means deny all
 8. ❌ Don't skip clock skew tolerance - use ±5 minutes for embargo checks
+9. ❌ **NEVER hardcode secrets** - Use GCP Secret Manager for ALL passwords, keys, tokens
+10. ❌ **NEVER use default passwords** like 'admin', 'password', 'secret' in any file
+11. ❌ **NEVER commit .env files** with real secrets to Git
+12. ❌ **NEVER use string literals** for passwords in TypeScript/JavaScript
+13. ❌ **NEVER inline credentials** in MongoDB/PostgreSQL connection strings
 
 ### Keycloak Specific
-- **Realm**: `dive-v3-pilot`
+- **Realm**: `dive-v3-broker`
 - **Client ID**: `dive-v3-client`
 - **IdP Aliases**: `us-idp`, `france-idp`, `canada-idp`, `industry-idp`
 - **Protocol Mappers**: Map IdP claims → `uniqueID`, `clearance`, `countryOfAffiliation`, `acpCOI`

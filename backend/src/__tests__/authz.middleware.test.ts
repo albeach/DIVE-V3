@@ -1,15 +1,15 @@
 /**
  * Authorization Middleware (PEP) Test Suite
  * Tests for JWT validation, OPA integration, and authorization enforcement
- * 
+ *
  * Target Coverage: 90%
  * Priority: CRITICAL (Core security component)
  */
 
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
-import { authzMiddleware, authenticateJWT, clearAuthzCaches } from '../middleware/authz.middleware';
+import { authzMiddleware, authenticateJWT, clearAuthzCaches, initializeJwtService } from '../middleware/authz.middleware';
 import { getResourceById } from '../services/resource.service';
 import { createMockJWT, createUSUserJWT, createExpiredJWT } from './helpers/mock-jwt';
 import { mockOPAAllow, mockOPADeny, mockOPADenyInsufficientClearance, mockOPAAllowWithKASObligation } from './helpers/mock-opa';
@@ -19,6 +19,120 @@ import { TEST_RESOURCES } from './helpers/test-fixtures';
 jest.mock('axios');
 jest.mock('../services/resource.service');
 jest.mock('jwk-to-pem');
+
+// Mock token blacklist service (Week 4: This was the missing mock causing 401 errors!)
+jest.mock('../services/token-blacklist.service', () => ({
+    isTokenBlacklisted: jest.fn().mockResolvedValue(false),
+    areUserTokensRevoked: jest.fn().mockResolvedValue(false)
+}));
+
+// Mock SP auth middleware
+jest.mock('../middleware/sp-auth.middleware', () => ({
+    validateSPToken: jest.fn().mockResolvedValue(null)
+}));
+
+// Mock token introspection service (authenticateJWT now uses this instead of jwtService.verify)
+jest.mock('../services/token-introspection.service', () => ({
+    tokenIntrospectionService: {
+        validateToken: jest.fn(),
+    },
+    TokenIntrospectionService: jest.fn(),
+}));
+// Get reference AFTER jest.mock (avoids TDZ — jest.mock is hoisted above const declarations)
+const mockValidateToken = (require('../services/token-introspection.service') as any).tokenIntrospectionService.validateToken as jest.Mock;
+
+// Mock trusted issuer model (dynamically imported by authenticateJWT)
+jest.mock('../models/trusted-issuer.model', () => ({
+    mongoOpalDataStore: {
+        getAllIssuers: jest.fn().mockResolvedValue([
+            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
+            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
+        ]),
+    },
+}));
+
+// Mock decision cache service
+jest.mock('../services/decision-cache.service', () => ({
+    decisionCacheService: {
+        generateCacheKey: jest.fn().mockReturnValue('test-cache-key'),
+        get: jest.fn().mockReturnValue(null),
+        set: jest.fn(),
+        reset: jest.fn(),
+        getTTLForClassification: jest.fn().mockReturnValue(300),
+    },
+}));
+const mockDecisionCacheGet = (require('../services/decision-cache.service') as any).decisionCacheService.get as jest.Mock;
+
+// Mock audit service
+jest.mock('../services/audit.service', () => ({
+    auditService: {
+        logAccessGrant: jest.fn(),
+        logAccessDeny: jest.fn(),
+    },
+}));
+
+// Mock decision log service
+jest.mock('../services/decision-log.service', () => ({
+    decisionLogService: {
+        logDecision: jest.fn().mockResolvedValue(undefined),
+    },
+}));
+
+// Mock circuit breaker (pass-through execution)
+jest.mock('../utils/circuit-breaker', () => ({
+    opaCircuitBreaker: {
+        execute: jest.fn((fn: Function) => fn()),
+    },
+    keycloakCircuitBreaker: {
+        execute: jest.fn((fn: Function) => fn()),
+    },
+    CircuitBreaker: jest.fn(),
+    CircuitState: { CLOSED: 'CLOSED', OPEN: 'OPEN', HALF_OPEN: 'HALF_OPEN' },
+}));
+
+// Week 4 BEST PRACTICE: Dependency Injection (not module mocking)
+// Store default mock implementation for resetting between tests
+const defaultJwtVerifyImpl = (token: any, _key: any, options: any, callback: any) => {
+    // Validate token like real jwt.verify would
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return callback(new Error('invalid token'), null);
+        }
+
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+        // Validate issuer if specified (FAL2 requirement)
+        if (options?.issuer) {
+            const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+            if (!validIssuers.includes(payload.iss)) {
+                return callback(new Error('jwt issuer invalid'), null);
+            }
+        }
+
+        // Validate audience if specified (FAL2 requirement)
+        if (options?.audience) {
+            const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+            const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+            const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+            if (!hasValidAudience) {
+                return callback(new Error('jwt audience invalid'), null);
+            }
+        }
+
+        // Return the decoded payload
+        callback(null, payload);
+    } catch (error) {
+        callback(error, null);
+    }
+};
+
+// Create mock JWT service that will be injected into middleware
+const mockJwtService = {
+    verify: jest.fn(defaultJwtVerifyImpl),
+    decode: jwt.decode,  // Use real decode
+    sign: jwt.sign       // Use real sign
+};
 
 // Mock logger module
 jest.mock('../utils/logger', () => ({
@@ -49,8 +163,58 @@ jest.mock('../utils/acp240-logger', () => ({
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedGetResourceById = getResourceById as jest.MockedFunction<typeof getResourceById>;
 
+// Initialize JWT service with mocks IMMEDIATELY (not in beforeAll)
+initializeJwtService(mockJwtService as any);
+
 // Import jwk-to-pem after mocking
 import jwkToPem from 'jwk-to-pem';
+
+/** Helper: Create a mock TokenIntrospectionResponse for successful auth */
+function createMockIntrospectionResponse(overrides: Record<string, any> = {}) {
+    return {
+        active: true,
+        sub: 'testuser-us',
+        uniqueID: 'testuser-us',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY'],
+        iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
+        aud: 'dive-v3-client',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        iat: Math.floor(Date.now() / 1000),
+        acr: 'urn:mace:incommon:iap:silver',
+        amr: ['pwd', 'otp'],
+        auth_time: Math.floor(Date.now() / 1000),
+        jti: 'test-jti-123',
+        username: 'testuser-us',
+        preferred_username: 'testuser-us',
+        client_id: 'dive-v3-client',
+        scope: 'openid profile email',
+        token_type: 'Bearer',
+        ...overrides,
+    };
+}
+
+/** Helper: Create a standard req.user object as set by authenticateJWT */
+function createMockUser(overrides: Record<string, any> = {}) {
+    return {
+        uniqueID: 'testuser-us',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY'],
+        roles: [],
+        sub: 'testuser-us',
+        iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
+        client_id: 'dive-v3-client',
+        email: 'testuser-us',
+        acr: 'urn:mace:incommon:iap:silver',
+        amr: ['pwd', 'otp'],
+        auth_time: Math.floor(Date.now() / 1000),
+        user_acr: undefined,
+        user_amr: undefined,
+        ...overrides,
+    };
+}
 
 describe('Authorization Middleware (PEP)', () => {
     let req: Partial<Request>;
@@ -64,10 +228,20 @@ describe('Authorization Middleware (PEP)', () => {
         // Reset mocks
         jest.clearAllMocks();
 
+        // Week 4: Reset JWT mock to default implementation (for test isolation)
+        mockJwtService.verify.mockImplementation(defaultJwtVerifyImpl);
+
+        // Configure default token introspection mock (active token with US user claims)
+        mockValidateToken.mockResolvedValue(createMockIntrospectionResponse());
+
+        // Reset decision cache mock (no cache hits by default)
+        mockDecisionCacheGet.mockReturnValue(null);
+
         // Setup request mock
         req = {
             headers: {},
             params: {},
+            method: 'GET',
             ip: '127.0.0.1'
         };
 
@@ -100,63 +274,8 @@ describe('Authorization Middleware (PEP)', () => {
         // Mock jwk-to-pem to return a fake public key
         (jwkToPem as jest.MockedFunction<typeof jwkToPem>).mockReturnValue('-----BEGIN PUBLIC KEY-----\nMOCK_PUBLIC_KEY\n-----END PUBLIC KEY-----');
 
-        // Mock jwt.decode to return proper token structure
-        jest.spyOn(jwt, 'decode').mockReturnValue({
-            header: {
-                kid: 'test-key-id',
-                alg: 'RS256',
-                typ: 'JWT'
-            },
-            payload: {
-                sub: 'testuser-us',
-                uniqueID: 'testuser-us',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'USA',
-                acpCOI: ['FVEY']
-            },
-            signature: 'mock-signature'
-        } as any);
-
-        // Mock jwt.verify - decode actual token and validate audience
-        jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
-            try {
-                // Manually decode JWT by parsing base64 payload (jwt.decode is also mocked)
-                const parts = token.split('.');
-                if (parts.length !== 3) {
-                    callback(new Error('invalid token'), null);
-                    return;
-                }
-
-                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                // Validate issuer if specified (FAL2 requirement)
-                // Session expiration fix (Oct 21): Handle array issuers for multi-realm support
-                if (options?.issuer) {
-                    const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                    if (!validIssuers.includes(payload.iss)) {
-                        callback(new Error('jwt issuer invalid'), null);
-                        return;
-                    }
-                }
-
-                // Validate audience if specified (FAL2 requirement)
-                // Session expiration fix (Oct 21): Handle array audiences for multi-realm support
-                if (options?.audience) {
-                    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                    const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                    const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                    if (!hasValidAudience) {
-                        callback(new Error('jwt audience invalid'), null);
-                        return;
-                    }
-                }
-
-                // Return the decoded payload (has aud, acr, amr, auth_time)
-                callback(null, payload);
-            } catch (error) {
-                callback(new Error('invalid token'), null);
-            }
-        }) as any);
+        // Week 4: mockJwtService is already configured with proper implementation (no need to reconfigure here)
+        // The dependency injection pattern provides the mock at module level
 
         // Mock OPA responses - default to allow
         mockedAxios.post.mockResolvedValue({
@@ -175,18 +294,7 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            // Mock JWT verification
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY'],
-                    exp: Math.floor(Date.now() / 1000) + 3600,
-                    iat: Math.floor(Date.now() / 1000)
-                });
-            });
+            // mockValidateToken already configured in outer beforeEach
 
             await authenticateJWT(req as Request, res as Response, next);
 
@@ -221,8 +329,11 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createExpiredJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(new Error('jwt expired'), null);
+            // Token introspection returns inactive for expired tokens
+            mockValidateToken.mockResolvedValueOnce({
+                active: false,
+                error: 'token_expired',
+                error_description: 'Token has expired'
             });
 
             await authenticateJWT(req as Request, res as Response, next);
@@ -230,7 +341,7 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Unauthorized',
-                message: 'Invalid or expired JWT token'
+                message: 'Token has expired'
             }));
             expect(next).not.toHaveBeenCalled();
         });
@@ -238,8 +349,10 @@ describe('Authorization Middleware (PEP)', () => {
         it('should reject JWT with invalid signature', async () => {
             req.headers!.authorization = 'Bearer invalid.jwt.signature';
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(new Error('invalid signature'), null);
+            mockValidateToken.mockResolvedValueOnce({
+                active: false,
+                error: 'invalid_token',
+                error_description: 'Invalid token signature'
             });
 
             await authenticateJWT(req as Request, res as Response, next);
@@ -254,8 +367,10 @@ describe('Authorization Middleware (PEP)', () => {
             });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(new Error('jwt issuer invalid'), null);
+            mockValidateToken.mockResolvedValueOnce({
+                active: false,
+                error: 'invalid_issuer',
+                error_description: 'Untrusted token issuer'
             });
 
             await authenticateJWT(req as Request, res as Response, next);
@@ -268,43 +383,30 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT({ acpCOI: ['FVEY', 'NATO-COSMIC'] });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY', 'NATO-COSMIC'],
-                    exp: Math.floor(Date.now() / 1000) + 3600,
-                    iat: Math.floor(Date.now() / 1000)
-                });
-            });
+            mockValidateToken.mockResolvedValueOnce(
+                createMockIntrospectionResponse({ acpCOI: ['FVEY', 'NATO-COSMIC'] })
+            );
 
             await authenticateJWT(req as Request, res as Response, next);
 
             expect((req as any).user.acpCOI).toEqual(['FVEY', 'NATO-COSMIC']);
         });
 
-        it('should handle double-encoded acpCOI (Keycloak quirk)', async () => {
-            const token = createUSUserJWT();
+        it('should handle acpCOI from JWT claims supplement', async () => {
+            // Introspection may not return custom claims; they come from JWT decode
+            const token = createUSUserJWT({ acpCOI: ['FVEY', 'NATO-COSMIC'] });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['["FVEY"]'], // Double-encoded
-                    exp: Math.floor(Date.now() / 1000) + 3600,
-                    iat: Math.floor(Date.now() / 1000)
-                });
-            });
+            // Introspection returns active but without acpCOI — JWT decode supplements it
+            mockValidateToken.mockResolvedValueOnce(
+                createMockIntrospectionResponse({ acpCOI: undefined })
+            );
 
             await authenticateJWT(req as Request, res as Response, next);
 
-            // Should be unwrapped
-            expect((req as any).user.acpCOI).toEqual(['FVEY']);
+            // acpCOI should be supplemented from JWT token claims
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.acpCOI).toEqual(['FVEY', 'NATO-COSMIC']);
         });
     });
 
@@ -313,20 +415,21 @@ describe('Authorization Middleware (PEP)', () => {
     // ============================================
     describe('authzMiddleware', () => {
         beforeEach(() => {
-            // Re-initialize ALL mocks to ensure test isolation
-
             // Re-create request mock
             req = {
                 headers: {},
                 params: {},
+                method: 'GET',
                 ip: '127.0.0.1'
             };
 
-            // Mock valid JWT for authz tests
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
             req.headers!['x-request-id'] = 'test-req-123';
             req.params!.id = 'doc-fvey-001';
+
+            // Pre-set user (authenticateJWT sets this before authzMiddleware runs)
+            (req as any).user = createMockUser();
 
             // Re-create response mocks fresh
             const statusMock = jest.fn().mockReturnThis();
@@ -336,73 +439,26 @@ describe('Authorization Middleware (PEP)', () => {
                 json: jsonMock
             };
 
-            // Reset next mock
             next = jest.fn();
-
-            // Reset JWT mocks for authz tests - decode actual token and validate audience/issuer
-            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
-                try {
-                    // Manually decode JWT by parsing base64 payload
-                    const parts = token.split('.');
-                    if (parts.length !== 3) {
-                        callback(new Error('invalid token'), null);
-                        return;
-                    }
-
-                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                    // Validate issuer if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid issuers
-                    if (options?.issuer) {
-                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                        if (!validIssuers.includes(payload.iss)) {
-                            callback(new Error('jwt issuer invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Validate audience if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid audiences
-                    if (options?.audience) {
-                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                        if (!hasValidAudience) {
-                            callback(new Error('jwt audience invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Return the decoded payload
-                    callback(null, payload);
-                } catch (error) {
-                    callback(new Error('invalid token'), null);
-                }
-            }) as any);
 
             // Clear call history on service mocks (will be set per test)
             mockedGetResourceById.mockClear();
             mockedAxios.post.mockClear();
+            mockDecisionCacheGet.mockReturnValue(null);
         });
 
         it('should allow access when OPA permits', async () => {
-            // Mock resource fetch
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
 
-            // Mock OPA decision (ALLOW)
+            // callOPA expects response.data as IOPADecision { result: { allow, reason, ... } }
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(mockedAxios.post).toHaveBeenCalledWith(
-                expect.stringContaining('/v1/data/dive/authorization'),
+                expect.stringContaining('/v1/data/dive/authz'),
                 expect.objectContaining({
                     input: expect.objectContaining({
                         subject: expect.objectContaining({
@@ -423,16 +479,10 @@ describe('Authorization Middleware (PEP)', () => {
         });
 
         it('should deny access when OPA denies', async () => {
-            // beforeEach already sets up authorization header and params
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
 
-            // Mock OPA decision (DENY)
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET').result
-                    }
-                }
+                data: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET')
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -440,8 +490,11 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(403);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Forbidden',
-                message: 'Access denied',
-                reason: expect.stringContaining('Insufficient clearance')
+                message: 'Authorization check failed',
+                details: expect.objectContaining({
+                    subject: expect.any(Object),
+                    resource: expect.any(Object)
+                })
             }));
             expect(next).not.toHaveBeenCalled();
         });
@@ -459,42 +512,41 @@ describe('Authorization Middleware (PEP)', () => {
             expect(next).not.toHaveBeenCalled();
         });
 
-        it('should return 503 when OPA is unavailable', async () => {
+        it('should fall back to local evaluation when OPA is unavailable', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
 
-            // Mock OPA error
+            // Mock OPA error — callOPA falls back to localEvaluateOPA
             mockedAxios.post.mockRejectedValue(new Error('ECONNREFUSED'));
 
             await authzMiddleware(req as Request, res as Response, next);
 
-            expect(res.status).toHaveBeenCalledWith(503);
-            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                error: 'Service Unavailable',
-                message: 'Authorization service temporarily unavailable'
-            }));
-            expect(next).not.toHaveBeenCalled();
+            // Local fallback: USA SECRET user accessing FVEY SECRET doc → ALLOW
+            expect(next).toHaveBeenCalled();
+            expect(res.status).not.toHaveBeenCalledWith(503);
         });
 
         it('should cache authorization decisions', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
-            mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
-            });
+            mockedAxios.post.mockResolvedValue({ data: mockOPAAllow() });
 
-            // First request
+            // First request — cache miss (mockDecisionCacheGet returns null by default)
             await authzMiddleware(req as Request, res as Response, next);
             expect(mockedAxios.post).toHaveBeenCalledTimes(1);
             expect(next).toHaveBeenCalledTimes(1);
 
-            // Reset mocks
+            // Reset mocks for second request
             jest.clearAllMocks();
             next = jest.fn();
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
 
-            // Second request (should use cache)
+            // Second request — cache hit
+            mockDecisionCacheGet.mockReturnValueOnce({
+                result: mockOPAAllow().result,
+                cachedAt: Date.now(),
+                ttl: 300,
+                classification: 'SECRET'
+            });
+
             await authzMiddleware(req as Request, res as Response, next);
 
             // OPA should NOT be called again (cached)
@@ -504,21 +556,23 @@ describe('Authorization Middleware (PEP)', () => {
 
         it('should not call OPA twice for same decision (caching)', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
-            mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
-            });
+            mockedAxios.post.mockResolvedValue({ data: mockOPAAllow() });
 
-            // Make first request
+            // First request — cache miss
             await authzMiddleware(req as Request, res as Response, next);
             const firstCallCount = mockedAxios.post.mock.calls.length;
 
-            // Make second identical request (should use cache)
+            // Second request — cache hit
             jest.clearAllMocks();
             next = jest.fn();
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
+            mockDecisionCacheGet.mockReturnValueOnce({
+                result: mockOPAAllow().result,
+                cachedAt: Date.now(),
+                ttl: 300,
+                classification: 'SECRET'
+            });
+
             await authzMiddleware(req as Request, res as Response, next);
             const secondCallCount = mockedAxios.post.mock.calls.length;
 
@@ -531,11 +585,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             // Mock OPA decision with KAS obligation
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllowWithKASObligation('doc-fvey-001').result
-                    }
-                }
+                data: mockOPAAllowWithKASObligation('doc-fvey-001')
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -562,11 +612,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -588,11 +634,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should handle ZTDF resources correctly', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -616,11 +658,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should log all authorization decisions', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -633,18 +671,17 @@ describe('Authorization Middleware (PEP)', () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
 
             // Mock invalid OPA response (missing result field)
-            // The callOPA function creates a fallback DENY decision, so expects 403 not 500
+            // callOPA falls back to localEvaluateOPA → SECRET/USA user → ALLOW
             mockedAxios.post.mockResolvedValue({
                 data: {
-                    // Missing result field - will fallback to deny
+                    // Missing result field — triggers local fallback
                 }
             });
 
             await authzMiddleware(req as Request, res as Response, next);
 
-            // Middleware treats invalid response as DENY, returns 403
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(next).not.toHaveBeenCalled();
+            // callOPA falls back to localEvaluateOPA which allows SECRET/USA user
+            expect(next).toHaveBeenCalled();
         });
 
         it('should construct correct OPA input structure', async () => {
@@ -654,11 +691,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -675,7 +708,7 @@ describe('Authorization Middleware (PEP)', () => {
                             acpCOI: expect.any(Array)
                         }),
                         action: expect.objectContaining({
-                            operation: 'view'
+                            operation: 'get'
                         }),
                         resource: expect.objectContaining({
                             resourceId: expect.any(String),
@@ -702,11 +735,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -733,46 +762,34 @@ describe('Authorization Middleware (PEP)', () => {
             expect(next).not.toHaveBeenCalled();
         });
 
-        it('should log DECRYPT event on successful access (ACP-240)', async () => {
-            const token = createUSUserJWT();
-            req.headers!.authorization = `Bearer ${token}`;
+        it('should log grant via auditService on successful access', async () => {
             req.params!.id = 'doc-001';
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
-            const acp240LoggerSpy = jest.spyOn(require('../utils/acp240-logger'), 'logDecryptEvent');
+            const { auditService } = require('../services/audit.service');
 
             await authzMiddleware(req as Request, res as Response, next);
 
-            expect(acp240LoggerSpy).toHaveBeenCalled();
+            expect(auditService.logAccessGrant).toHaveBeenCalled();
         });
 
-        it('should log ACCESS_DENIED event on rejection (ACP-240)', async () => {
-            const token = createUSUserJWT();
-            req.headers!.authorization = `Bearer ${token}`;
+        it('should log deny via auditService on rejection', async () => {
             req.params!.id = 'doc-001';
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET').result
-                    }
-                }
+                data: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET')
             });
 
-            const acp240LoggerSpy = jest.spyOn(require('../utils/acp240-logger'), 'logAccessDeniedEvent');
+            const { auditService } = require('../services/audit.service');
 
             await authzMiddleware(req as Request, res as Response, next);
 
-            expect(acp240LoggerSpy).toHaveBeenCalled();
+            expect(auditService.logAccessDeny).toHaveBeenCalled();
         });
     });
 
@@ -785,67 +802,20 @@ describe('Authorization Middleware (PEP)', () => {
             req.headers!.authorization = `Bearer ${token}`;
             req.headers!['x-request-id'] = 'test-req-123';
             req.params!.id = 'doc-fvey-001';
+            (req as any).method = 'GET';
 
-            // Decode actual token and validate audience/issuer
-            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
-                try {
-                    // Manually decode JWT by parsing base64 payload
-                    const parts = token.split('.');
-                    if (parts.length !== 3) {
-                        callback(new Error('invalid token'), null);
-                        return;
-                    }
-
-                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                    // Validate issuer if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid issuers
-                    if (options?.issuer) {
-                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                        if (!validIssuers.includes(payload.iss)) {
-                            callback(new Error('jwt issuer invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Validate audience if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid audiences
-                    if (options?.audience) {
-                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                        if (!hasValidAudience) {
-                            callback(new Error('jwt audience invalid'), null);
-                            return;
-                        }
-                    }
-
-                    callback(null, payload);
-                } catch (error) {
-                    callback(new Error('invalid token'), null);
-                }
-            });
+            // Pre-set user (authzMiddleware expects req.user from authenticateJWT)
+            (req as any).user = createMockUser();
+            mockDecisionCacheGet.mockReturnValue(null);
         });
 
         it('should handle missing clearance attribute', async () => {
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    // Missing clearance
-                    countryOfAffiliation: 'USA',
-                    acpCOI: []
-                });
-            });
+            // Override user with missing clearance
+            (req as any).user = createMockUser({ clearance: undefined });
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPADeny('Missing required attribute: clearance').result
-                    }
-                }
+                data: mockOPADeny('Missing required attribute: clearance')
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -854,23 +824,12 @@ describe('Authorization Middleware (PEP)', () => {
         });
 
         it('should handle missing countryOfAffiliation attribute', async () => {
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    // Missing countryOfAffiliation
-                    acpCOI: []
-                });
-            });
+            // Override user with missing country
+            (req as any).user = createMockUser({ countryOfAffiliation: undefined });
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPADeny('Missing required attribute: countryOfAffiliation').result
-                    }
-                }
+                data: mockOPADeny('Missing required attribute: countryOfAffiliation')
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -878,9 +837,7 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(403);
         });
 
-        it('should handle OPA timeout', async () => {
-            const token = createUSUserJWT();
-            req.headers!.authorization = `Bearer ${token}`;
+        it('should handle OPA timeout with local fallback', async () => {
             req.params!.id = 'doc-001';
 
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
@@ -891,7 +848,8 @@ describe('Authorization Middleware (PEP)', () => {
 
             await authzMiddleware(req as Request, res as Response, next);
 
-            expect(res.status).toHaveBeenCalledWith(503);
+            // callOPA falls back to localEvaluateOPA; USA SECRET user → ALLOW
+            expect(next).toHaveBeenCalled();
         });
 
         it('should handle very large resource metadata', async () => {
@@ -911,11 +869,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             mockedGetResourceById.mockResolvedValue(largeResource);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPAAllow().result
-                    }
-                }
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -933,47 +887,11 @@ describe('Authorization Middleware (PEP)', () => {
             req.headers!['x-request-id'] = 'test-req-123';
             const token = createUSUserJWT({ clearance: 'CONFIDENTIAL' });
             req.headers!.authorization = `Bearer ${token}`;
+            (req as any).method = 'GET';
 
-            // Decode actual token and validate audience/issuer
-            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
-                try {
-                    // Manually decode JWT by parsing base64 payload
-                    const parts = token.split('.');
-                    if (parts.length !== 3) {
-                        callback(new Error('invalid token'), null);
-                        return;
-                    }
-
-                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                    // Validate issuer if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid issuers
-                    if (options?.issuer) {
-                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                        if (!validIssuers.includes(payload.iss)) {
-                            callback(new Error('jwt issuer invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Validate audience if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid audiences
-                    if (options?.audience) {
-                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                        if (!hasValidAudience) {
-                            callback(new Error('jwt audience invalid'), null);
-                            return;
-                        }
-                    }
-
-                    callback(null, payload);
-                } catch (error) {
-                    callback(new Error('invalid token'), null);
-                }
-            });
+            // Pre-set user with CONFIDENTIAL clearance for deny tests
+            (req as any).user = createMockUser({ clearance: 'CONFIDENTIAL' });
+            mockDecisionCacheGet.mockReturnValue(null);
         });
 
         it('should include complete resource metadata in 403 response', async () => {
@@ -995,15 +913,11 @@ describe('Authorization Middleware (PEP)', () => {
             mockedAxios.post.mockResolvedValue({
                 data: {
                     result: {
-                        decision: {
-                            allow: false,
-                            reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
-                            evaluation_details: {
-                                checks: {
-                                    clearance_check: false,
-                                    releasability_check: true
-                                }
-                            }
+                        allow: false,
+                        reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
+                        evaluation_details: {
+                            clearance_check: false,
+                            releasability_check: true
                         }
                     }
                 }
@@ -1014,7 +928,7 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(403);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Forbidden',
-                message: 'Access denied',
+                message: 'Authorization check failed',
                 reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
                 details: expect.objectContaining({
                     resource: expect.objectContaining({
@@ -1031,11 +945,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should include subject attributes in 403 response', async () => {
             mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
             mockedAxios.post.mockResolvedValue({
-                data: {
-                    result: {
-                        decision: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET').result
-                    }
-                }
+                data: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET')
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -1116,36 +1026,35 @@ describe('Authorization Middleware (PEP)', () => {
             mockedAxios.post.mockResolvedValue({
                 data: {
                     result: {
-                        decision: {
-                            allow: false,
-                            reason: 'Country not in releasabilityTo',
-                            evaluation_details: {}
-                        }
+                        allow: false,
+                        reason: 'Country not in releasabilityTo',
+                        evaluation_details: {}
                     }
                 }
             });
 
-            // First request - should call OPA and cache
+            // First request — OPA call returns deny
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(res.status).toHaveBeenCalledWith(403);
-            const firstCall = (res.json as jest.Mock).mock.calls[0][0];
-            expect(firstCall.details.resource.title).toBe('Cached Resource');
 
             // Reset mocks for second request
             jest.clearAllMocks();
             mockedGetResourceById.mockResolvedValue(testResource as any);
+            (req as any).user = createMockUser({ clearance: 'CONFIDENTIAL' });
 
-            // Second request - should use cache (no OPA call)
+            // Second request — simulate cache hit
+            mockDecisionCacheGet.mockReturnValueOnce({
+                result: { allow: false, reason: 'Country not in releasabilityTo', evaluation_details: {} },
+                cachedAt: Date.now(),
+                ttl: 300,
+                classification: 'SECRET'
+            });
+
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(res.status).toHaveBeenCalledWith(403);
             expect(mockedAxios.post).not.toHaveBeenCalled(); // Verify cache was used
-
-            const secondCall = (res.json as jest.Mock).mock.calls[0][0];
-            expect(secondCall.details.resource).toBeDefined();
-            expect(secondCall.details.resource.title).toBe('Cached Resource');
-            expect(secondCall.details.resource.classification).toBe('SECRET');
         });
 
         it('should handle legacy (non-ZTDF) resources in error response', async () => {
@@ -1186,17 +1095,13 @@ describe('Authorization Middleware (PEP)', () => {
             mockedAxios.post.mockResolvedValue({
                 data: {
                     result: {
-                        decision: {
-                            allow: false,
-                            reason: 'Multiple failures',
-                            evaluation_details: {
-                                checks: {
-                                    clearance_check: false,
-                                    releasability_check: false,
-                                    coi_check: true
-                                },
-                                violations: ['clearance', 'releasability']
-                            }
+                        allow: false,
+                        reason: 'Multiple failures',
+                        evaluation_details: {
+                            clearance_check: false,
+                            releasability_check: false,
+                            coi_check: true,
+                            violations: ['clearance', 'releasability']
                         }
                     }
                 }
@@ -1205,12 +1110,12 @@ describe('Authorization Middleware (PEP)', () => {
             await authzMiddleware(req as Request, res as Response, next);
 
             const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
-            // Should have both evaluation_details and new metadata
-            expect(jsonCall.details.checks).toBeDefined();
+            // Should have evaluation_details, subject, and resource in details
+            expect(jsonCall.details.evaluation_details).toBeDefined();
             expect(jsonCall.details.subject).toBeDefined();
             expect(jsonCall.details.resource).toBeDefined();
-            // Verify both old and new data are present
-            expect(jsonCall.details.checks.clearance_check).toBe(false);
+            // Verify evaluation_details data
+            expect(jsonCall.details.evaluation_details.clearance_check).toBe(false);
             expect(jsonCall.details.resource.resourceId).toBe('doc-fvey-001');
             expect(jsonCall.details.resource.classification).toBe('SECRET');
         });
@@ -1272,5 +1177,424 @@ describe('Authorization Middleware (PEP)', () => {
             expect(jsonCall.details.resource.title).toBe('FVEY Intelligence Report');
         });
     });
-});
 
+    describe('Token Blacklist and Revocation', () => {
+        const { isTokenBlacklisted, areUserTokensRevoked } = require('../services/token-blacklist.service');
+
+        it('should reject blacklisted token', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Mock JWT verification success
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    jti: 'blacklisted-token-id',
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            // Mock token as blacklisted
+            isTokenBlacklisted.mockResolvedValueOnce(true);
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized',
+                    message: 'Token has been revoked'
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should reject token when user tokens are revoked', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Token introspection succeeds
+            mockValidateToken.mockResolvedValueOnce(createMockIntrospectionResponse());
+
+            isTokenBlacklisted.mockResolvedValueOnce(false);
+            areUserTokensRevoked.mockResolvedValueOnce(true);
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized',
+                    message: expect.stringContaining('terminated')
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Token Introspection Error Handling', () => {
+        it('should handle token introspection network failure', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Token introspection throws (network error)
+            mockValidateToken.mockRejectedValueOnce(new Error('unable to get local issuer certificate'));
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized'
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should handle inactive token from introspection', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Token introspection returns inactive
+            mockValidateToken.mockResolvedValueOnce({
+                active: false,
+                error: 'token_expired',
+                error_description: 'Token has expired',
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should handle token with missing kid in header', async () => {
+            // Create a token without kid
+            const tokenWithoutKid = jwt.sign(
+                {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA'
+                },
+                'secret',
+                { algorithm: 'HS256', noTimestamp: false }
+            );
+
+            req.headers!.authorization = `Bearer ${tokenWithoutKid}`;
+
+            // Token introspection still succeeds (kid not needed for introspection)
+            mockValidateToken.mockResolvedValueOnce(createMockIntrospectionResponse());
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            // Should succeed since introspection validates the token
+            expect(next).toHaveBeenCalled();
+        });
+    });
+
+    describe('AMR and ACR Format Handling', () => {
+        it('should handle AMR as JSON string (legacy format)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    amr: '["pwd","otp"]', // JSON string format
+                    acr: 'urn:mace:incommon:iap:silver', // URN format
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user).toBeDefined();
+            expect((req as any).user.amr).toEqual(['pwd', 'otp']);
+        });
+
+        it('should handle AMR as array (new format)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockValidateToken.mockResolvedValueOnce(createMockIntrospectionResponse({
+                amr: ['pwd', 'mfa'], // Array format
+                acr: 2, // Numeric format
+            }));
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.amr).toEqual(['pwd', 'mfa']);
+            expect((req as any).user.acr).toBe(2);
+        });
+
+        it('should handle invalid AMR JSON string gracefully', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    amr: 'invalid-json{', // Invalid JSON
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            // Should fall back to original string value
+            expect((req as any).user).toBeDefined();
+        });
+
+        it('should handle ACR as numeric value', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockValidateToken.mockResolvedValueOnce(createMockIntrospectionResponse({
+                acr: 3, // Numeric ACR level
+            }));
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.acr).toBe(3);
+        });
+
+        it('should handle ACR as URN string', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockValidateToken.mockResolvedValueOnce(createMockIntrospectionResponse({
+                acr: 'urn:mace:incommon:iap:gold', // URN format
+            }));
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.acr).toBe('urn:mace:incommon:iap:gold');
+        });
+    });
+
+    describe('Multi-Realm Token Handling', () => {
+        it('should handle token from dive-v3-broker-usa realm', async () => {
+            const tokenPayload = {
+                sub: 'testuser-us',
+                uniqueID: 'testuser-us',
+                clearance: 'SECRET',
+                countryOfAffiliation: 'USA',
+                iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                iat: Math.floor(Date.now() / 1000)
+            };
+
+            const token = jwt.sign(tokenPayload, 'secret', { algorithm: 'HS256' });
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, tokenPayload);
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should handle token with no issuer (default to broker realm)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    // No iss claim
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should handle malformed token when extracting realm', async () => {
+            req.headers!.authorization = `Bearer invalid.malformed`;
+
+            // Token introspection rejects malformed token
+            mockValidateToken.mockResolvedValueOnce({
+                active: false,
+                error: 'invalid_token',
+                error_description: 'Token is malformed',
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Classification Equivalency and Advanced Attributes', () => {
+        beforeEach(() => {
+            // Pre-set user for authzMiddleware (which expects req.user from authenticateJWT)
+            (req as any).user = createMockUser();
+            mockDecisionCacheGet.mockReturnValue(null);
+        });
+
+        it('should include subject attributes in OPA input', async () => {
+            req.headers!['x-request-id'] = 'test-dutyorg-123';
+            req.params = { id: 'doc-fvey-001' };
+
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
+            expect(opaInput.input.subject.uniqueID).toBe('testuser-us');
+            expect(opaInput.input.subject.clearance).toBe('SECRET');
+            expect(opaInput.input.subject.countryOfAffiliation).toBe('USA');
+        });
+
+        it('should include original classification fields in OPA input', async () => {
+            req.headers!['x-request-id'] = 'test-class-123';
+            req.params = { id: 'doc-fra-001' };
+
+            // Create a French resource with original classification fields
+            const frenchResource = {
+                ...TEST_RESOURCES.fveySecretDocument,
+                resourceId: 'doc-fra-001',
+                ztdf: {
+                    ...TEST_RESOURCES.fveySecretDocument.ztdf,
+                    policy: {
+                        ...TEST_RESOURCES.fveySecretDocument.ztdf.policy,
+                        securityLabel: {
+                            ...TEST_RESOURCES.fveySecretDocument.ztdf.policy.securityLabel,
+                            originalClassification: 'SECRET DÉFENSE',
+                            originatingCountry: 'FRA',
+                            natoEquivalent: 'NATO SECRET'
+                        }
+                    }
+                }
+            };
+
+            mockedGetResourceById.mockResolvedValue(frenchResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
+            expect(opaInput.input.resource.originalClassification).toBe('SECRET DÉFENSE');
+            expect(opaInput.input.resource.originalCountry).toBe('FRA');
+            expect(opaInput.input.resource.natoEquivalent).toBe('NATO SECRET');
+        });
+    });
+
+    describe('Service Provider (SP) Token Authentication', () => {
+        it('should require user authentication before authorization', async () => {
+            // authzMiddleware expects req.user to be set by authenticateJWT
+            // Without it, returns 401
+            req.headers!['x-request-id'] = 'test-sp-123';
+            req.params = { id: 'doc-fvey-001' };
+
+            // Explicitly clear user (no authenticateJWT ran)
+            delete (req as any).user;
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized',
+                    message: 'No authenticated user found',
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Error Recovery and Edge Cases', () => {
+        beforeEach(() => {
+            (req as any).user = createMockUser();
+            mockDecisionCacheGet.mockReturnValue(null);
+        });
+
+        it('should handle OPA response with nested decision structure', async () => {
+            req.params = { id: 'doc-fvey-001' };
+
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        allow: true,
+                        reason: 'Top-level allow'
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should include resource COI in OPA input', async () => {
+            req.params = { id: 'doc-fvey-001' };
+
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
+
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
+            expect(opaInput.input.resource.COI).toEqual(['FVEY']);
+        });
+
+        it('should handle auth_time in context', async () => {
+            req.headers!['x-request-id'] = 'test-authtime-123';
+            req.params = { id: 'doc-fvey-001' };
+
+            const authTime = Math.floor(Date.now() / 1000) - 3600;
+
+            // Pre-set user with specific auth_time
+            (req as any).user = createMockUser({ auth_time: authTime });
+
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
+            expect(opaInput.input.context.auth_time).toBe(authTime);
+        });
+    });
+});

@@ -12,6 +12,7 @@
 
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { logger } from '../utils/logger';
 import {
     blacklistToken,
@@ -20,6 +21,7 @@ import {
     getBlacklistStats
 } from '../services/token-blacklist.service';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
 
 const router = Router();
 
@@ -153,13 +155,11 @@ router.post('/logout', authenticateJWT, async (req: Request, res: Response) => {
  * GET /api/auth/blacklist-stats
  * Get token blacklist statistics (admin only)
  */
-router.get('/blacklist-stats', authenticateJWT, async (req: Request, res: Response) => {
+router.get('/blacklist-stats', authenticateJWT, requireAdmin, async (req: Request, res: Response) => {
     const requestId = req.headers['x-request-id'] as string;
     const user = (req as any).user;
 
     try {
-        // TODO: Add admin role check
-        // For now, allow any authenticated user to view stats
 
         const stats = await getBlacklistStats();
 
@@ -235,6 +235,61 @@ router.post('/check-revocation', authenticateJWT, async (req: Request, res: Resp
     }
 });
 
+// ============================================
+// Custom Login Routes (Phase 4.2)
+// ============================================
+
+import { customLoginHandler, customLoginMFAHandler } from './custom-login.controller';
+import { initiateOTPSetup, verifyAndEnableOTP } from './otp-setup.controller';
+
+/**
+ * Rate Limit Store for Custom Login (for testing - can be reset)
+ */
+export const customLoginRateLimitStore = new MemoryStore();
+
+/**
+ * Rate Limiting for Custom Login (Brute-Force Protection)
+ * - Window: 15 minutes
+ * - Max attempts: 5 per IP (stricter than token endpoint)
+ * - Response: 429 Too Many Requests
+ */
+const customLoginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 login attempts per windowMs
+    message: {
+        error: 'Too Many Requests',
+        message: 'Too many login attempts from this IP, please try again later'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: customLoginRateLimitStore // Use exported store (can be reset in tests)
+});
+
+/**
+ * POST /api/auth/custom-login
+ * Custom login page authentication
+ * 
+ * Security:
+ * - Rate limiting: 5 attempts/15min per IP (brute-force protection)
+ */
+router.post('/custom-login', customLoginRateLimiter, customLoginHandler);
+
+/**
+ * POST /api/auth/custom-login/mfa
+ * MFA verification for custom login
+ */
+router.post('/custom-login/mfa', customLoginMFAHandler);
+
+/**
+ * POST /api/auth/otp/setup
+ * Initiate OTP setup - returns QR code and secret
+ */
+router.post('/otp/setup', initiateOTPSetup);
+
+/**
+ * POST /api/auth/otp/verify
+ * Verify and enable OTP for user
+ */
+router.post('/otp/verify', verifyAndEnableOTP);
+
 export default router;
-
-

@@ -1,0 +1,167 @@
+# =============================================================================
+# DIVE V3 AlertManager Configuration
+# =============================================================================
+# Phase 2: Monitoring & Observability Enhancement
+# =============================================================================
+
+global:
+  resolve_timeout: 5m
+  # Slack webhook URL (set via environment variable)
+  # slack_api_url: $ALERTMANAGER_SLACK_WEBHOOK_URL
+  # SMTP configuration (set via environment variables)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@dive-v3.io'
+
+# =============================================================================
+# INHIBITION RULES
+# =============================================================================
+# Suppress less severe alerts when more severe alerts are firing
+inhibit_rules:
+  # If hub is down, suppress spoke alerts (they depend on hub)
+  - source_match:
+      alertname: HubNotReady
+      severity: critical
+    target_match:
+      component: federation
+    equal: []  # Applies to all targets with federation component
+
+  # If database is down, suppress state transition alerts
+  - source_match:
+      alertname: OrchestrationDBDown
+      severity: critical
+    target_match:
+      alertname: StateTransitionFailures
+
+  # If backend is down, suppress high error rate alerts
+  - source_match:
+      alertname: BackendAPIDown
+      severity: critical
+    target_match:
+      alertname: HighErrorRate
+    equal: ['job']
+
+# =============================================================================
+# ROUTING TREE
+# =============================================================================
+route:
+  # Default receiver
+  receiver: 'default'
+
+  # Group alerts by instance and alertname
+  group_by: ['alertname', 'instance', 'instance_code']
+
+  # Wait 30 seconds before sending first notification
+  group_wait: 30s
+
+  # Wait 5 minutes before sending subsequent notifications
+  group_interval: 5m
+
+  # Resend notification every 4 hours for unresolved alerts
+  repeat_interval: 4h
+
+  # Child routes for specific alert types
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+      continue: true  # Also send to default
+
+    # Federation alerts - federation team
+    - match:
+        component: federation
+      receiver: 'federation-alerts'
+      group_by: ['alertname', 'source', 'target']
+
+    # Deployment alerts - ops team
+    - match:
+        component: deployment
+      receiver: 'deployment-alerts'
+      group_by: ['alertname', 'instance_code']
+
+    # Security alerts - security team
+    - match:
+        component: security
+      receiver: 'security-alerts'
+      group_by: ['alertname', 'instance_code']
+
+    # Database alerts - DBA team
+    - match:
+        component: database
+      receiver: 'database-alerts'
+
+    # KAS alerts - specific handling
+    - match_re:
+        alertname: KAS.*
+      receiver: 'kas-alerts'
+      group_by: ['alertname', 'kas_id', 'instance']
+
+# =============================================================================
+# RECEIVERS
+# =============================================================================
+receivers:
+  # Default receiver - logging only in development
+  - name: 'default'
+    # Webhook for development/testing (sends to local endpoint)
+    # webhook_configs:
+    #   - url: 'http://localhost:9095/webhook'
+    #     send_resolved: true
+
+  # Critical alerts - multiple channels
+  - name: 'critical-alerts'
+    # Slack configuration (uncomment and configure)
+    # slack_configs:
+    #   - channel: '#dive-v3-alerts-critical'
+    #     title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+    #     text: |-
+    #       {{ range .Alerts }}
+    #       *Alert:* {{ .Annotations.summary }}
+    #       *Description:* {{ .Annotations.description }}
+    #       *Instance:* {{ .Labels.instance }}
+    #       {{ if .Annotations.runbook_url }}*Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+    #       {{ end }}
+    #     send_resolved: true
+
+  # Federation alerts
+  - name: 'federation-alerts'
+    # slack_configs:
+    #   - channel: '#dive-v3-federation'
+    #     title: '🔗 Federation: {{ .GroupLabels.alertname }}'
+    #     send_resolved: true
+
+  # Deployment alerts
+  - name: 'deployment-alerts'
+    # slack_configs:
+    #   - channel: '#dive-v3-deployments'
+    #     title: '🚀 Deployment: {{ .GroupLabels.alertname }}'
+    #     send_resolved: true
+
+  # Security alerts
+  - name: 'security-alerts'
+    # slack_configs:
+    #   - channel: '#dive-v3-security'
+    #     title: '🔒 Security: {{ .GroupLabels.alertname }}'
+    #     send_resolved: true
+
+  # Database alerts
+  - name: 'database-alerts'
+    # slack_configs:
+    #   - channel: '#dive-v3-database'
+    #     title: '🗄️ Database: {{ .GroupLabels.alertname }}'
+    #     send_resolved: true
+
+  # KAS alerts
+  - name: 'kas-alerts'
+    # slack_configs:
+    #   - channel: '#dive-v3-kas'
+    #     title: '🔑 KAS: {{ .GroupLabels.alertname }}'
+    #     send_resolved: true
+
+# =============================================================================
+# TEMPLATES (Optional - for custom notification formatting)
+# =============================================================================
+# templates:
+#   - '/etc/alertmanager/templates/*.tmpl'

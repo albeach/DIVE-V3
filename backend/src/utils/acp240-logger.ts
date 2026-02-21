@@ -12,29 +12,31 @@
  */
 
 import { logger } from './logger';
-import { MongoClient, Db } from 'mongodb';
+import { Db } from 'mongodb';
+import { getDb, mongoSingleton } from './mongodb-singleton';
 
-// MongoDB connection configuration
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
-const LOGS_COLLECTION = 'audit_logs';
-
-// MongoDB client (singleton)
-let mongoClient: MongoClient | null = null;
+// MongoDB connection (using singleton)
 let db: Db | null = null;
 
 /**
+ * Get collection name (allows test override for parallel test isolation)
+ */
+function getLogsCollection(): string {
+    return process.env.ACP240_LOGS_COLLECTION || 'audit_logs';
+}
+
+/**
  * Initialize MongoDB connection for audit logging
+ * BEST PRACTICE: Use MongoDB singleton for connection pooling
  */
 async function initMongoDB(): Promise<void> {
-    if (mongoClient && db) {
+    if (db) {
         return;
     }
 
     try {
-        mongoClient = new MongoClient(MONGODB_URL);
-        await mongoClient.connect();
-        db = mongoClient.db(DB_NAME);
+        await mongoSingleton.connect();
+        db = getDb();
         logger.debug('ACP-240 logger: Connected to MongoDB for audit persistence');
     } catch (error) {
         logger.error('ACP-240 logger: Failed to connect to MongoDB', {
@@ -56,7 +58,7 @@ async function writeToMongoDB(event: IACP240AuditEvent): Promise<void> {
             return;
         }
 
-        const collection = db.collection(LOGS_COLLECTION);
+        const collection = db.collection(getLogsCollection());
 
         // Insert the event with all fields
         await collection.insertOne({
@@ -135,6 +137,10 @@ export interface IACP240AuditEvent {
         amr?: string[];      // Authentication Methods Reference
         auth_time?: number;  // Time of authentication
         aal_level?: string;  // Derived AAL level (AAL1/AAL2/AAL3)
+        // ADatP-5663 specific fields
+        issuer?: string;     // IdP URL (§4.4)
+        token_id?: string;   // JWT ID (jti claim) for revocation tracking
+        token_lifetime?: number;  // Time since authentication (currentTime - auth_time)
     };
 
     /** Resource attributes (for policy correlation) */
@@ -143,6 +149,17 @@ export interface IACP240AuditEvent {
         releasabilityTo?: string[];
         COI?: string[];
         encrypted?: boolean;
+        // ACP-240 specific fields
+        ztdf_integrity?: 'valid' | 'invalid' | 'not_checked';  // STANAG 4778 signature status
+        original_classification?: string;  // National classification (e.g., "GEHEIM")
+        original_country?: string;         // ISO 3166-1 alpha-3 (e.g., "DEU")
+        kas_actions?: Array<{              // KAS unwrap/rewrap operations
+            action: 'unwrap' | 'rewrap';
+            kas_url: string;
+            status: 'success' | 'failure';
+            latency_ms: number;
+            timestamp: string;
+        }>;
     };
 
     /** Policy evaluation details (OPA) */
@@ -150,6 +167,11 @@ export interface IACP240AuditEvent {
         allow: boolean;
         reason: string;
         evaluation_details?: Record<string, unknown>;
+        obligations?: Array<{           // ACP-240 §5.2 KAS obligations
+            type: string;
+            resourceId?: string;
+            status?: 'pending' | 'fulfilled' | 'failed';
+        }>;
     };
 
     /** Additional context */
@@ -174,7 +196,8 @@ export interface IACP240AuditEvent {
  * 2. MongoDB (audit_logs collection) for dashboard queries
  */
 export function logACP240Event(event: IACP240AuditEvent): Promise<void> {
-    const authzLogger = logger.child({ service: 'acp240-audit' });
+    const authzLogger =
+        typeof logger.child === 'function' ? logger.child({ service: 'acp240-audit' }) : logger;
 
     // Write to file (synchronous)
     authzLogger.info('ACP-240 Audit Event', {
@@ -364,20 +387,85 @@ export function logDataSharedEvent(params: {
 }
 
 /**
- * Close MongoDB connection (for graceful shutdown)
+ * Log FEDERATION_AUTH event (cross-instance authentication)
  */
-export async function closeAuditLogConnection(): Promise<void> {
-    if (mongoClient) {
-        try {
-            await mongoClient.close();
-            mongoClient = null;
-            db = null;
-            logger.info('ACP-240 logger: MongoDB connection closed');
-        } catch (error) {
-            logger.error('Failed to close MongoDB connection', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
-    }
+export function logFederationAuthEvent(params: {
+    requestId: string;
+    subject: string;
+    sourceInstance: string;
+    targetInstance: string;
+    outcome: 'ALLOW' | 'DENY';
+    reason?: string;
+    subjectAttributes?: {
+        clearance?: string;
+        countryOfAffiliation?: string;
+        acpCOI?: string[];
+        aal_level?: string;
+    };
+    latencyMs?: number;
+}): Promise<void> {
+    const event: IACP240AuditEvent = {
+        eventType: 'DATA_SHARED', // Federation is a form of data sharing
+        timestamp: new Date().toISOString(),
+        requestId: params.requestId,
+        subject: params.subject,
+        action: 'federation_auth',
+        resourceId: `${params.sourceInstance}→${params.targetInstance}`,
+        outcome: params.outcome,
+        reason: params.reason || `Federation authentication from ${params.sourceInstance} to ${params.targetInstance}`,
+        subjectAttributes: params.subjectAttributes,
+        context: {
+            sourceIP: params.sourceInstance,
+        },
+        latencyMs: params.latencyMs
+    };
+
+    return logACP240Event(event);
 }
 
+/**
+ * Log authentication event (login)
+ */
+export function logAuthenticationEvent(params: {
+    requestId: string;
+    subject: string;
+    outcome: 'ALLOW' | 'DENY';
+    reason?: string;
+    subjectAttributes?: {
+        clearance?: string;
+        countryOfAffiliation?: string;
+        aal_level?: string;
+        amr?: string[];
+        acr?: string;
+    };
+    authMethod?: string;
+    latencyMs?: number;
+}): Promise<void> {
+    const event: IACP240AuditEvent = {
+        eventType: 'ACCESS_MODIFIED', // Authentication modifies access state
+        timestamp: new Date().toISOString(),
+        requestId: params.requestId,
+        subject: params.subject,
+        action: 'authenticate',
+        resourceId: 'session',
+        outcome: params.outcome,
+        reason: params.reason || `Authentication ${params.outcome.toLowerCase()}`,
+        subjectAttributes: params.subjectAttributes,
+        context: {
+            sourceIP: params.authMethod,
+        },
+        latencyMs: params.latencyMs
+    };
+
+    return logACP240Event(event);
+}
+
+/**
+ * Close MongoDB connection (for graceful shutdown)
+ * Note: With singleton pattern, connection lifecycle is managed centrally
+ */
+export async function closeAuditLogConnection(): Promise<void> {
+    // Reset local db reference
+    db = null;
+    logger.info('ACP-240 logger: MongoDB reference cleared (singleton manages connection lifecycle)');
+}

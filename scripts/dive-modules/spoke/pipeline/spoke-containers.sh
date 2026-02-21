@@ -1,0 +1,1020 @@
+#!/usr/bin/env bash
+# =============================================================================
+# DIVE V3 CLI - Spoke Container Orchestration
+# =============================================================================
+# Manages container lifecycle with:
+#   - Service dependency awareness
+#   - Health check monitoring
+#   - Graceful startup/shutdown
+#   - Stale container cleanup
+#
+# Consolidates logic from spoke_deploy() lines 735-783, spoke_up(), and
+# spoke-env-sync.sh spoke_up_enhanced()
+# =============================================================================
+# Version: 1.0.0
+# Date: 2026-01-13
+# =============================================================================
+
+# Prevent multiple sourcing
+if [ -n "${SPOKE_CONTAINERS_LOADED:-}" ]; then
+    return 0
+fi
+export SPOKE_CONTAINERS_LOADED=1
+
+# =============================================================================
+# SERVICE DEPENDENCY GRAPH - DYNAMIC DISCOVERY
+# =============================================================================
+# Phase 1 Sprint 1.2 Enhancement: Services discovered dynamically from compose files
+# No hardcoded arrays - parse from docker-compose.yml with dive.service.class labels
+# =============================================================================
+
+# Load compose parser utility for dynamic service discovery
+if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh"
+fi
+
+# Load shared pipeline utilities (health checks, service SSOT)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/deployment/pipeline-utils.sh"
+fi
+
+##
+# Get service order for a spoke instance (dynamically from compose file)
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   Space-separated list of services in dependency order
+##
+spoke_get_service_order() {
+    local instance_code="$1"
+
+    # Get services dynamically from compose file
+    if type compose_get_spoke_services &>/dev/null; then
+        local dynamic_services
+        if dynamic_services=$(compose_get_spoke_services "$instance_code" 2>/dev/null); then
+            echo "$dynamic_services"
+            return 0
+        fi
+        log_verbose "Falling back to SSOT service order for $instance_code"
+    fi
+
+    # Fallback to SSOT service list
+    echo "${PIPELINE_SPOKE_ALL_SERVICES:-postgres mongodb redis keycloak opa opal-client backend frontend kas}"
+}
+
+##
+# Get service dependencies dynamically
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Service name
+#
+# Returns:
+#   Space-separated list of dependencies
+##
+spoke_get_service_deps() {
+    local instance_code="$1"
+    local service="$2"
+
+    if type compose_get_spoke_dependencies &>/dev/null; then
+        local deps
+        deps=$(compose_get_spoke_dependencies "$instance_code" "$service")
+        if [ "$deps" = "none" ]; then
+            echo ""
+        else
+            # Convert comma-separated to space-separated
+            echo "$deps" | tr ',' ' '
+        fi
+    else
+        # Fallback to legacy hardcoded dependencies
+        case "$service" in
+            postgres|mongodb|redis|opa) echo "" ;;
+            keycloak) echo "postgres" ;;
+            backend) echo "postgres mongodb redis keycloak opa" ;;
+            frontend) echo "backend" ;;
+            kas) echo "mongodb backend" ;;
+            opal-client) echo "backend" ;;
+            *) echo "" ;;
+        esac
+    fi
+}
+
+# Service startup timeouts — delegates to shared SSOT
+spoke_get_service_timeout() {
+    pipeline_get_service_timeout "$1"
+}
+
+# =============================================================================
+# MAIN CONTAINER ORCHESTRATION
+# =============================================================================
+
+##
+# Start all spoke containers with dependency awareness
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Force rebuild (true/false)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_containers_start() {
+    local instance_code="$1"
+    local force_rebuild="${2:-false}"
+
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    log_step "Starting containers for $code_upper"
+
+    # Verify compose file exists
+    if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
+        orch_record_error "$SPOKE_ERROR_COMPOSE_GENERATE" "$ORCH_SEVERITY_CRITICAL" \
+            "Docker compose file not found" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_GENERATE $instance_code)"
+        return 1
+    fi
+
+    # Set compose project name
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+    cd "$spoke_dir" || return 1
+
+    # Source .env file
+    if [ -f "$spoke_dir/.env" ]; then
+        set -a
+        source "$spoke_dir/.env"
+        set +a
+    fi
+
+    # Check if parallel tier-based startup is available
+    if type orch_start_services_tiered &>/dev/null && [ "$force_rebuild" != "true" ]; then
+        log_info "Using optimized parallel tier-based startup (30% faster)"
+
+        # Change back to DIVE_ROOT for module execution
+        cd "${DIVE_ROOT}" || return 1
+
+        # Use tiered parallel startup
+        if orch_start_services_tiered "$instance_code" "docker-compose.yml"; then
+            log_success "All services started with parallel tier approach"
+            return 0
+        else
+            log_warn "Parallel tier startup failed, falling back to traditional approach"
+            cd "$spoke_dir" || return 1
+        fi
+    fi
+
+    # BEST PRACTICE STAGED STARTUP APPROACH
+    # Start containers in dependency order to ensure proper initialization
+    # Stage 1: Infrastructure (postgres, redis, mongodb, opa)
+    # Stage 2: OPAL Client (depends on infrastructure)
+    # Stage 3: Keycloak (depends on postgres)
+    # Stage 4: Applications (backend, kas, frontend - depend on Keycloak and OPAL)
+
+    log_info "Using best practice staged container startup"
+
+    local compose_cmd="docker compose"
+    local compose_args_base="up -d"
+
+    # Add --env-file flag if .env file exists (required for variable substitution)
+    if [ -f "$spoke_dir/.env" ]; then
+        compose_cmd="$compose_cmd --env-file .env"
+        log_verbose "Using environment file: .env"
+    fi
+
+    if [ "$force_rebuild" = "true" ]; then
+        compose_args_base="$compose_args_base --build --force-recreate"
+
+        # CRITICAL FIX (2026-02-19): Fix Docker buildx lock file permissions.
+        # Docker Compose v2 uses BuildKit/buildx by default. On EC2 instances,
+        # the ~/.docker/buildx/ directory and its .lock file are often created by
+        # root during Docker installation, but the deploy user (ubuntu) runs
+        # `docker compose --build`.
+        # This causes: "open /home/ubuntu/.docker/buildx/.lock: permission denied"
+        # Fix: Check the .lock FILE specifically (directory may be writable while
+        # the file inside is root-owned), and also fix any other root-owned files.
+        local docker_dir="${HOME}/.docker"
+        if [ -d "${docker_dir}/buildx" ]; then
+            # Check for any root-owned files inside buildx directory
+            local root_owned
+            root_owned=$(find "${docker_dir}/buildx" -not -user "$(id -u)" 2>/dev/null | head -1)
+            if [ -n "$root_owned" ]; then
+                log_verbose "Fixing Docker buildx directory permissions (root-owned files detected)..."
+                sudo chown -R "$(id -u):$(id -g)" "${docker_dir}/buildx" 2>/dev/null || true
+            fi
+        fi
+        # Ensure buildx directory exists and is writable
+        mkdir -p "${docker_dir}/buildx" 2>/dev/null || true
+    fi
+
+    # =============================================================================
+    # PERFORMANCE OPTIMIZATION: Pre-pull Docker images in parallel
+    # =============================================================================
+    # Pull images before starting containers to:
+    # 1. Avoid blocking container startup on image downloads
+    # 2. Enable parallel image pulls across all services
+    # 3. Reduce overall deployment time by 30-60 seconds
+    # =============================================================================
+    log_info "Pre-pulling Docker images in parallel..."
+    local pull_start
+    pull_start=$(date +%s)
+
+    # Start pull in background so we can enforce a timeout
+    $compose_cmd pull --quiet --ignore-pull-failures 2>/dev/null &
+    local pull_pid=$!
+    log_verbose "Image pull started (PID: $pull_pid)"
+
+    # Wait for pull with timeout
+    local pull_timeout=120
+    local pull_waited=0
+    while kill -0 $pull_pid 2>/dev/null && [ $pull_waited -lt $pull_timeout ]; do
+        sleep 2
+        pull_waited=$((pull_waited + 2))
+    done
+
+    # Check if pull completed
+    if kill -0 $pull_pid 2>/dev/null; then
+        log_warn "Image pull still running after ${pull_timeout}s, continuing anyway"
+        # Don't kill - let it finish in background
+    else
+        local pull_exit=0
+        wait $pull_pid 2>/dev/null || pull_exit=$?
+        local pull_end
+        pull_end=$(date +%s)
+        local pull_duration=$((pull_end - pull_start))
+        if [ $pull_exit -eq 0 ]; then
+            log_success "✓ Images pre-pulled in ${pull_duration}s"
+        else
+            log_warn "Image pull completed with warnings (exit: $pull_exit, ${pull_duration}s) — cached images will be used"
+        fi
+    fi
+
+    # Stage 1: Start core infrastructure (postgres, redis, mongodb, opa)
+    log_info "Stage 1: Starting core infrastructure containers..."
+    local infra_services="postgres-${code_lower} redis-${code_lower} mongodb-${code_lower} opa-${code_lower}"
+    local compose_args="$compose_args_base $infra_services"
+
+    log_verbose "Infrastructure services: $infra_services"
+    log_verbose "Running: $compose_cmd $compose_args"
+
+    # Cross-platform timeout implementation (macOS doesn't have GNU timeout)
+    if command -v timeout &>/dev/null; then
+        # Linux: use GNU timeout
+        if ! timeout 60 $compose_cmd $compose_args; then
+            log_error "Failed to start core infrastructure containers (timeout or error)"
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup failed" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
+    elif command -v gtimeout &>/dev/null; then
+        # macOS with GNU coreutils installed via Homebrew
+        if ! gtimeout 60 $compose_cmd $compose_args; then
+            log_error "Failed to start core infrastructure containers (timeout or error)"
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup failed" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
+    else
+        # macOS without GNU coreutils: use background process with kill
+        $compose_cmd $compose_args &
+        local compose_pid=$!
+        local waited=0
+        while [ $waited -lt 60 ]; do
+            if ! kill -0 $compose_pid 2>/dev/null; then
+                # Process finished
+                wait $compose_pid
+                local exit_code=$?
+                if [ $exit_code -ne 0 ]; then
+                    log_error "Failed to start core infrastructure containers (exit code: $exit_code)"
+                    orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                        "Infrastructure startup failed" "containers" \
+                        "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+                    return 1
+                fi
+                break
+            fi
+            sleep 1
+            waited=$((waited + 1))
+        done
+
+        # Check if still running (timeout)
+        if kill -0 $compose_pid 2>/dev/null; then
+            log_error "Container startup timed out after 60s"
+            kill $compose_pid 2>/dev/null || true
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup timeout" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
+    fi
+
+    # Wait for core infrastructure to be running
+    # CRITICAL FIX (2026-01-27): Don't wait for 'healthy' status during start_period
+    # Docker healthchecks take time to initialize (start_period + intervals)
+    # Instead, wait for containers to be Up and running
+    log_info "Waiting for core infrastructure to be running..."
+    local max_wait=30  # Reduced from 120s - just need containers to start
+    local waited=0
+
+    while [ $waited -lt $max_wait ]; do
+        # Container names are: dive-spoke-fra-postgres, dive-spoke-fra-redis, etc.
+        local running_count
+        running_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | grep -E '\-(postgres|redis|mongodb|opa)$' | wc -l | tr -d ' ')
+
+        if [ "$running_count" -ge 4 ]; then
+            log_info "Core infrastructure running (${running_count}/4 services) after ${waited}s"
+            # Give containers 2 more seconds to stabilize before proceeding
+            sleep 2
+            break
+        fi
+
+        log_verbose "Infrastructure startup: ${running_count}/4 services running, waiting..."
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    if [ $waited -ge $max_wait ]; then
+        log_error "Core infrastructure failed to start within ${max_wait}s"
+        return 1
+    fi
+
+    # Stage 2: Start OPAL Client (depends on infrastructure)
+    # CRITICAL FIX (2026-02-19): Wait for OPA to be healthy BEFORE starting OPAL client.
+    # Docker compose depends_on:service_healthy blocks indefinitely if OPA hasn't passed
+    # its first health check (30s start_period). By waiting here, we avoid docker compose
+    # blocking or timing out.
+    log_info "Stage 2: Waiting for OPA to be healthy before starting OPAL Client..."
+    local opa_container
+    opa_container=$(pipeline_container_name "spoke" "opa" "$instance_code")
+    if pipeline_wait_for_healthy "$opa_container" 90 3; then
+        log_info "OPA is healthy — starting OPAL Client"
+    else
+        log_warn "OPA did not become healthy within 90s — starting OPAL Client anyway"
+        log_warn "OPAL Client may fail to start if OPA dependency is not met"
+    fi
+
+    compose_args="$compose_args_base opal-client-${code_lower}"
+    log_verbose "Running: $compose_cmd $compose_args"
+
+    # CRITICAL FIX (2026-02-19): Stream compose output instead of suppressing it.
+    # Previous code used >/dev/null 2>&1 which hid errors, then $(...) which
+    # captured output but appeared to hang during long image builds.
+    # Now: stream output to terminal in real-time, capture only the exit code.
+    local opal_compose_exit=0
+    $compose_cmd $compose_args 2>&1 || opal_compose_exit=$?
+
+    if [ $opal_compose_exit -ne 0 ]; then
+        # CRITICAL FIX (2026-02-19): OPAL Client startup failure is NON-BLOCKING.
+        # In remote mode, OPAL Client often fails during deployment because:
+        #   - OPA may not be healthy yet (depends_on condition)
+        #   - Token is placeholder (real token provisioned in CONFIGURATION phase)
+        #   - Hub OPAL server may not be reachable yet
+        # The OPAL Client will be restarted with a real token after federation setup.
+        log_warn "OPAL Client startup returned exit code $opal_compose_exit (non-blocking)"
+        log_warn "OPAL Client will be configured in the CONFIGURATION phase"
+        log_warn "Deployment will continue — OPAL is not required for core infrastructure"
+        # Do NOT return 1 — OPAL client failure should not block spoke deployment
+    fi
+
+    # Wait for OPAL Client to be healthy (may take longer due to policy sync)
+    log_info "OPAL Client container started — waiting for health check (up to 120s)..."
+    log_info "  (Health check: curl http://127.0.0.1:7000/healthcheck, interval=10s, start_period=30s)"
+    if ! spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120; then
+        log_warn "OPAL Client did not become healthy — deployment will continue"
+        log_warn "This is expected in remote mode (token provisioned in CONFIGURATION phase)"
+        log_warn "Check OPAL logs: ./dive --instance ${code_lower} spoke logs opal-client"
+        # Non-blocking: OPAL is important but spoke can function without it initially
+    fi
+
+    # Stage 3: Start Keycloak (depends on postgres)
+    log_info "Stage 3: Starting Keycloak..."
+    compose_args="$compose_args_base keycloak-${code_lower}"
+
+    log_verbose "Running: $compose_cmd $compose_args"
+    local keycloak_exit=0
+    $compose_cmd $compose_args 2>&1 || keycloak_exit=$?
+    if [ $keycloak_exit -ne 0 ]; then
+        log_error "Failed to start Keycloak (exit code: $keycloak_exit)"
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "Keycloak startup failed" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    # Wait for Keycloak to be running (not necessarily healthy - realm created later)
+    log_info "Waiting for Keycloak container to be running..."
+    local max_wait=60
+    local wait_count=0
+    while [ $wait_count -lt $max_wait ]; do
+        if docker ps --filter "name=dive-spoke-${code_lower}-keycloak" --format '{{.Names}}' | grep -q .; then
+            log_success "Keycloak container is running"
+            break
+        fi
+        sleep 2
+        wait_count=$((wait_count + 2))
+    done
+
+    if [ $wait_count -ge $max_wait ]; then
+        log_error "Keycloak failed to start within ${max_wait}s"
+        return 1
+    fi
+
+    # Stage 4: Start application containers (backend, kas, frontend)
+    log_info "Stage 4: Starting application containers (backend, kas, frontend)..."
+    local app_services="backend-${code_lower} kas-${code_lower} frontend-${code_lower}"
+    compose_args="$compose_args_base $app_services"
+
+    log_verbose "Running: $compose_cmd $compose_args"
+    local compose_exit_code=0
+
+    # Stream compose output instead of capturing in subshell (prevents hang during builds)
+    $compose_cmd $compose_args 2>&1 || compose_exit_code=$?
+
+    if [ $compose_exit_code -ne 0 ]; then
+        log_warn "Docker compose returned non-zero exit code: $compose_exit_code"
+    fi
+
+    # CRITICAL FIX (2026-02-07): Verify ALL application services started
+    # ROOT CAUSE: Previous logic only checked backend, allowing KAS/frontend failures to go unnoticed
+    # FIX: Check for ALL expected services (backend, kas, frontend)
+    local expected_services=("dive-spoke-${code_lower}-backend" "dive-spoke-${code_lower}-kas" "dive-spoke-${code_lower}-frontend")
+    local missing_services=()
+    
+    for service in "${expected_services[@]}"; do
+        if ! docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
+            missing_services+=("$service")
+        fi
+    done
+
+    if [ ${#missing_services[@]} -gt 0 ]; then
+        log_error "Application containers failed to start: ${missing_services[*]}"
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "Missing services: ${missing_services[*]}" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    log_success "All application containers started successfully (backend, kas, frontend)"
+
+    # Start any containers stuck in "Created" state
+    spoke_containers_start_created "$instance_code"
+
+    log_success "Containers started"
+    return 0
+}
+
+##
+# Start containers that are in "Created" state
+##
+spoke_containers_start_created() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    local created_containers
+    created_containers=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --filter "status=created" --format '{{.Names}}')
+
+    if [ -n "$created_containers" ]; then
+        log_verbose "Starting containers in Created state..."
+        for container in $created_containers; do
+            log_verbose "Starting $container"
+            if ! docker start "$container" 2>/dev/null; then
+                log_verbose "Could not start $container (may already be running)"
+            fi
+        done
+    fi
+}
+
+##
+# Stop all spoke containers
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success
+##
+spoke_containers_stop() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    log_step "Stopping containers for $(upper "$instance_code")"
+
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+
+    if [ -f "$spoke_dir/docker-compose.yml" ]; then
+        cd "$spoke_dir" || return 1
+        if ! docker compose down 2>/dev/null; then
+            log_verbose "docker compose down failed (containers may not be running)"
+        fi
+    else
+        # Fallback: stop containers by name pattern
+        local containers
+        containers=$(docker ps -q --filter "name=dive-spoke-${code_lower}-" 2>/dev/null)
+        if [ -n "$containers" ]; then
+            if ! docker stop $containers 2>/dev/null; then
+                log_verbose "Some containers could not be stopped"
+            fi
+        fi
+    fi
+
+    log_success "Containers stopped"
+    return 0
+}
+
+##
+# Clean up containers and volumes
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Remove volumes (true/false/databases-only)
+#
+# Returns:
+#   0 - Success
+##
+spoke_containers_clean() {
+    local instance_code="$1"
+    local remove_volumes="${2:-false}"
+
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    log_step "Cleaning containers for $(upper "$instance_code")"
+
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+
+    if [ -f "$spoke_dir/docker-compose.yml" ]; then
+        cd "$spoke_dir" || return 1
+        if [ "$remove_volumes" = "true" ]; then
+            if ! docker compose down -v --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down with volumes failed"
+            fi
+        elif [ "$remove_volumes" = "databases-only" ]; then
+            # Stop containers but only remove database volumes
+            if ! docker compose down --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down failed"
+            fi
+            spoke_containers_clean_database_volumes "$instance_code"
+        else
+            if ! docker compose down --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down failed"
+            fi
+        fi
+    fi
+
+    # Also remove any orphaned containers
+    local orphaned
+    orphaned=$(docker ps -aq --filter "name=dive-spoke-${code_lower}-" 2>/dev/null)
+    if [ -n "$orphaned" ]; then
+        if ! docker rm -f $orphaned 2>/dev/null; then
+            log_verbose "Some orphaned containers could not be removed"
+        fi
+    fi
+
+    log_success "Containers cleaned"
+    return 0
+}
+
+##
+# Clean only database volumes (postgres, mongodb, redis)
+# Used when secrets change to prevent password mismatch
+#
+# Arguments:
+#   $1 - Instance code
+##
+spoke_containers_clean_database_volumes() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local project_name="dive-spoke-${code_lower}"
+
+    log_verbose "Cleaning database volumes for $instance_code"
+
+    # Database volumes to clean
+    local db_volumes=(
+        "${project_name}_postgres_data"
+        "${project_name}_mongodb_data"
+        "${project_name}_mongodb_config"
+        "${project_name}_redis_data"
+    )
+
+    for volume in "${db_volumes[@]}"; do
+        if docker volume ls --format '{{.Name}}' | grep -q "^${volume}$"; then
+            log_verbose "Removing database volume: $volume"
+            if ! docker volume rm "$volume" 2>/dev/null; then
+                log_verbose "Could not remove volume $volume (may be in use)"
+            fi
+        fi
+    done
+
+    log_verbose "Database volumes cleaned"
+}
+
+# =============================================================================
+# HEALTH CHECK MONITORING
+# =============================================================================
+
+##
+# Wait for all services to become healthy
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Global timeout (seconds, default 300)
+#
+# Returns:
+#   0 - All services healthy
+#   1 - Timeout or failure
+##
+spoke_containers_wait_for_healthy() {
+    local instance_code="$1"
+    local global_timeout="${2:-300}"
+
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local start_time
+    start_time=$(date +%s)
+
+    log_step "Waiting for services to become healthy..."
+
+    # Get services dynamically from compose file
+    local -a service_order=()
+    read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
+
+    # CRITICAL FIX (2026-02-19): Get optional services so we don't block on them.
+    # OPAL client is "optional" — it often isn't healthy during DEPLOYMENT phase
+    # because the real token is provisioned in the CONFIGURATION phase.
+    local optional_services=""
+    if type compose_get_spoke_services_by_class &>/dev/null; then
+        optional_services=$(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo "")
+    fi
+
+    # Wait for each service in order
+    for service in "${service_order[@]}"; do
+        local container="dive-spoke-${code_lower}-${service}"
+        local timeout
+        timeout=$(spoke_get_service_timeout "$service")
+
+        # Check global timeout
+        local elapsed=$(($(date +%s) - start_time))
+        if [ $elapsed -ge $global_timeout ]; then
+            log_error "Global timeout reached after ${elapsed}s"
+            orch_record_error "$SPOKE_ERROR_SERVICE_TIMEOUT" "$ORCH_SEVERITY_CRITICAL" \
+                "Global timeout waiting for services" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_SERVICE_TIMEOUT $instance_code)"
+            return 1
+        fi
+
+        # CRITICAL FIX (2026-02-19): Optional services are non-blocking
+        # OPAL client health failure should not prevent deployment from proceeding
+        local is_optional=false
+        if echo " $optional_services " | grep -q " $service "; then
+            is_optional=true
+        fi
+
+        # Wait for this service
+        if ! spoke_containers_wait_for_service "$container" "$timeout"; then
+            if [ "$is_optional" = "true" ]; then
+                log_warn "Optional service $service did not become healthy (non-blocking)"
+                log_warn "This is expected — $service will be configured in a later phase"
+                continue
+            fi
+            orch_record_error "$SPOKE_ERROR_CONTAINER_UNHEALTHY" "$ORCH_SEVERITY_HIGH" \
+                "Service $service failed health check" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_CONTAINER_UNHEALTHY $instance_code)"
+            return 1
+        fi
+    done
+
+    local total_time=$(($(date +%s) - start_time))
+    log_success "All services healthy (${total_time}s)"
+    return 0
+}
+
+##
+# Wait for a single service container to become healthy
+#
+# Arguments:
+#   $1 - Container name
+#   $2 - Timeout (seconds)
+#
+# Returns:
+#   0 - Healthy
+#   1 - Timeout or unhealthy
+##
+spoke_containers_wait_for_service() {
+    local container="$1"
+    local timeout="$2"
+
+    echo -n "  Waiting for $container... "
+
+    # Container not found = skip (not in this compose file)
+    if ! pipeline_container_exists "$container"; then
+        echo -e "${YELLOW}skipped (not found)${NC}"
+        return 0
+    fi
+
+    # Use shared health check with running-is-ok fallback
+    if pipeline_wait_for_healthy_or_running "$container" "$timeout" 3 10; then
+        echo -e "${GREEN}✓${NC}"
+        return 0
+    fi
+
+    echo -e "${RED}TIMEOUT${NC}"
+    log_warn "Container $container did not become healthy within ${timeout}s"
+    return 1
+}
+
+##
+# Check if dependencies are healthy
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Instance code (lowercase)
+#
+# Returns:
+#   0 - All dependencies healthy
+#   1 - Some dependencies not healthy
+##
+spoke_containers_check_dependencies() {
+    local service="$1"
+    local code_lower="$2"
+
+    local deps="${SPOKE_SERVICE_DEPS[$service]}"
+
+    if [ -z "$deps" ]; then
+        return 0
+    fi
+
+    for dep in $deps; do
+        local container="dive-spoke-${code_lower}-${dep}"
+        local status
+        status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "")
+
+        if [ "$status" != "healthy" ]; then
+            # Check if running without health check
+            local running
+            running=$(docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null || echo "false")
+            if [ "$running" != "true" ]; then
+                log_verbose "Dependency $dep not ready for $service"
+                return 1
+            fi
+        fi
+    done
+
+    return 0
+}
+
+# =============================================================================
+# CONTAINER INFORMATION
+# =============================================================================
+
+##
+# Get container status summary
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   JSON status object
+##
+spoke_containers_status() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    local running=0
+    local unhealthy=0
+    local stopped=0
+    local total=0
+
+    # Get services dynamically from compose file
+    local -a service_order=()
+    read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
+
+    for service in "${service_order[@]}"; do
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
+
+        if pipeline_container_exists "$container"; then
+            total=$((total + 1))
+
+            local status
+            status=$(pipeline_get_container_state "$container")
+
+            case "$status" in
+                running)
+                    running=$((running + 1))
+                    local health
+                    health=$(pipeline_get_container_health "$container")
+                    if [ "$health" = "unhealthy" ]; then
+                        unhealthy=$((unhealthy + 1))
+                    fi
+                    ;;
+                exited|dead)
+                    stopped=$((stopped + 1))
+                    ;;
+            esac
+        fi
+    done
+
+    echo "{\"running\":$running,\"unhealthy\":$unhealthy,\"stopped\":$stopped,\"total\":$total}"
+}
+
+##
+# List all containers for a spoke instance
+#
+# Arguments:
+#   $1 - Instance code
+##
+spoke_containers_list() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    echo ""
+    echo "Containers for $(upper "$instance_code"):"
+    echo "============================================"
+
+    docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" \
+        --filter "name=dive-spoke-${code_lower}-" 2>/dev/null || echo "No containers found"
+
+    echo ""
+}
+
+##
+# Get container logs
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Service name (optional, all if empty)
+#   $3 - Tail lines (optional, default 50)
+##
+spoke_containers_logs() {
+    local instance_code="$1"
+    local service="${2:-}"
+    local tail_lines="${3:-50}"
+
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+
+    if [ -f "$spoke_dir/docker-compose.yml" ]; then
+        cd "$spoke_dir" || return 1
+        if [ -n "$service" ]; then
+            docker compose logs --tail="$tail_lines" "${service}-${code_lower}" 2>/dev/null || \
+                docker compose logs --tail="$tail_lines" "$service" 2>/dev/null
+        else
+            docker compose logs --tail="$tail_lines"
+        fi
+    else
+        if [ -n "$service" ]; then
+            docker logs --tail="$tail_lines" "dive-spoke-${code_lower}-${service}" 2>/dev/null
+        else
+            # Get services dynamically from compose file
+            local -a service_order=()
+            read -r -a service_order <<<"$(spoke_get_service_order "$instance_code")"
+
+            for svc in "${service_order[@]}"; do
+                echo "=== $svc ==="
+                docker logs --tail=20 "dive-spoke-${code_lower}-${svc}" 2>/dev/null || echo "No logs"
+                echo ""
+            done
+        fi
+    fi
+}
+
+# =============================================================================
+# RESTART AND RECREATION
+# =============================================================================
+
+##
+# Restart specific service
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Service name
+##
+spoke_containers_restart_service() {
+    local instance_code="$1"
+    local service="$2"
+
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    log_step "Restarting $service"
+
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+    cd "$spoke_dir" || return 1
+
+    docker compose restart "${service}-${code_lower}" 2>/dev/null || \
+        docker compose restart "$service" 2>/dev/null || \
+        docker restart "dive-spoke-${code_lower}-${service}" 2>/dev/null
+
+    log_success "$service restarted"
+}
+
+##
+# Force recreation of all containers
+#
+# Arguments:
+#   $1 - Instance code
+##
+spoke_containers_force_recreate() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    log_step "Force recreating containers for $(upper "$instance_code")"
+
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+    cd "$spoke_dir" || return 1
+
+    # Stop existing
+    if ! docker compose down 2>/dev/null; then
+        log_verbose "docker compose down failed (containers may not be running)"
+    fi
+
+    # Remove any hash tracking
+    rm -f "$spoke_dir/.compose.hash"
+
+    # Start fresh with force recreate
+    docker compose up -d --force-recreate 2>&1 | tail -5
+
+    log_success "Containers recreated"
+}
+
+##
+# Wait for specific services to become healthy
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Space-separated list of service names (without instance prefix)
+#   $3 - Timeout in seconds (default: 60)
+#
+# Returns:
+#   0 - All services healthy
+#   1 - Timeout or failure
+##
+spoke_containers_wait_for_services() {
+    local instance_code="$1"
+    local service_list="$2"
+    local timeout="${3:-60}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    log_info "Waiting up to ${timeout}s for services to become healthy: $service_list"
+
+    local start_time
+    start_time=$(date +%s)
+    local last_progress=0
+    while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+        local elapsed=$(($(date +%s) - start_time))
+        local all_healthy=true
+
+        for service in $service_list; do
+            # Service is in format "service-instance", extract base service name
+            local service_name="${service%%-*}"  # Get part before first dash
+            # Check if service is running and healthy
+            if docker ps --filter "name=dive-spoke-${code_lower}-${service_name}" --filter "health=healthy" --format '{{.Names}}' | grep -q .; then
+                log_verbose "✓ $service is healthy"
+            else
+                log_verbose "⏳ $service not yet healthy"
+                all_healthy=false
+                break
+            fi
+        done
+
+        if [ "$all_healthy" = true ]; then
+            log_info "All services are healthy after ${elapsed}s"
+            return 0
+        fi
+
+        # Show progress every 15 seconds so the user knows we're still working
+        if [ $((elapsed - last_progress)) -ge 15 ]; then
+            log_info "  Still waiting for $service_list to become healthy... (${elapsed}/${timeout}s)"
+            last_progress=$elapsed
+        fi
+
+        sleep 2
+    done
+
+    log_warn "Services did not become healthy within ${timeout}s: $service_list"
+    return 1
+}
+
+# sc2034-anchor
+: "${SPOKE_SERVICE_TIMEOUTS:-}"

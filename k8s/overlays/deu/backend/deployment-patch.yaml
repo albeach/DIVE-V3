@@ -1,0 +1,29 @@
+# =============================================================================
+# DIVE V3 Backend - DEU Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: dive-v3-deu
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/instance: deu
+    spec:
+      serviceAccountName: backend
+      containers:
+        - name: backend
+          env:
+            - name: INSTANCE_CODE
+              value: "DEU"
+            - name: INSTANCE_NAME
+              value: "Germany"
+            - name: MONGODB_DATABASE
+              value: "dive-v3-deu"

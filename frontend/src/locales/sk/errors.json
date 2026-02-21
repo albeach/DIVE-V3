@@ -1,0 +1,94 @@
+{
+  "general": {
+    "unknown": "An unknown error occurred",
+    "networkError": "Network error. Please check your connection.",
+    "serverError": "Server error. Please try again later.",
+    "timeout": "Request timed out. Please try again.",
+    "maintenance": "System is under maintenance. Please try again later.",
+    "tryAgain": "Try Again",
+    "goBack": "Go Back",
+    "goHome": "Go to Dashboard"
+  },
+  "authentication": {
+    "unauthorized": "Unauthorized. Please sign in.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "invalidCredentials": "Invalid username or password",
+    "accountLocked": "Your account has been locked. Please contact support.",
+    "accountDisabled": "Your account has been disabled.",
+    "mfaRequired": "Multi-factor authentication required",
+    "mfaFailed": "Multi-factor authentication failed",
+    "tokenInvalid": "Authentication token is invalid",
+    "tokenExpired": "Authentication token has expired"
+  },
+  "authorization": {
+    "forbidden": "You do not have permission to perform this action",
+    "insufficientClearance": "Insufficient clearance level",
+    "countryRestriction": "Access restricted: Resource not released to your country",
+    "coiRestriction": "Access restricted: You are not a member of the required COI",
+    "policyDenied": "Access denied by policy",
+    "kasError": "KAS endpoint denied key release"
+  },
+  "resources": {
+    "notFound": "Resource not found",
+    "alreadyExists": "Resource already exists",
+    "uploadFailed": "Failed to upload resource",
+    "downloadFailed": "Failed to download resource",
+    "deleteFailed": "Failed to delete resource",
+    "updateFailed": "Failed to update resource",
+    "encryptionFailed": "Failed to encrypt resource",
+    "decryptionFailed": "Failed to decrypt resource",
+    "invalidFormat": "Invalid file format",
+    "fileTooLarge": "File size exceeds maximum allowed ({{maxSize}}MB)",
+    "invalidMetadata": "Invalid resource metadata"
+  },
+  "policies": {
+    "notFound": "Policy not found",
+    "validationFailed": "Policy validation failed",
+    "evaluationFailed": "Policy evaluation failed",
+    "syntaxError": "Policy syntax error: {{message}}",
+    "saveFailed": "Failed to save policy",
+    "deleteFailed": "Failed to delete policy",
+    "deployFailed": "Failed to deploy policy"
+  },
+  "federation": {
+    "spokeNotFound": "Spoke not found",
+    "deploymentFailed": "Failed to deploy spoke",
+    "undeployFailed": "Failed to undeploy spoke",
+    "heartbeatFailed": "Heartbeat check failed",
+    "federationLinkFailed": "Failed to establish federation link",
+    "certificateInvalid": "Invalid TLS certificate",
+    "trustVerificationFailed": "Trust verification failed"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalidEmail": "Invalid email address",
+    "invalidUrl": "Invalid URL",
+    "invalidFormat": "Invalid format",
+    "tooShort": "Must be at least {{min}} characters",
+    "tooLong": "Must be no more than {{max}} characters",
+    "invalidRange": "Must be between {{min}} and {{max}}",
+    "invalidPattern": "Invalid format. Expected: {{pattern}}",
+    "mustMatch": "Fields must match",
+    "invalidJson": "Invalid JSON format"
+  },
+  "http": {
+    "400": "Bad Request",
+    "401": "Unauthorized",
+    "403": "Forbidden",
+    "404": "Not Found",
+    "405": "Method Not Allowed",
+    "408": "Request Timeout",
+    "409": "Conflict",
+    "422": "Unprocessable Entity",
+    "429": "Too Many Requests",
+    "500": "Internal Server Error",
+    "502": "Bad Gateway",
+    "503": "Service Unavailable",
+    "504": "Gateway Timeout"
+  },
+  "notFound": {
+    "title": "Page Not Found",
+    "message": "The page you are looking for doesn't exist or has been moved.",
+    "suggestion": "Check the URL or return to the dashboard."
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "multiKas": {
+    "title": "Multi-KAS Coalitiearchitectuur",
+    "description": "Gedistribueerd sleutelbeheer voor coalitieomgevingen",
+    "loading": "Multi-KAS-register laden...",
+    "loadingSubtitle": "Live gegevens ophalen van MongoDB",
+    "refreshing": "Vernieuwen...",
+    "refresh": "Vernieuwen",
+    "liveFromMongoDB": "Live van MongoDB",
+    "updated": "Bijgewerkt: {{time}}",
+    "lastUpdated": "Laatst bijgewerkt: {{time}}",
+    "autoRefreshInterval": "Automatisch vernieuwingsinterval: {{seconds}} seconden",
+    "errorTitle": "Fout bij laden van KAS-gegevens",
+    "retry": "Opnieuw proberen",
+    "hideDetails": "Details verbergen",
+    "showDetails": "Details tonen",
+    "technicalDetails": "Technische details",
+    "howItWorks": {
+      "title": "Hoe Multi-KAS werkt in DIVE V3",
+      "uploadPhase": {
+        "title": "Upload Phase (Resource Creation)",
+        "description": "When you upload an encrypted resource, upload.service.ts automatically creates 1-4 Key Access Objects (KAOs) based on the resource's releasabilityTo and COI tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key."
+      },
+      "accessPhase": {
+        "title": "Access Phase (Key Request)",
+        "description": "When you try to view a resource, resource.service.ts selects the optimal KAS based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which re-evaluates the OPA policy before releasing the key."
+      },
+      "mongoDBSSOT": {
+        "title": "MongoDB as SSOT",
+        "description": "All KAS registrations are stored in kas_registry collection. Health metrics, heartbeats, and federation agreements are tracked in real-time. The dashboard you're viewing now fetches live data from MongoDB every 30 seconds."
+      },
+      "dataSource": {
+        "title": "Data Source:",
+        "description": "This dashboard displays real KAS instances from the MongoDB kas_registry collection. Metrics are aggregated from audit_log for request counts and response times."
+      }
+    },
+    "grid": {
+      "title": "KAS-federatieregister",
+      "subtitle": "Live gegevens van MongoDB (kas_registry collectie)"
+    },
+    "flow": {
+      "title": "Multi-KAS-stroom"
+    },
+    "example": {
+      "title": "Example: Multi-KAO Resource",
+      "classification": "Classification",
+      "kaoCount": "{{count}} KAOs",
+      "releasableTo": "Releasable To:",
+      "communitiesOfInterest": "Communities of Interest:",
+      "keyAccessObjects": "Key Access Objects (KAOs):",
+      "kaoNumber": "KAO #{{number}}",
+      "kasEndpoint": "KAS Endpoint:",
+      "wrappedKey": "Wrapped Key:"
+    },
+    "benefits": {
+      "title": "Coalition Benefits",
+      "instantGrowth": {
+        "title": "Instant Coalition Growth",
+        "description": "Add new coalition partners in minutes by deploying a spoke KAS. No re-encryption needed for existing resources."
+      },
+      "sovereignty": {
+        "title": "National Key Sovereignty",
+        "description": "Each nation controls its own KAS. Keys never leave national boundaries without explicit policy approval."
+      },
+      "policyDriven": {
+        "title": "Policy-Driven Access",
+        "description": "OPA policies evaluated at each KAS ensure only authorized users with proper clearances can access resources."
+      },
+      "zeroReencryption": {
+        "title": "Zero Re-encryption",
+        "description": "Resources encrypted once, accessible by multiple KAS endpoints. No need to re-encrypt when adding partners."
+      }
+    },
+    "footer": {
+      "dataSource": "Data sourced from MongoDB collections: {{collections}}",
+      "collections": "kas_registry and audit_log"
+    }
+  },
+  "certificates": {
+    "title": "Certificate Compliance",
+    "subtitle": "TLS certificate validation and trust management",
+    "valid": "Valid",
+    "invalid": "Invalid",
+    "expired": "Expired",
+    "expiringSoon": "Expiring Soon",
+    "expiresIn": "Expires in {{days}} days",
+    "issuer": "Issuer",
+    "subject": "Subject",
+    "validFrom": "Valid From",
+    "validUntil": "Valid Until",
+    "serialNumber": "Serial Number",
+    "fingerprint": "Fingerprint"
+  },
+  "classifications": {
+    "title": "Classification Levels",
+    "subtitle": "Security classification and marking standards",
+    "unclassified": "UNCLASSIFIED",
+    "confidential": "CONFIDENTIAL",
+    "secret": "SECRET",
+    "topSecret": "TOP SECRET",
+    "description": {
+      "unclassified": "Information that does not meet the standards for classification",
+      "confidential": "Information that could cause damage to national security if disclosed",
+      "secret": "Information that could cause serious damage to national security if disclosed",
+      "topSecret": "Information that could cause exceptionally grave damage to national security if disclosed"
+    }
+  },
+  "identityAssurance": {
+    "title": "Identity Assurance Levels",
+    "subtitle": "Authentication strength and identity proofing",
+    "ial1": "IAL1 - Self-Asserted",
+    "ial2": "IAL2 - Verified",
+    "ial3": "IAL3 - In-Person Proofed",
+    "aal1": "AAL1 - Single-Factor",
+    "aal2": "AAL2 - Two-Factor",
+    "aal3": "AAL3 - Hardware-Protected"
+  },
+  "coiKeys": {
+    "title": "Community of Interest (COI) Keys",
+    "subtitle": "Coalition access control and key management",
+    "nato": "NATO-COSMIC",
+    "fvey": "Five Eyes (FVEY)",
+    "canUs": "CAN-US",
+    "usOnly": "US-ONLY",
+    "description": "COI tags determine which KAS endpoints can decrypt resources"
+  },
+  "breadcrumbs": {
+    "compliance": "Naleving",
+    "multiKas": "Multi-KAS",
+    "certificates": "Certificates",
+    "classifications": "Classifications",
+    "identityAssurance": "Identity Assurance",
+    "coiKeys": "COI Keys"
+  }
+}

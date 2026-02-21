@@ -1,0 +1,145 @@
+{
+  "kasServers": [
+    {
+      "kasId": "usa-kas",
+      "organization": "US DoD",
+      "countryCode": "USA",
+      "kasUrl": "https://kas.usa.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.usa.dive25.local/realms/dive-v3-broker-usa",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["USA"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "US-ONLY"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap", "store", "upsert"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "gbr-kas",
+      "organization": "UK MOD",
+      "countryCode": "GBR",
+      "kasUrl": "https://kas.gbr.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.gbr.dive25.local/realms/dive-v3-broker-gbr",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["GBR"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "GBR-ONLY"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap", "store"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "fra-kas",
+      "organization": "France DGA",
+      "countryCode": "FRA",
+      "kasUrl": "https://kas.fra.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.fra.dive25.local/realms/dive-v3-broker-fra",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["FRA"],
+      "supportedCOIs": ["NATO-COSMIC", "FRA-ONLY"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "deu-kas",
+      "organization": "Germany BMVg",
+      "countryCode": "DEU",
+      "kasUrl": "https://kas.deu.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.deu.dive25.local/realms/dive-v3-broker-deu",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["DEU"],
+      "supportedCOIs": ["NATO-COSMIC", "DEU-ONLY"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "can-kas",
+      "organization": "Canada DND",
+      "countryCode": "CAN",
+      "kasUrl": "https://kas.can.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.can.dive25.local/realms/dive-v3-broker-can",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["CAN"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "CAN-US"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap", "store"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "nato-kas",
+      "organization": "NATO CIS",
+      "countryCode": "NATO",
+      "kasUrl": "https://kas.nato.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.nato.dive25.local/realms/dive-v3-broker-nato",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["USA", "GBR", "FRA", "DEU", "CAN", "ITA", "ESP", "NLD", "BEL", "POL"],
+      "supportedCOIs": ["NATO-COSMIC", "NATO-SECRET"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap", "store", "federated"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    }
+  ],
+  "federationAgreements": {
+    "USA": {
+      "trustedKAS": ["usa-kas", "gbr-kas", "can-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "US-ONLY", "CAN-US"]
+    },
+    "GBR": {
+      "trustedKAS": ["gbr-kas", "usa-kas", "can-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "GBR-ONLY"]
+    },
+    "FRA": {
+      "trustedKAS": ["fra-kas", "nato-kas"],
+      "maxClassification": "SECRET",
+      "allowedCOIs": ["NATO-COSMIC", "FRA-ONLY"]
+    },
+    "DEU": {
+      "trustedKAS": ["deu-kas", "nato-kas"],
+      "maxClassification": "SECRET",
+      "allowedCOIs": ["NATO-COSMIC", "DEU-ONLY"]
+    },
+    "CAN": {
+      "trustedKAS": ["can-kas", "usa-kas", "gbr-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "CAN-US"]
+    }
+  }
+}

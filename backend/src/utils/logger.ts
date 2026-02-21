@@ -31,24 +31,30 @@ export const logger = winston.createLogger({
         // File output - general logs
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'app.log'),
-            maxsize: 10485760, // 10MB
-            maxFiles: 5
+            maxsize: 5242880, // 5MB
+            maxFiles: 3,
+            tailable: true,
+            zippedArchive: true
         }),
 
         // File output - error logs
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'error.log'),
             level: 'error',
-            maxsize: 10485760,
-            maxFiles: 5
+            maxsize: 5242880, // 5MB
+            maxFiles: 3,
+            tailable: true,
+            zippedArchive: true
         }),
 
         // File output - authorization decisions (audit trail)
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'authz.log'),
             level: 'info',
-            maxsize: 52428800, // 50MB (larger for compliance)
-            maxFiles: 10,
+            maxsize: 10485760, // 10MB
+            maxFiles: 5,
+            tailable: true,
+            zippedArchive: true,
             format: winston.format.combine(
                 winston.format.timestamp(),
                 winston.format.json()
@@ -63,4 +69,3 @@ const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
 }
-

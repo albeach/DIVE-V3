@@ -1,0 +1,29 @@
+# =============================================================================
+# DIVE V3 - Frontend ServiceMonitor
+# =============================================================================
+# Prometheus ServiceMonitor for Frontend metrics
+# =============================================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dive-v3-frontend
+  namespace: dive-v3
+  labels:
+    app: frontend
+    app.kubernetes.io/name: dive-v3-frontend
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      scheme: http
+  namespaceSelector:
+    matchNames:
+      - dive-v3
+

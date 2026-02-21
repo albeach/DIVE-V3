@@ -1,6 +1,8 @@
 /**
  * Analytics Service Tests (Phase 3)
  * 
+ * MEMORY LEAK FIX (2026-02-16): Updated tests for singleton pattern
+ * 
  * Test coverage:
  * - Risk distribution calculation
  * - Compliance trends aggregation
@@ -11,15 +13,23 @@
  */
 
 import { analyticsService } from '../services/analytics.service';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 
-// Mock MongoDB
-jest.mock('mongodb');
+// Mock MongoDB singleton
+jest.mock('../utils/mongodb-singleton', () => {
+    const mockDb = {
+        collection: jest.fn(),
+    };
+    return {
+        getDb: jest.fn(() => mockDb),
+    };
+});
+
+import { getDb } from '../utils/mongodb-singleton';
 
 describe('AnalyticsService', () => {
     let mockDb: jest.Mocked<Db>;
     let mockCollection: jest.Mocked<Collection>;
-    let mockMongoClient: jest.Mocked<MongoClient>;
 
     beforeEach(() => {
         // Create mock collection
@@ -29,26 +39,9 @@ describe('AnalyticsService', () => {
             aggregate: jest.fn(),
         } as any;
 
-        // Create mock database
-        mockDb = {
-            collection: jest.fn().mockReturnValue(mockCollection),
-        } as any;
-
-        // Create mock MongoDB client with admin and ping methods
-        mockMongoClient = {
-            db: jest.fn().mockReturnValue(mockDb),
-            connect: jest.fn().mockResolvedValue(undefined),
-            close: jest.fn().mockResolvedValue(undefined),
-        } as any;
-
-        // Mock db().admin().ping() for connection check
-        const mockAdmin = {
-            ping: jest.fn().mockResolvedValue({}),
-        };
-        mockDb.admin = jest.fn().mockReturnValue(mockAdmin as any);
-
-        // Set the mock client
-        analyticsService.setMongoClient(mockMongoClient);
+        // Get mocked database
+        mockDb = getDb() as jest.Mocked<Db>;
+        mockDb.collection = jest.fn().mockReturnValue(mockCollection);
 
         // Clear cache before each test
         analyticsService.clearCache();
@@ -500,6 +493,85 @@ describe('AnalyticsService', () => {
                 expect(error).toBeDefined();
             }
         });
+
+        it('should handle countDocuments errors in risk distribution', async () => {
+            mockCollection.countDocuments = jest.fn()
+                .mockRejectedValue(new Error('Query timeout'));
+
+            await expect(analyticsService.getRiskDistribution()).rejects.toThrow();
+        });
+
+        it('should handle aggregation pipeline errors in compliance trends', async () => {
+            mockCollection.find = jest.fn().mockReturnValue({
+                sort: jest.fn().mockReturnThis(),
+                toArray: jest.fn().mockRejectedValue(new Error('Aggregation failed')),
+            }) as any;
+
+            await expect(analyticsService.getComplianceTrends()).rejects.toThrow();
+        });
+
+        it('should handle aggregation pipeline errors in SLA metrics', async () => {
+            mockCollection.aggregate = jest.fn().mockReturnValue({
+                toArray: jest.fn().mockRejectedValue(new Error('Pipeline failed')),
+            }) as any;
+
+            await expect(analyticsService.getSLAMetrics()).rejects.toThrow();
+        });
+
+        it('should handle authorization metrics calculation errors', async () => {
+            mockCollection.countDocuments = jest.fn()
+                .mockRejectedValue(new Error('Count failed'));
+
+            await expect(analyticsService.getAuthzMetrics()).rejects.toThrow();
+        });
+
+        it('should handle security posture calculation errors', async () => {
+            mockCollection.find = jest.fn().mockReturnValue({
+                toArray: jest.fn().mockRejectedValue(new Error('Find failed')),
+            }) as any;
+
+            await expect(analyticsService.getSecurityPosture()).rejects.toThrow();
+        });
+
+        it('should handle find errors with date range in authz metrics', async () => {
+            mockCollection.find = jest.fn().mockReturnValue({
+                toArray: jest.fn().mockRejectedValue(new Error('Query error')),
+            }) as any;
+
+            const dateRange = {
+                startDate: new Date('2025-01-01'),
+                endDate: new Date('2025-01-31'),
+            };
+
+            await expect(analyticsService.getAuthzMetrics(dateRange)).rejects.toThrow();
+        });
+
+        it('should handle empty aggregate results in SLA metrics', async () => {
+            mockCollection.find = jest.fn().mockReturnValue({
+                toArray: jest.fn().mockResolvedValue([]), // Empty results
+            }) as any;
+
+            const result = await analyticsService.getSLAMetrics();
+
+            expect(result.fastTrackCompliance).toBe(0);
+            expect(result.standardCompliance).toBe(0);
+            expect(result.averageReviewTime).toBe(0);
+            expect(result.exceededCount).toBe(0);
+        });
+
+        it('should handle division by zero in metrics calculations', async () => {
+            // Authz metrics with zero total decisions
+            mockCollection.countDocuments = jest.fn().mockResolvedValue(0);
+            mockCollection.find = jest.fn().mockReturnValue({
+                toArray: jest.fn().mockResolvedValue([]),
+            }) as any;
+
+            const result = await analyticsService.getAuthzMetrics();
+
+            expect(result.totalDecisions).toBe(0);
+            expect(result.allowRate).toBe(0);
+            expect(result.denyRate).toBe(0);
+            expect(result.cacheHitRate).toBe(0);
+        });
     });
 });
-

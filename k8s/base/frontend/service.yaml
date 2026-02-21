@@ -1,0 +1,22 @@
+# =============================================================================
+# DIVE V3 Frontend - Kubernetes Service
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: frontend
+

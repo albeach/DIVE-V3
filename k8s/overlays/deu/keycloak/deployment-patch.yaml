@@ -1,0 +1,33 @@
+# =============================================================================
+# DIVE V3 Keycloak - DEU Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: dive-v3-deu
+spec:
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+        app.kubernetes.io/instance: deu
+    spec:
+      serviceAccountName: keycloak
+      containers:
+        - name: keycloak
+          env:
+            - name: KC_DB_URL_HOST
+              value: "postgres.dive-v3-deu.svc.cluster.local"
+            - name: KC_DB_URL_DATABASE
+              value: "keycloak"
+            - name: KC_HOSTNAME
+              value: "keycloak-deu.dive-v3-deu.svc.cluster.local"
+            - name: INSTANCE_CODE
+              value: "DEU"
+            - name: INSTANCE_NAME
+              value: "Germany"

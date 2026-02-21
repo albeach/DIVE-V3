@@ -29,10 +29,15 @@ coi_members := {
 	"FVEY": {"USA", "GBR", "CAN", "AUS", "NZL"},
 	"NATO": {
 		"ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
-		"DEU", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
+		"DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
 		"MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE", "TUR", "USA",
 	},
-	"NATO-COSMIC": {"NATO"}, # Special: requires NATO membership + COSMIC clearance
+	"NATO-COSMIC": {
+		# COSMIC TOP SECRET is NATO's highest classification - all NATO members
+		"ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
+		"DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
+		"MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE", "TUR", "USA",
+	},
 	"EU-RESTRICTED": {
 		"AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA",
 		"DEU", "GRC", "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD",
@@ -45,6 +50,9 @@ coi_members := {
 	"PACOM": {"USA", "JPN", "KOR", "AUS", "NZL", "PHL"},
 	"CENTCOM": {"USA", "SAU", "ARE", "QAT", "KWT", "BHR", "JOR", "EGY"},
 	"SOCOM": {"USA", "GBR", "CAN", "AUS", "NZL"}, # FVEY special ops
+	"Alpha": set(), # No country affiliation
+	"Beta": set(), # No country affiliation
+	"Gamma": set(), # No country affiliation
 }
 
 # ============================================
@@ -66,36 +74,46 @@ deny contains msg if {
 	"US-ONLY" in input.resource.COI
 	some x in input.resource.COI
 	x != "US-ONLY"
-	msg := sprintf("COI US-ONLY cannot be combined with foreign-sharing COIs: %s", [x])
+	msg := sprintf("Invalid resource marking: US-ONLY cannot be combined with '%s' because US-ONLY restricts access to the United States only", [x])
 }
 
 deny contains msg if {
 	"EU-RESTRICTED" in input.resource.COI
 	some x in input.resource.COI
 	x == "NATO-COSMIC"
-	msg := "COI EU-RESTRICTED cannot be combined with NATO-COSMIC"
+	msg := "Invalid resource marking: EU-RESTRICTED and NATO-COSMIC communities cannot be combined as they have conflicting membership requirements"
 }
 
 deny contains msg if {
 	"EU-RESTRICTED" in input.resource.COI
 	some x in input.resource.COI
 	x == "US-ONLY"
-	msg := "COI EU-RESTRICTED cannot be combined with US-ONLY"
+	msg := "Invalid resource marking: EU-RESTRICTED and US-ONLY communities cannot be combined as they have conflicting membership requirements"
 }
 
 # ============================================
 # VIOLATION 2: Releasability ⊆ COI Membership
 # ============================================
 
+# COIs with no country affiliation (membership-based only)
+no_affiliation_cois := {"Alpha", "Beta", "Gamma"}
+
 deny contains msg if {
-	# Compute union of all COI member countries
-	union := {c | some coi in input.resource.COI; some c in coi_members[coi]}
+	# Compute union of all COI member countries (excluding no-affiliation COIs)
+	union := {c | 
+		some resource_coi in input.resource.COI
+		not resource_coi in no_affiliation_cois
+		some c in coi_members[resource_coi]
+	}
+
+	# Only check if union is not empty (i.e., there are country-based COIs)
+	count(union) > 0
 
 	# Check if releasabilityTo ⊆ union
 	some r in input.resource.releasabilityTo
 	not r in union
 
-	msg := sprintf("Releasability country %s not in COI union %v", [r, union])
+	msg := sprintf("Country %s is listed in the release markings but is not a member of any assigned community: %v", [r, union])
 }
 
 # ============================================
@@ -105,27 +123,27 @@ deny contains msg if {
 deny contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.COI) != 1
-	msg := "NOFORN caveat requires COI=[US-ONLY] (single COI)"
+	msg := "NOFORN violation: Resources marked NOFORN must have exactly one community assignment: US-ONLY"
 }
 
 deny contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.COI) == 1
 	input.resource.COI[0] != "US-ONLY"
-	msg := "NOFORN caveat requires COI=[US-ONLY]"
+	msg := "NOFORN violation: Resources marked NOFORN must be assigned to the US-ONLY community"
 }
 
 deny contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.releasabilityTo) != 1
-	msg := "NOFORN caveat requires releasabilityTo=[USA] (single country)"
+	msg := "NOFORN violation: Resources marked NOFORN must be releasable to exactly one country: USA"
 }
 
 deny contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.releasabilityTo) == 1
 	input.resource.releasabilityTo[0] != "USA"
-	msg := "NOFORN caveat requires releasabilityTo=[USA]"
+	msg := "NOFORN violation: Resources marked NOFORN must be releasable only to USA"
 }
 
 # ============================================
@@ -137,7 +155,7 @@ deny contains msg if {
 	some pair in subset_superset_pairs
 	pair[0] in input.resource.COI
 	pair[1] in input.resource.COI
-	msg := sprintf("Subset+superset COIs %v invalid with ANY semantics (widens access)", [pair])
+	msg := sprintf("Invalid resource marking: %v are subset/superset communities — using both with ANY operator would unintentionally widen access", [pair])
 }
 
 # ============================================
@@ -146,7 +164,7 @@ deny contains msg if {
 
 deny contains msg if {
 	count(input.resource.releasabilityTo) == 0
-	msg := "Empty releasabilityTo (denies all access)"
+	msg := "This resource has no release markings (empty releasability list) — access is denied to all countries"
 }
 
 # ============================================
@@ -156,7 +174,7 @@ deny contains msg if {
 deny contains msg if {
 	some coi in input.resource.COI
 	not coi_members[coi]
-	msg := sprintf("Unknown COI: %s (cannot validate releasability)", [coi])
+	msg := sprintf("Unknown COI: '%s' is not a recognized Community of Interest and cannot be validated", [coi])
 }
 
 # ============================================
@@ -222,7 +240,7 @@ deny_decision := {
 # Permit decision (for standalone use)
 permit_decision := {
 	"allowed": true,
-	"reason": "All COI coherence checks passed",
+	"reason": "All community of interest coherence checks passed",
 	"coiOperator": input.resource.coiOperator,
 } if allow
 

@@ -1,19 +1,58 @@
 /**
  * Session Refresh API Route
- * 
+ *
  * Allows clients to manually trigger a session refresh
  * This extends the session by refreshing tokens with Keycloak
- * 
+ *
  * Week 3.4: Enhanced Session Management
+ * Phase 2: Security Hardening - Added Zod validation, enhanced logging, security headers
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { accounts } from '@/lib/db/schema';
+import { accounts, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { updateAccountTokensByUserId } from '@/lib/db/operations';
+import { 
+    validateSessionRefreshRequest,
+    type SessionRefreshRequest 
+} from '@/schemas/session.schema';
+import { z } from 'zod';
+
+export const dynamic = 'force-dynamic';
+
+// Rate limiting applied via backend middleware (see session-rate-limit.middleware.ts)
 
 export async function POST(request: NextRequest) {
+    const requestId = request.headers.get('x-request-id') || `req-${Date.now()}`;
+    
+    // Parse and validate request body
+    let validatedBody: SessionRefreshRequest | undefined;
+    try {
+        const body = await request.json().catch(() => ({}));
+        validatedBody = validateSessionRefreshRequest(body);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            const validationErrors = error.issues;
+            console.error('[SessionRefresh] Validation error:', {
+                requestId,
+                errors: validationErrors
+            });
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'ValidationError',
+                    message: 'Invalid request body',
+                    details: {
+                        code: 'INVALID_REQUEST_BODY',
+                        validationErrors
+                    }
+                },
+                { status: 400 }
+            );
+        }
+    }
     try {
         // Get current session
         const session = await auth();
@@ -29,7 +68,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('[SessionRefresh] Manual refresh requested for user:', session.user.id);
+        console.log('[SessionRefresh] Manual refresh requested', {
+            requestId,
+            userId: session.user.id.substring(0, 8) + '...',
+            reason: validatedBody?.reason || 'manual',
+            forceRefresh: validatedBody?.forceRefresh || false
+        });
 
         // Get account to retrieve refresh token
         const accountResults = await db
@@ -41,14 +85,23 @@ export async function POST(request: NextRequest) {
         const account = accountResults[0];
 
         if (!account || !account.refresh_token) {
-            console.error('[SessionRefresh] No account or refresh token found');
+            console.error('[SessionRefresh] No account or refresh token found', { requestId });
             return NextResponse.json(
                 {
                     success: false,
                     error: 'NoRefreshToken',
-                    message: 'Unable to refresh session. Please login again.'
+                    message: 'Unable to refresh session. Please login again.',
+                    details: {
+                        code: 'NO_REFRESH_TOKEN',
+                        retryable: false
+                    }
                 },
-                { status: 400 }
+                { 
+                    status: 400,
+                    headers: {
+                        'X-Request-Id': requestId
+                    }
+                }
             );
         }
 
@@ -101,20 +154,39 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // Update account with new tokens
-            await db.update(accounts)
-                .set({
-                    access_token: tokens.access_token,
-                    id_token: tokens.id_token,
-                    expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
-                    refresh_token: tokens.refresh_token || account.refresh_token,
-                })
-                .where(eq(accounts.userId, session.user.id));
+            // Validate refresh token rotation - Keycloak must return new refresh token
+            if (!tokens.refresh_token) {
+                console.error('[SessionRefresh] No new refresh token received from Keycloak');
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'MissingRefreshToken',
+                        message: 'Token rotation failed - no refresh token received'
+                    },
+                    { status: 500 }
+                );
+            }
+
+            // Update account with new tokens (refresh token rotation enforced)
+            await updateAccountTokensByUserId(session.user.id, {
+                access_token: tokens.access_token,
+                id_token: tokens.id_token,
+                expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
+                refresh_token: tokens.refresh_token,  // Always use new token from rotation
+            });
+
+            // Extend database session by 8 hours to align with NextAuth maxAge
+            // This prevents premature NextAuth session expiration
+            const newSessionExpiry = new Date(Date.now() + 8 * 60 * 60 * 1000);  // +8 hours
+            await db.update(sessions)
+                .set({ expires: newSessionExpiry })
+                .where(eq(sessions.userId, session.user.id));
 
             console.log('[SessionRefresh] Session refreshed successfully', {
                 userId: session.user.id,
                 newExpiry: new Date((Math.floor(Date.now() / 1000) + tokens.expires_in) * 1000).toISOString(),
                 expiresIn: tokens.expires_in,
+                sessionExpiry: newSessionExpiry.toISOString(),
             });
 
             return NextResponse.json({
@@ -122,6 +194,12 @@ export async function POST(request: NextRequest) {
                 message: 'Session refreshed successfully',
                 expiresIn: tokens.expires_in,
                 expiresAt: new Date((Math.floor(Date.now() / 1000) + tokens.expires_in) * 1000).toISOString(),
+            }, {
+                headers: {
+                    'X-Request-Id': requestId,
+                    'Cache-Control': 'no-store, no-cache, must-revalidate',
+                    'Pragma': 'no-cache'
+                }
             });
 
         } catch (error) {
@@ -137,21 +215,39 @@ export async function POST(request: NextRequest) {
         }
 
     } catch (error) {
-        console.error('[SessionRefresh] Unexpected error:', error);
+        console.error('[SessionRefresh] Unexpected error:', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined
+        });
         return NextResponse.json(
             {
                 success: false,
                 error: 'InternalError',
-                message: 'An unexpected error occurred'
+                message: 'An unexpected error occurred',
+                details: {
+                    code: 'INTERNAL_ERROR',
+                    retryable: true
+                }
             },
-            { status: 500 }
+            { 
+                status: 500,
+                headers: {
+                    'X-Request-Id': requestId
+                }
+            }
         );
     }
 }
 
 // Health check endpoint - returns session status with server time
+// Phase 2: Security Hardening - Added validation, enhanced response
 export async function GET(request: NextRequest) {
+    const requestId = request.headers.get('x-request-id') || `req-${Date.now()}`;
     const serverTime = Math.floor(Date.now() / 1000); // Server time in seconds
+
+    // Parse query parameters (future: includeMetrics flag)
+    const includeMetrics = request.nextUrl.searchParams.get('includeMetrics') === 'true';
 
     const session = await auth();
 
@@ -190,17 +286,30 @@ export async function GET(request: NextRequest) {
     const isExpired = timeUntilExpiry <= 0;
 
     // Include session metadata
-    const response = {
+    const response: any = {
         authenticated: true,
         expiresAt: account.expires_at ? new Date(account.expires_at * 1000).toISOString() : null,
         timeUntilExpiry,
         isExpired,
-        needsRefresh: timeUntilExpiry < 180, // Less than 3 minutes
+        needsRefresh: timeUntilExpiry < 480, // Less than 8 minutes (aligned with proactive refresh)
         serverTime, // Server time for clock skew detection
         userId: session.user.id,
         provider: account.provider,
     };
 
-    return NextResponse.json(response);
-}
+    // Include extended metrics if requested (for debugging)
+    if (includeMetrics) {
+        response.metrics = {
+            sessionAge: account.expires_at ? serverTime - (account.expires_at - 900) : 0, // Approximate
+            lastRefreshAt: account.expires_at ? new Date((account.expires_at - 900) * 1000).toISOString() : null,
+        };
+    }
 
+    return NextResponse.json(response, {
+        headers: {
+            'X-Request-Id': requestId,
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Pragma': 'no-cache'
+        }
+    });
+}

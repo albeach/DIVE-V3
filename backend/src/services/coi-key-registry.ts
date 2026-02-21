@@ -79,7 +79,7 @@ class COIKeyRegistry {
      */
     private generateKeyForCOI(coi: string): ICOIKeyEntry {
         // Use environment-specific seed for key derivation
-        const seed = process.env.COI_KEY_SEED || 'dive-v3-pilot-seed-2025';
+        const seed = process.env.COI_KEY_SEED || 'dive-v3-broker-seed-2025';
 
         // Generate deterministic 256-bit key using HMAC-SHA256
         const hmac = crypto.createHmac('sha256', seed);
@@ -277,4 +277,3 @@ export function selectCOIForResource(releasabilityTo: string[], coiTags: string[
 export const __testing__ = {
     COIKeyRegistry
 };
-

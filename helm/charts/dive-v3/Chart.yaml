@@ -1,0 +1,27 @@
+apiVersion: v2
+name: dive-v3
+description: DIVE V3 - Coalition ICAM Web Application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - icam
+  - abac
+  - nato
+  - federation
+  - keycloak
+maintainers:
+  - name: DIVE V3 Team
+dependencies:
+  - name: postgresql
+    version: "12.1.9"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: mongodb
+    version: "13.9.4"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: mongodb.enabled
+  - name: redis
+    version: "17.3.7"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

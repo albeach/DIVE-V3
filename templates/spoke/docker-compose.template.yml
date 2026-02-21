@@ -1,0 +1,887 @@
+# =============================================================================
+# DIVE V3 Spoke Instance: {{INSTANCE_CODE_UPPER}} ({{INSTANCE_NAME}})
+# =============================================================================
+# Generated At: {{TIMESTAMP}}
+# Template Hash: {{TEMPLATE_HASH}}
+# Instance Code: {{INSTANCE_CODE_UPPER}}
+# NOTE: This file is auto-generated from templates/spoke/docker-compose.template.yml
+#       Do not edit directly - changes will be overwritten on next deployment
+# =============================================================================
+#
+# BREAKING CHANGES in 2.5.0:
+# - Unified network naming: 'internal' instead of 'dive-${code}-network'
+# - Simplified volume declarations (no code prefix, relies on project name)
+# - Keycloak 24.0.0 (from 23.0.0)
+# - MongoDB 7.0 (from 6.0)
+# - OPA 0.68.0 (from 0.60.0)
+#
+# FIXES in 2.5.1:
+# - Explicitly mapped MongoDB /data/configdb to named volume (mongodb_config)
+# - Explicitly mapped OPAL client cache to named volume (opal_cache)
+# - Eliminates anonymous Docker volumes created by base images
+#
+# CRITICAL FIX in 2.6.0:
+# - Added container_name directives to all 9 services
+# - Prevents Docker Compose auto-naming with -1 suffix
+# - Ensures SSOT compliance: dive-spoke-{code}-{service}
+# - No more "dive-spoke-pol-keycloak-pol-1" (now "dive-spoke-pol-keycloak")
+#
+# VERSION ALIGNMENT in 2.7.0:
+# - Fixed Redis version: redis:alpine → redis:7.2-alpine (matches Hub)
+# - Fixed OPA version: openpolicyagent/opa:0.68.0 → openpolicyagent/opa:1.12.1 (latest stable)
+# - Ensures Hub and Spoke use identical base image versions
+# - See DOCKER_IMAGE_VERSION_SSOT.md for complete version matrix
+#
+# NETWORK FIX in 2.8.0:
+# - Backend now on BOTH dive-internal AND dive-shared networks
+# - CRITICAL: dive-shared required for Hub federation and OPAL policy sync
+# - Fixes "getaddrinfo ENOTFOUND hub.dive25.com" errors
+#
+# KEYCLOAK 26.5.2 UPGRADE in 2.9.1:
+# - Updated Keycloak to version 26.5.2 with latest security fixes
+# - Replaced deprecated KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD with KC_ADMIN/KC_ADMIN_PASSWORD
+# - Ensures compatibility with latest Keycloak configuration standards
+# =============================================================================
+#
+# This is a STANDALONE spoke stack - completely separate from Hub.
+#
+# Placeholders (auto-replaced by ./dive spoke init):
+#   {{INSTANCE_CODE_UPPER}} - 3-letter uppercase code (e.g., NZL)
+#   {{INSTANCE_CODE_LOWER}} - 3-letter lowercase code (e.g., nzl)
+#   {{INSTANCE_NAME}}       - Human-readable name
+#   {{IDP_HOSTNAME}}        - Keycloak hostname
+#   {{API_URL}}             - Backend API URL
+#   {{BASE_URL}}            - Frontend URL
+#   {{IDP_URL}}             - Keycloak IdP URL
+#   {{KEYCLOAK_HOST_PORT}}  - Keycloak HTTPS port (e.g., 18443)
+#   {{BACKEND_HOST_PORT}}   - Backend port (e.g., 14000)
+#   {{FRONTEND_HOST_PORT}}  - Frontend port (e.g., 13000)
+#   {{OPA_HOST_PORT}}       - OPA port (e.g., 18181)
+#   {{KAS_HOST_PORT}}       - KAS port (e.g., 18085)
+#
+# Usage:
+#   cd instances/{{INSTANCE_CODE_LOWER}}
+#   docker compose --env-file .env up -d
+#
+# =============================================================================
+
+# Project name ensures complete isolation from Hub
+name: dive-spoke-{{INSTANCE_CODE_LOWER}}
+
+networks:
+  dive-internal:
+    driver: bridge
+    labels:
+      dive.network.type: "internal"
+      dive.network.scope: "spoke"
+      dive.network.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.network.description: "Spoke {{INSTANCE_CODE_UPPER}} internal service communication"
+  dive-shared:
+    external: true
+
+volumes:
+  postgres_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "postgres"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "database"
+  mongodb_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "database"
+  mongodb_config:  # MongoDB config directory (prevent anonymous volume)
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "config"
+  redis_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "redis"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "cache"
+  opal_cache:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "cache"
+  opal_backup:     # OPAL client backup directory (prevent anonymous volume from base image)
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "backup"
+  backend_node_modules:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "backend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "node_modules"
+  backend_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "backend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "logs"
+  kas_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "kas"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "logs"
+  vault_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "secrets-storage"
+  vault_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "audit-logs"
+  caddy_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "tls-certificates"
+  caddy_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "config"
+
+services:
+  # ==========================================================================
+  # DATABASE SERVICES
+  # ==========================================================================
+  # NOTE: All secrets use instance-suffixed environment variables
+  # Example: ${POSTGRES_PASSWORD_NZL} (not ${POSTGRES_PASSWORD})
+  # This ensures each spoke has isolated, unique credentials
+  # Secret management: scripts/dive-modules/spoke/pipeline/spoke-secrets.sh
+  # ==========================================================================
+
+  postgres-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "PostgreSQL database for Keycloak user/realm storage"
+    image: postgres:18.1-alpine3.23
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
+    # TLS: Copy certs with correct ownership (PG Alpine runs as uid 70)
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/postgresql/certs &&
+        cp /certs/fullchain.pem /var/lib/postgresql/certs/server.crt &&
+        cp /certs/key.pem /var/lib/postgresql/certs/server.key &&
+        cp /certs/ca/rootCA.pem /var/lib/postgresql/certs/ca.crt &&
+        chown 70:70 /var/lib/postgresql/certs/server.key &&
+        chmod 600 /var/lib/postgresql/certs/server.key &&
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/var/lib/postgresql/certs/server.crt \
+          -c ssl_key_file=/var/lib/postgresql/certs/server.key \
+          -c ssl_ca_file=/var/lib/postgresql/certs/ca.crt
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      POSTGRES_DB: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
+      - ./certs:/certs:ro
+    networks:
+      - dive-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mongodb-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "MongoDB database for resource metadata and audit logs"
+    image: mongo:8.0.17
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
+    # Use official docker-entrypoint with custom command for replica set + keyFile
+    # KeyFile permissions fixed via init script before MongoDB starts
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # MEMORY LEAK FIX (2026-02-16): Hard limit prevents host OOM
+        reservations:
+          memory: 512M  # Minimum guaranteed memory
+    command:
+      - bash
+      - -c
+      - |
+        cp /data/keyfile/mongo-keyfile /tmp/mongo-keyfile &&
+        chmod 600 /tmp/mongo-keyfile &&
+        chown 999:999 /tmp/mongo-keyfile &&
+        cat /certs/certificate.pem /certs/key.pem > /tmp/mongodb.pem &&
+        cp /certs/ca/rootCA.pem /tmp/ca.pem &&
+        chown 999:999 /tmp/mongodb.pem /tmp/ca.pem &&
+        chmod 600 /tmp/mongodb.pem &&
+        chmod 644 /tmp/ca.pem &&
+        exec docker-entrypoint.sh mongod \
+          --replSet rs0 \
+          --keyFile /tmp/mongo-keyfile \
+          --bind_ip_all \
+          --tlsMode requireTLS \
+          --tlsCertificateKeyFile /tmp/mongodb.pem \
+          --tlsCAFile /tmp/ca.pem \
+          --tlsAllowConnectionsWithoutCertificates \
+          --wiredTigerCacheSizeGB 1
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb  # Prevent anonymous volume creation
+      # Mount replica set keyFile (generated during spoke deployment)
+      - ./mongo-keyfile:/data/keyfile/mongo-keyfile:ro
+      - ./certs:/certs:ro
+      # NOTE: Replica set initialization happens POST-START via deployment script
+      # docker-entrypoint-initdb.d/ runs BEFORE --replSet is applied, so it cannot work
+      # See: scripts/init-mongo-replica-set-post-start.sh (called by spoke deployment pipeline)
+    networks:
+      - dive-internal
+    healthcheck:
+      # MEMORY LEAK FIX (2026-02-16): TCP-based health check eliminates mongosh connection churn
+      # OLD: mongosh creates new connection every 10s with replica set checks
+      # NEW: TCP socket check (zero MongoDB connections)
+      # IMPACT: Eliminates health check connection overhead entirely
+      #
+      # NOTE: Replica set initialization still happens via deployment script
+      # (scripts/init-mongo-replica-set-post-start.sh) during spoke pipeline
+      # This health check only verifies MongoDB is listening on port 27017
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s  # Longer start period for replica set init
+    restart: unless-stopped
+
+  redis-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Redis cache for session state and policy decisions"
+    image: redis:7.2-alpine
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /certs/fullchain.pem
+      --tls-key-file /certs/key.pem
+      --tls-ca-cert-file /certs/ca/rootCA.pem
+      --tls-auth-clients no
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+      - ./certs:/certs:ro
+    networks:
+      - dive-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca/rootCA.pem", "-a", "${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # IDENTITY & ACCESS MANAGEMENT
+  # ==========================================================================
+
+  keycloak-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Keycloak IdP for federation and local authentication"
+    build:
+      context: ../../keycloak
+      dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-keycloak
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Spokes need less memory than Hub (768M heap + 256M native)
+        reservations:
+          memory: 256M
+    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
+    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      KC_HOSTNAME: {{IDP_HOSTNAME}}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/fullchain.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
+      # X.509 Client Certificate Authentication (request mode - allows but not requires)
+      KC_HTTPS_CLIENT_AUTH: request
+      KC_LOG_LEVEL: info
+      KC_FEATURES: scripts
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # ==========================================================================
+      # TRUST STORE FOR FEDERATION (Keycloak 26+ native approach)
+      # ==========================================================================
+      # Keycloak needs to trust self-signed certificates from other Keycloak
+      # instances during federation. This is required for server-to-server calls
+      # (tokenUrl, userInfoUrl, jwksUrl). Without this:
+      #   "PKIX path building failed: unable to find valid certification path"
+      #
+      # The rootCA.pem is synced during deployment via:
+      #   spoke_init_prepare_certificates() in phase-initialization.sh
+      # ==========================================================================
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/ca-bundle/rootCA.pem
+      # Terraform SSOT: Skip JSON import, Keycloak starts empty
+      SKIP_REALM_IMPORT: "true"
+      # Legacy realm import variables (kept for compatibility, but not used)
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
+      APP_URL: {{BASE_URL}}
+      API_URL: {{API_URL}}
+      USA_IDP_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      USA_IDP_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-spoke-users.sh
+      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
+      # MEMORY LEAK FIX (2026-02-16): JVM heap tuning for spoke (smaller than Hub)
+      JAVA_OPTS: >-
+        -Xms256m
+        -Xmx768m
+        -XX:MetaspaceSize=96m
+        -XX:MaxMetaspaceSize=192m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=100
+        -XX:+UseStringDeduplication
+        -Djava.net.preferIPv4Stack=true
+      # MEMORY LEAK FIX (2026-02-16): Aggressive session pruning (spoke settings)
+      KC_SPI_USER_SESSIONS_INFINISPAN_USER_SESSIONS_IDLE_TIMEOUT: "900"  # 15 min
+      KC_SPI_USER_SESSIONS_INFINISPAN_OFFLINE_SESSION_IDLE_TIMEOUT: "43200"  # 12 hours
+      KC_SPI_USER_SESSIONS_INFINISPAN_MAX_CACHE_SIZE: "5000"  # Lower than Hub
+      KC_DB_POOL_INITIAL_SIZE: 5
+      KC_DB_POOL_MIN_SIZE: 5
+      KC_DB_POOL_MAX_SIZE: 15  # MEMORY LEAK FIX: Reduced from default 100
+    ports:
+      - "127.0.0.1:{{KEYCLOAK_HOST_PORT}}:8443"  # Localhost only (secure)
+      - "127.0.0.1:{{KEYCLOAK_HTTP_PORT}}:8080"
+    volumes:
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../certs/ca-bundle:/opt/keycloak/ca-bundle:ro  # SSOT CA bundle for federation
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
+      - ../../keycloak/realms:/opt/keycloak/realm-templates:ro
+    depends_on:
+      postgres-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      dive-internal:
+      dive-shared:
+        aliases:
+          - keycloak-{{INSTANCE_CODE_LOWER}}  # CRITICAL: Network alias for federation JWKS discovery
+    healthcheck:
+      # ENHANCED: Check spoke realm (application ready) with fallback to master (Keycloak operational)
+      # Primary: Verifies Terraform configuration applied (spoke realm exists)
+      # Fallback: Verifies Keycloak is operational (during Terraform apply phase)
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}} >/dev/null 2>&1 || curl -ksf https://localhost:8443/realms/master >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # POLICY ENGINE
+  # ==========================================================================
+
+  opa-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Open Policy Agent for ABAC authorization decisions"
+    image: openpolicyagent/opa:1.12.3
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
+    platform: linux/amd64
+    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/fullchain.pem --tls-private-key-file=/certs/key.pem
+    ports:
+      - "{{OPA_HOST_PORT}}:8181"
+    volumes:
+      # REMOVED: ../../policies:/policies:ro
+      # Policies now loaded exclusively via OPAL (proper GitOps)
+      - ./cache/policies:/var/opa/cache
+      - ./certs:/certs:ro
+    networks:
+      - dive-internal
+    healthcheck:
+      # FIXED: Use CMD (not CMD-SHELL) as OPA minimal image has no /bin/sh
+      # Test basic OPA evaluation (policies loaded from mounted volumes)
+      test: ["CMD", "/opa", "eval", "--format", "raw", "true"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  opal-client-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "optional"
+      dive.service.description: "OPAL client for real-time policy sync with hub"
+    build:
+      context: ../../docker
+      dockerfile: opal-client.Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opal-client
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["/usr/local/bin/opal-entrypoint.sh"]
+    environment:
+      # Hub OPAL Server URL - from environment variable (required)
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
+      # Authentication - token and public key from Hub
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      # Policy subscription directories - CRITICAL FIX for duplicate paths issue
+      # Request only specific directories from Hub (NOT "." which requests entire repo)
+      # This prevents OPAL from including files with "policies/" prefix duplicates
+      # Delimiter is colon (:) for OPAL client config
+      OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
+      # Use external OPA (standalone container) - OPAL pushes policies to it
+      # This avoids inline OPA chicken-and-egg health check issues
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_POLICY_STORE_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # SSOT: Use INSTANCE_CODE for subscription, not spokeId (Hub is SSOT for spokeId)
+      OPAL_SUBSCRIPTION_ID: spoke-{{INSTANCE_CODE_LOWER}}
+      # Data topics to subscribe to (must match Hub topics)
+      # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints,classification_equivalency
+      OPAL_LOG_LEVEL: INFO
+      # Enable data updater to receive dynamic data from Hub
+      OPAL_DATA_UPDATER_ENABLED: "true"
+      OPAL_KEEP_ALIVE_TIMEOUT: 60
+      OPAL_RECONNECT_INTERVAL: 5
+      OPAL_RECONNECT_MAX_INTERVAL: 300
+      OPAL_POLICY_REFRESH_INTERVAL: 60
+      # SSL Certificate Trust - CRITICAL for Hub OPAL server connection
+      # SSOT CA bundle mounted from project root (mkcert + Vault PKI)
+      SSL_CERT_FILE: /var/opal/ca-bundle/rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/ca-bundle/rootCA.pem
+      WEBSOCKET_SSL_CERT: /var/opal/ca-bundle/rootCA.pem
+    volumes:
+      - opal_cache:/var/opal/cache
+      - opal_backup:/opal/backup  # Prevent anonymous volume from base image
+      - ./certs:/var/opal/certs:ro
+      - ../../certs/ca-bundle:/var/opal/ca-bundle:ro  # SSOT CA bundle for Hub OPAL server trust
+    depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-internal      # Internal spoke communication
+      - dive-shared        # CRITICAL: Required for Hub OPAL server communication
+    extra_hosts:
+      - "localhost:host-gateway"
+    healthcheck:
+      # Check OPAL client API health (port 7000), not inline OPA
+      # CRITICAL: Use 127.0.0.1 NOT localhost — extra_hosts remaps localhost to host-gateway
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:7000/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # BACKEND API
+  # ==========================================================================
+
+  backend-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Express.js API with PEP for authorization enforcement"
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.dev
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-backend
+    init: true
+    command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
+    environment:
+      NODE_ENV: development
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      PORT: "4000"
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-https://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
+      VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
+      # Vault database secrets engine role (dynamic MongoDB credentials)
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE:-}
+      # SSOT ARCHITECTURE (2026-01-22): Backend uses INSTANCE_CODE to query Hub for spokeId
+      # No SPOKE_ID environment variable - Hub MongoDB is single source of truth
+      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
+      INSTANCE_NAME: "{{INSTANCE_NAME}}"
+      INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
+      SPOKE_MODE: "true"
+      IS_HUB: "false"
+      # MongoDB
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true&tls=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
+      MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
+      MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      # Local Redis for session cache (authenticated)
+      REDIS_URL: rediss://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}@redis-{{INSTANCE_CODE_LOWER}}:6379
+      # ==========================================================================
+      # SHARED BLACKLIST REDIS (ACP-240 Cross-Instance Token Revocation)
+      # ==========================================================================
+      # Connects to Hub's centralized blacklist Redis for federation-wide token
+      # revocation. When a user logs out on any spoke, their tokens are revoked
+      # across ALL federated instances (GAP-010 remediation).
+      #
+      # Requirements:
+      # - Spoke must be on dive-shared Docker network (default for local dev)
+      # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
+      # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
+      # ==========================================================================
+      # Token blacklist: set in .env (local=Hub Redis, remote=empty → API-based via HUB_API_URL)
+      BLACKLIST_REDIS_URL: ${BLACKLIST_REDIS_URL:-}
+      HUB_API_URL: ${HUB_API_URL:-}
+      # Keycloak (internal Docker network URL for backend API calls)
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
+      KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      # CRITICAL: Include Hub issuer for cross-instance federation
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-{{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak:8443/realms/dive-v3-broker-usa}
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      # OPA
+      # OPA - Use standalone OPA for policy decisions (HTTPS)
+      # OPAL client pushes policies to standalone OPA
+      OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # KAS - Local Key Access Service for this spoke
+      KAS_URL: https://kas-{{INSTANCE_CODE_LOWER}}:8080
+      # API URL for Swagger/OpenAPI documentation
+      API_URL: {{API_URL}}
+      # CORS
+      NEXT_PUBLIC_BASE_URL: {{BASE_URL}}
+      # CORS Configuration (Dynamic - computed from instance endpoints)
+      # BEST PRACTICE: Derive allowed origins from instance configuration
+      # No hardcoded URLs - all origins computed from {{BASE_URL}}, {{API_URL}}, {{IDP_URL}}
+      # This ensures CORS works regardless of port assignments or domain changes
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-{{BASE_URL}},{{API_URL}},{{IDP_URL}},https://localhost:8443,https://localhost:4000,https://localhost:3000}
+      # Federation mode - allows cross-instance communication
+      # SECURITY NOTE: JWT authentication enforces security, not CORS
+      # For production federations, set to 'true' to allow spoke-to-hub communication
+      ENABLE_FEDERATION_CORS: ${ENABLE_FEDERATION_CORS:-true}
+      FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
+      # Hub federation URL: .env overrides (remote mode uses external URL)
+      HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
+      SPOKE_TOKEN: ${SPOKE_TOKEN:-}  # Hub API token for heartbeat authentication
+      # SPOKE_CONFIG_PATH removed — DB state is the SSOT
+      DIVE_POLICY_CACHE_PATH: /app/cache/policies
+      DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
+      # Multimedia/FFmpeg Configuration (STANAG 4774/4778)
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      MAX_MULTIMEDIA_UPLOAD_SIZE_MB: "500"
+      MAX_UPLOAD_SIZE_MB: "100"
+      # OPAL data source token — validates OPAL client data fetch requests
+      # Propagated from Hub's OPAL_DATA_SOURCE_TOKEN during spoke deployment
+      OPAL_DATA_SOURCE_TOKEN: ${OPAL_DATA_SOURCE_TOKEN:-}
+    ports:
+      - "127.0.0.1:{{BACKEND_HOST_PORT}}:4000"  # Localhost only (secure)
+    volumes:
+      - ../../backend:/app
+      - backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw  # SSOT: /app/certs (rw for CRL cache)
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+      - ../../NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
+      # NOTE: config.json mount REMOVED — DB state is the SSOT (spoke_config_get)
+      - ../../config/federation-registry.json:/app/config/federation-registry.json:ro
+      # NOTE: kas-registry.json mount REMOVED in Phase 3 (MongoDB KAS Registry Migration)
+      # Spokes now use MongoDB kas_registry collection as SSOT for KAS instances
+      # Registration happens via: spoke_kas_register_mongodb() -> POST /api/kas/register
+      - ../../policies:/app/policies:ro  # Policy metadata for /api/policies endpoint
+      - ../../examples/examples:/app/examples/examples:ro  # Multi-format seeding templates
+      - ./cache:/app/cache
+      - backend_logs:/app/logs
+    depends_on:
+      postgres-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend uses orchestration DB
+      mongodb-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      redis-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend uses redis for sessions
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend validates JWT tokens
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Explicit OPA dependency (policies loaded from volume + OPAL)
+      opal-client-{{INSTANCE_CODE_LOWER}}:
+        condition: service_started  # Policies loaded via volume mount (OPAL sync is bonus)
+    networks:
+      dive-internal:               # Internal spoke communication
+        aliases:
+          - backend                # CRITICAL: OPAL data source URLs use generic 'backend' hostname
+      dive-shared:                 # Required for Hub federation and OPAL policy sync
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ==========================================================================
+  # KAS - Key Access Service
+  # ==========================================================================
+
+  kas-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "stretch"
+      dive.service.description: "Key Access Service for TDF encrypted resources (stretch goal)"
+    build:
+      context: ../../kas
+      dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-kas
+    environment:
+      NODE_ENV: development
+      KAS_PORT: 8080
+      HTTPS_ENABLED: "true"
+      CERT_PATH: /app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: fullchain.pem
+      BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      # OPA - Use standalone OPA for policy decisions (HTTPS)
+      OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
+      MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
+      MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-https://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE_KAS:-}
+      REDIS_URL: rediss://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}}@redis-{{INSTANCE_CODE_LOWER}}:6379
+      LOG_LEVEL: info
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+    ports:
+      - "{{KAS_HOST_PORT}}:8080"
+    depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      opal-client-{{INSTANCE_CODE_LOWER}}:
+        condition: service_started  # started not healthy: OPAL token provisioned later in config phase; KAS uses OPA (already healthy)
+      mongodb-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      redis-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-internal
+      - dive-shared  # For federation with hub and other spokes
+    volumes:
+      - ./certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+      - ../../kas/src:/app/src
+      - kas_logs:/app/logs
+      - ../../config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: npm run dev
+    restart: unless-stopped
+
+  # ==========================================================================
+  # FRONTEND
+  # ==========================================================================
+
+  frontend-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Next.js React application with NextAuth.js"
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile.prod.optimized
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-frontend
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Prevent frontend from exceeding 1GB
+        reservations:
+          memory: 256M
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_INSTANCE: {{INSTANCE_CODE_UPPER}}
+      NEXT_PUBLIC_INSTANCE_NAME: "{{INSTANCE_NAME}}"
+      # Public URLs for client-side requests
+      NEXT_PUBLIC_API_URL: {{API_URL}}
+      NEXT_PUBLIC_KEYCLOAK_URL: {{IDP_BASE_URL}}
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      NEXT_PUBLIC_BACKEND_URL: {{API_URL}}
+      # Internal URL for SSR requests
+      BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
+      NEXTAUTH_URL: {{BASE_URL}}
+      NEXTAUTH_SECRET: ${AUTH_SECRET_{{INSTANCE_CODE_UPPER}}}
+      # Database for NextAuth sessions
+      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=require}
+      # Keycloak OAuth config (internal Docker network URL for SSR/API calls)
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
+      # NextAuth v5 Keycloak provider
+      AUTH_KEYCLOAK_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
+      AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
+
+      # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
+      # Makes Node.js fetch() API respect system CA trust store (installed via entrypoint)
+      # This maintains proper TLS verification without security compromises
+      # See: docs/TLS_BEST_PRACTICES_2026.md
+      NODE_OPTIONS: "--use-openssl-ca"
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
+      CERT_PATH: /app/certs
+    ports:
+      - "127.0.0.1:{{FRONTEND_HOST_PORT}}:3000"  # Localhost only (secure)
+    volumes:
+      - ./certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NextAuth needs Keycloak realm
+      backend-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    healthcheck:
+      # Zero Trust: Frontend speaks HTTPS internally (custom server.standalone.js)
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+    networks:
+      - dive-internal
+    restart: unless-stopped
+
+  # ==========================================================================
+  # CADDY REVERSE PROXY (Remote deployment — TLS termination for spoke domains)
+  # ==========================================================================
+  # Enabled when SPOKE_CADDY_ENABLED=true (set by spoke deployment in remote mode).
+  # Each spoke EC2 gets its own Caddy for Let's Encrypt certs on spoke domains.
+  # Local dev does not use this (Hub Caddy handles all domains on same host).
+
+  # ==========================================================================
+  # VAULT (Spoke-Local Secrets Management — Data Sovereignty)
+  # ==========================================================================
+  vault-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "HashiCorp Vault for spoke {{INSTANCE_CODE_UPPER}} secrets management"
+    profiles: ["vault"]
+    image: hashicorp/vault:1.15
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: "https://127.0.0.1:8200"
+      VAULT_API_ADDR: "https://vault-{{INSTANCE_CODE_LOWER}}:8200"
+      VAULT_LOCAL_CONFIG: >-
+        {
+          "storage": {"file": {"path": "/vault/data"}},
+          "listener": [{
+            "tcp": {
+              "address": "0.0.0.0:8200",
+              "tls_cert_file": "/vault/certs/fullchain.pem",
+              "tls_key_file": "/vault/certs/key.pem",
+              "tls_disable": false
+            }
+          }],
+          "ui": true,
+          "log_level": "info",
+          "disable_mlock": false
+        }
+    command: ["server"]
+    ports:
+      - "127.0.0.1:{{VAULT_HOST_PORT}}:8200"
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./certs:/vault/certs:ro
+    networks:
+      dive-internal:
+    healthcheck:
+      # vault status exit codes: 0=healthy+unsealed, 2=uninitialized (both are "vault is running")
+      # Exit 1=sealed, 3=error. Accept 0 and 2 as healthy during bootstrap.
+      # $$s / $$? use double-$ so Docker Compose passes literal $s/$? to the shell.
+      test: ["CMD-SHELL", "vault status -tls-skip-verify; s=$$?; [ $$s -eq 0 ] || [ $$s -eq 2 ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  caddy-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Caddy reverse proxy with auto Let's Encrypt for spoke {{INSTANCE_CODE_UPPER}}"
+    profiles: ["caddy"]
+    build:
+      context: ../../docker/caddy
+      dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-caddy
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN_APP: ${CADDY_DOMAIN_APP:-localhost}
+      CADDY_DOMAIN_API: ${CADDY_DOMAIN_API:-localhost}
+      CADDY_DOMAIN_IDP: ${CADDY_DOMAIN_IDP:-localhost}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - dive-internal
+    depends_on:
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      backend-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+
+  # ==========================================================================
+  # CLOUDFLARE TUNNEL (Optional - uncomment if using dive25.com)
+  # ==========================================================================
+
+  # cloudflared-{{INSTANCE_CODE_LOWER}}:
+  #   image: cloudflare/cloudflared:latest
+  #   command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+  #   environment:
+  #     TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+  #   networks:
+  #     - dive-{{INSTANCE_CODE_LOWER}}-network
+  #   restart: unless-stopped

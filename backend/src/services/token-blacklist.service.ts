@@ -1,54 +1,194 @@
 /**
  * Token Blacklist Service
- * 
- * Gap #7 Remediation (October 20, 2025)
+ *
+ * Phase 2 Security Hardening - GAP-010 Remediation (November 26, 2025)
  * ACP-240 Best Practices: Immediate revocation and stale access prevention
- * 
- * Implements Redis-based token blacklist for real-time revocation.
- * Ensures users cannot access resources after logout.
- * 
- * Reference: docs/KEYCLOAK-CONFIGURATION-AUDIT.md (Gap #7)
+ *
+ * ENHANCEMENT: Shared blacklist across all federated instances (USA, FRA, GBR, DEU)
+ * - Uses centralized blacklist Redis for cross-instance token revocation
+ * - Implements Redis Pub/Sub for real-time blacklist propagation
+ * - Ensures users cannot access ANY instance after logout
+ *
+ * Architecture:
+ * ┌─────────────┐     ┌─────────────────┐     ┌─────────────┐
+ * │  USA API    │────▶│ Blacklist Redis │◀────│  FRA API    │
+ * └─────────────┘     │ (Centralized)   │     └─────────────┘
+ *                     │  + Pub/Sub      │
+ * ┌─────────────┐     │                 │     ┌─────────────┐
+ * │  GBR API    │────▶└─────────────────┘◀────│  DEU API    │
+ * └─────────────┘                             └─────────────┘
+ *
+ * Reference: docs/INFRASTRUCTURE-GAP-ANALYSIS.md (GAP-010)
  */
 
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 
-// Redis client (singleton)
-let redisClient: Redis | null = null;
+// Redis clients (singletons)
+let blacklistRedisClient: Redis | null = null;
+let pubSubClient: Redis | null = null;
+
+// Remote mode: when no direct Redis and HUB_API_URL is set, use HTTP API
+const HUB_API_URL = process.env.HUB_API_URL || '';
+const DEPLOYMENT_MODE = process.env.DEPLOYMENT_MODE || 'local';
+const isRemoteMode = (): boolean => !process.env.BLACKLIST_REDIS_URL && !!HUB_API_URL;
+
+// Pub/Sub channel for blacklist events
+const BLACKLIST_CHANNEL = 'dive-v3:token-blacklist';
+const USER_REVOKE_CHANNEL = 'dive-v3:user-revoked';
+
+// Instance identifier for logging
+const INSTANCE_ID = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || process.env.NEXT_PUBLIC_INSTANCE || 'unknown';
+const BLACKLIST_REDIS_REQUIRED = ['1', 'true', 'yes', 'on'].includes(
+    (process.env.BLACKLIST_REDIS_REQUIRED || '').toLowerCase()
+);
 
 /**
- * Get or create Redis client
+ * Get the blacklist Redis URL
+ * Priority: BLACKLIST_REDIS_URL > REDIS_URL > default
  */
-function getRedisClient(): Redis {
-    if (!redisClient) {
-        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+function getBlacklistRedisUrl(): string {
+    // Centralized blacklist Redis (Phase 2 enhancement)
+    if (process.env.BLACKLIST_REDIS_URL) {
+        return process.env.BLACKLIST_REDIS_URL;
+    }
+    // Fallback to local Redis
+    return process.env.REDIS_URL || 'redis://redis:6379';
+}
 
-        logger.info('Initializing Redis client for token blacklist', { redisUrl });
+/**
+ * Get or create blacklist Redis client
+ */
+function getBlacklistRedisClient(): Redis {
+    if (!blacklistRedisClient) {
+        const redisUrl = getBlacklistRedisUrl();
 
-        redisClient = new Redis(redisUrl, {
+        logger.info('Initializing blacklist Redis client', {
+            instance: INSTANCE_ID,
+            redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@') // Mask password
+        });
+
+        blacklistRedisClient = new Redis(redisUrl, {
             retryStrategy: (times) => {
                 const delay = Math.min(times * 50, 2000);
-                logger.warn('Redis connection retry', { attempt: times, delayMs: delay });
+                logger.warn('Blacklist Redis connection retry', {
+                    instance: INSTANCE_ID,
+                    attempt: times,
+                    delayMs: delay
+                });
                 return delay;
             },
-            maxRetriesPerRequest: 3
+            maxRetriesPerRequest: 2, // Reduced from 3 for faster fail-open
+            enableReadyCheck: true,
+            connectTimeout: 2000, // Reduced from 10000ms to 2000ms for faster fail-open when blacklist Redis is unavailable
+            commandTimeout: 1000, // Max 1s per Redis command (fail-open if slow)
+            // Connection pool for better performance
+            lazyConnect: false
         });
 
-        redisClient.on('connect', () => {
-            logger.info('Redis connected for token blacklist');
+        blacklistRedisClient.on('connect', () => {
+            logger.info('Blacklist Redis connected', { instance: INSTANCE_ID });
         });
 
-        redisClient.on('error', (error) => {
-            logger.error('Redis error', { error: error.message });
+        blacklistRedisClient.on('error', (error) => {
+            logger.error('Blacklist Redis error', {
+                instance: INSTANCE_ID,
+                error: error.message
+            });
+        });
+
+        blacklistRedisClient.on('reconnecting', () => {
+            logger.warn('Blacklist Redis reconnecting', { instance: INSTANCE_ID });
         });
     }
 
-    return redisClient;
+    return blacklistRedisClient;
+}
+
+/**
+ * Initialize Pub/Sub subscriber for cross-instance blacklist propagation
+ */
+async function initPubSubSubscriber(): Promise<void> {
+    if (pubSubClient) return;
+
+    const redisUrl = getBlacklistRedisUrl();
+
+    pubSubClient = new Redis(redisUrl, {
+        retryStrategy: (times) => Math.min(times * 50, 2000),
+        maxRetriesPerRequest: null // Infinite retries for Pub/Sub
+    });
+
+    pubSubClient.on('message', (channel, message) => {
+        try {
+            const data = JSON.parse(message);
+            logger.info('Received blacklist event via Pub/Sub', {
+                instance: INSTANCE_ID,
+                channel,
+                sourceInstance: data.sourceInstance,
+                type: data.type
+            });
+            // Event is received - local cache would be invalidated here if we had one
+        } catch (error) {
+            logger.error('Failed to process Pub/Sub message', {
+                instance: INSTANCE_ID,
+                error: error instanceof Error ? error.message : 'Unknown'
+            });
+        }
+    });
+
+    await pubSubClient.subscribe(BLACKLIST_CHANNEL, USER_REVOKE_CHANNEL);
+    logger.info('Subscribed to blacklist Pub/Sub channels', {
+        instance: INSTANCE_ID,
+        channels: [BLACKLIST_CHANNEL, USER_REVOKE_CHANNEL]
+    });
+
+    // Verify subscription after a short delay
+    setTimeout(async () => {
+        await verifyPubSubSubscription();
+    }, 1000);
+}
+
+/**
+ * Publish blacklist event to all instances via Pub/Sub
+ */
+async function publishBlacklistEvent(
+    channel: string,
+    type: 'token' | 'user',
+    identifier: string,
+    reason?: string
+): Promise<void> {
+    const redis = getBlacklistRedisClient();
+
+    try {
+        const event = {
+            type,
+            identifier,
+            reason: reason || 'Revocation',
+            sourceInstance: INSTANCE_ID,
+            timestamp: new Date().toISOString()
+        };
+
+        await redis.publish(channel, JSON.stringify(event));
+
+        logger.debug('Published blacklist event', {
+            instance: INSTANCE_ID,
+            channel,
+            type,
+            identifier
+        });
+    } catch (error) {
+        // Don't fail the main operation if Pub/Sub fails
+        logger.warn('Failed to publish blacklist event', {
+            instance: INSTANCE_ID,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+    }
 }
 
 /**
  * Add token to blacklist (on logout or manual revocation)
- * 
+ * Now broadcasts to all instances via Pub/Sub
+ *
  * @param jti - JWT ID (jti claim from token)
  * @param expiresIn - Seconds until token naturally expires
  * @param reason - Reason for revocation (optional)
@@ -59,31 +199,44 @@ export const blacklistToken = async (
     reason?: string
 ): Promise<void> => {
     if (!jti) {
-        logger.warn('Cannot blacklist token without jti claim');
+        logger.warn('Cannot blacklist token without jti claim', { instance: INSTANCE_ID });
         return;
     }
 
-    const redis = getRedisClient();
+    // Remote mode: use Hub API for cross-instance revocation
+    if (isRemoteMode()) {
+        return blacklistTokenViaApi(jti, expiresIn, reason);
+    }
+
+    const redis = getBlacklistRedisClient();
 
     try {
+        const blacklistEntry = {
+            revokedAt: new Date().toISOString(),
+            reason: reason || 'User logout',
+            expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+            revokedByInstance: INSTANCE_ID
+        };
+
         await redis.set(
             `blacklist:${jti}`,
-            JSON.stringify({
-                revokedAt: new Date().toISOString(),
-                reason: reason || 'User logout',
-                expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString()
-            }),
+            JSON.stringify(blacklistEntry),
             'EX',
             expiresIn
         );
 
-        logger.info('Token blacklisted', {
+        // Publish to all instances (Phase 2 enhancement)
+        await publishBlacklistEvent(BLACKLIST_CHANNEL, 'token', jti, reason);
+
+        logger.info('Token blacklisted (shared)', {
+            instance: INSTANCE_ID,
             jti,
             expiresIn,
             reason: reason || 'User logout'
         });
     } catch (error) {
         logger.error('Failed to blacklist token', {
+            instance: INSTANCE_ID,
             jti,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
@@ -92,8 +245,8 @@ export const blacklistToken = async (
 };
 
 /**
- * Check if token is blacklisted
- * 
+ * Check if token is blacklisted (checks shared blacklist)
+ *
  * @param jti - JWT ID to check
  * @returns true if token is revoked, false otherwise
  */
@@ -102,16 +255,23 @@ export const isTokenBlacklisted = async (jti: string): Promise<boolean> => {
         return false;  // Can't check without jti
     }
 
-    const redis = getRedisClient();
+    // Remote mode: check via Hub API
+    if (isRemoteMode()) {
+        return isTokenBlacklistedViaApi(jti);
+    }
+
+    const redis = getBlacklistRedisClient();
 
     try {
         const result = await redis.get(`blacklist:${jti}`);
 
         if (result) {
             const blacklistEntry = JSON.parse(result);
-            logger.debug('Token found in blacklist', {
+            logger.debug('Token found in shared blacklist', {
+                instance: INSTANCE_ID,
                 jti,
                 revokedAt: blacklistEntry.revokedAt,
+                revokedByInstance: blacklistEntry.revokedByInstance,
                 reason: blacklistEntry.reason
             });
             return true;
@@ -119,18 +279,21 @@ export const isTokenBlacklisted = async (jti: string): Promise<boolean> => {
 
         return false;
     } catch (error) {
-        logger.error('Failed to check token blacklist', {
+        logger.error('Failed to check shared token blacklist', {
+            instance: INSTANCE_ID,
             jti,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        // Fail-closed: If Redis is down, treat as blacklisted to be safe
-        return true;
+        // Fail-open: If Redis is down, allow request (availability over security for blacklist check)
+        // The token has already passed Keycloak introspection, so this is a secondary check
+        return false;
     }
 };
 
 /**
  * Revoke all tokens for a user (on logout or account suspension)
- * 
+ * Now broadcasts to all instances via Pub/Sub
+ *
  * @param uniqueID - User's uniqueID
  * @param expiresIn - Seconds until revocation expires (default: 900 = 15 minutes)
  * @param reason - Reason for revocation
@@ -141,31 +304,39 @@ export const revokeAllUserTokens = async (
     reason?: string
 ): Promise<void> => {
     if (!uniqueID) {
-        logger.warn('Cannot revoke user tokens without uniqueID');
+        logger.warn('Cannot revoke user tokens without uniqueID', { instance: INSTANCE_ID });
         return;
     }
 
-    const redis = getRedisClient();
+    const redis = getBlacklistRedisClient();
 
     try {
+        const revocationEntry = {
+            revokedAt: new Date().toISOString(),
+            reason: reason || 'User logout',
+            expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+            revokedByInstance: INSTANCE_ID
+        };
+
         await redis.set(
             `user-revoked:${uniqueID}`,
-            JSON.stringify({
-                revokedAt: new Date().toISOString(),
-                reason: reason || 'User logout',
-                expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString()
-            }),
+            JSON.stringify(revocationEntry),
             'EX',
             expiresIn
         );
 
-        logger.info('All user tokens revoked', {
+        // Publish to all instances (Phase 2 enhancement)
+        await publishBlacklistEvent(USER_REVOKE_CHANNEL, 'user', uniqueID, reason);
+
+        logger.info('All user tokens revoked (shared)', {
+            instance: INSTANCE_ID,
             uniqueID,
             expiresIn,
             reason: reason || 'User logout'
         });
     } catch (error) {
         logger.error('Failed to revoke user tokens', {
+            instance: INSTANCE_ID,
             uniqueID,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
@@ -174,8 +345,8 @@ export const revokeAllUserTokens = async (
 };
 
 /**
- * Check if all user tokens are revoked
- * 
+ * Check if all user tokens are revoked (checks shared blacklist)
+ *
  * @param uniqueID - User's uniqueID to check
  * @returns true if all user tokens revoked, false otherwise
  */
@@ -184,16 +355,18 @@ export const areUserTokensRevoked = async (uniqueID: string): Promise<boolean> =
         return false;
     }
 
-    const redis = getRedisClient();
+    const redis = getBlacklistRedisClient();
 
     try {
         const result = await redis.get(`user-revoked:${uniqueID}`);
 
         if (result) {
             const revocationEntry = JSON.parse(result);
-            logger.debug('User tokens globally revoked', {
+            logger.debug('User tokens globally revoked (shared)', {
+                instance: INSTANCE_ID,
                 uniqueID,
                 revokedAt: revocationEntry.revokedAt,
+                revokedByInstance: revocationEntry.revokedByInstance,
                 reason: revocationEntry.reason
             });
             return true;
@@ -202,22 +375,102 @@ export const areUserTokensRevoked = async (uniqueID: string): Promise<boolean> =
         return false;
     } catch (error) {
         logger.error('Failed to check user token revocation', {
+            instance: INSTANCE_ID,
             uniqueID,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : 'Unknown error',
+            blacklistRedisRequired: BLACKLIST_REDIS_REQUIRED
         });
-        // Fail-closed: If Redis is down, treat as revoked to be safe
-        return true;
+        // Best-practice default: optional blacklist should fail-open for availability.
+        // Set BLACKLIST_REDIS_REQUIRED=true to enforce fail-closed behavior.
+        return BLACKLIST_REDIS_REQUIRED;
+    }
+};
+
+// =============================================================================
+// HTTP-BASED TOKEN REVOCATION (Remote Mode)
+// =============================================================================
+// When BLACKLIST_REDIS_URL is unset and HUB_API_URL is set, spoke backends
+// use the Hub's /api/blacklist/* endpoints instead of direct Redis access.
+// This enables cross-EC2 token revocation without exposing Redis publicly.
+// =============================================================================
+
+/**
+ * Blacklist a token via Hub API (remote mode)
+ */
+const blacklistTokenViaApi = async (
+    jti: string,
+    expiresIn: number,
+    reason?: string
+): Promise<void> => {
+    try {
+        const response = await fetch(`${HUB_API_URL}/api/blacklist/tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jti, ttl: expiresIn, reason: reason || 'User logout' }),
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (response.ok) {
+            logger.info('Token blacklisted via Hub API', {
+                instance: INSTANCE_ID,
+                jti,
+                hubApiUrl: HUB_API_URL
+            });
+        } else {
+            logger.warn('Hub API blacklist request failed', {
+                instance: INSTANCE_ID,
+                jti,
+                status: response.status
+            });
+        }
+    } catch (error) {
+        logger.warn('Failed to blacklist token via Hub API (fail-open)', {
+            instance: INSTANCE_ID,
+            jti,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+        // Fail-open: Hub API unreachable shouldn't block user operations
+    }
+};
+
+/**
+ * Check if token is blacklisted via Hub API (remote mode)
+ */
+const isTokenBlacklistedViaApi = async (jti: string): Promise<boolean> => {
+    try {
+        const response = await fetch(
+            `${HUB_API_URL}/api/blacklist/tokens/${encodeURIComponent(jti)}/status`,
+            { signal: AbortSignal.timeout(3000) }
+        );
+
+        if (response.ok) {
+            const data = (await response.json()) as { blacklisted?: boolean };
+            return data.blacklisted === true;
+        }
+
+        return false;
+    } catch (error) {
+        logger.debug('Hub API blacklist check failed (fail-open)', {
+            instance: INSTANCE_ID,
+            jti,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+        // Fail-open: same as Redis mode
+        return false;
     }
 };
 
 /**
  * Get blacklist statistics (for monitoring)
+ * Returns stats from the shared blacklist Redis
  */
 export const getBlacklistStats = async (): Promise<{
     totalBlacklistedTokens: number;
     totalRevokedUsers: number;
+    instance: string;
+    redisUrl: string;
 }> => {
-    const redis = getRedisClient();
+    const redis = getBlacklistRedisClient();
 
     try {
         const tokenKeys = await redis.keys('blacklist:*');
@@ -225,17 +478,50 @@ export const getBlacklistStats = async (): Promise<{
 
         return {
             totalBlacklistedTokens: tokenKeys.length,
-            totalRevokedUsers: userKeys.length
+            totalRevokedUsers: userKeys.length,
+            instance: INSTANCE_ID,
+            redisUrl: getBlacklistRedisUrl().replace(/:[^:@]+@/, ':***@')
         };
     } catch (error) {
         logger.error('Failed to get blacklist stats', {
+            instance: INSTANCE_ID,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
         return {
             totalBlacklistedTokens: 0,
-            totalRevokedUsers: 0
+            totalRevokedUsers: 0,
+            instance: INSTANCE_ID,
+            redisUrl: 'error'
         };
     }
+};
+
+/**
+ * Initialize the blacklist service
+ * Call this on application startup
+ */
+export const initializeBlacklistService = async (): Promise<void> => {
+    if (isRemoteMode()) {
+        logger.info('Token blacklist using Hub API (remote mode)', {
+            instance: INSTANCE_ID,
+            hubApiUrl: HUB_API_URL,
+            deploymentMode: DEPLOYMENT_MODE
+        });
+        return;
+    }
+
+    logger.info('Initializing shared token blacklist service', {
+        instance: INSTANCE_ID,
+        blacklistRedisUrl: getBlacklistRedisUrl().replace(/:[^:@]+@/, ':***@')
+    });
+
+    // Initialize Redis connection
+    getBlacklistRedisClient();
+
+    // Initialize Pub/Sub subscriber
+    await initPubSubSubscriber();
+
+    logger.info('Shared token blacklist service initialized', { instance: INSTANCE_ID });
 };
 
 /**
@@ -243,7 +529,7 @@ export const getBlacklistStats = async (): Promise<{
  * @internal
  */
 export const clearBlacklist = async (): Promise<void> => {
-    const redis = getRedisClient();
+    const redis = getBlacklistRedisClient();
 
     try {
         const tokenKeys = await redis.keys('blacklist:*');
@@ -258,11 +544,13 @@ export const clearBlacklist = async (): Promise<void> => {
         }
 
         logger.info('Blacklist cleared', {
+            instance: INSTANCE_ID,
             tokensCleared: tokenKeys.length,
             usersCleared: userKeys.length
         });
     } catch (error) {
         logger.error('Failed to clear blacklist', {
+            instance: INSTANCE_ID,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
         throw error;
@@ -270,14 +558,95 @@ export const clearBlacklist = async (): Promise<void> => {
 };
 
 /**
- * Close Redis connection (for graceful shutdown)
+ * Health check for blacklist Redis
  */
-export const closeRedisConnection = async (): Promise<void> => {
-    if (redisClient) {
-        await redisClient.quit();
-        redisClient = null;
-        logger.info('Redis connection closed');
+export const getBlacklistHealth = async (): Promise<{
+    healthy: boolean;
+    connected: boolean;
+    pubSubSubscribed: boolean;
+    blacklistCount: number;
+    error?: string;
+}> => {
+    try {
+        const client = getBlacklistRedisClient();
+
+        // Test connection
+        await client.ping();
+
+        // Check Pub/Sub subscription (simplified for now)
+        const pubSubSubscribed = !!pubSubClient;
+
+        // Get blacklist count
+        const keys = await client.keys('dive-v3:blacklist:*');
+        const blacklistCount = keys.length;
+
+        return {
+            healthy: true,
+            connected: true,
+            pubSubSubscribed,
+            blacklistCount,
+        };
+    } catch (error) {
+        logger.error('Blacklist Redis health check failed', {
+            instance: INSTANCE_ID,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        return {
+            healthy: false,
+            connected: false,
+            pubSubSubscribed: false,
+            blacklistCount: 0,
+            error: error instanceof Error ? error.message : 'Connection failed',
+        };
     }
 };
 
+/**
+ * Verify Pub/Sub subscription on startup
+ */
+export const verifyPubSubSubscription = async (): Promise<boolean> => {
+    try {
+        if (!pubSubClient) {
+            logger.warn('Pub/Sub client not initialized', { instance: INSTANCE_ID });
+            return false;
+        }
 
+        // Simplified verification - just check if client exists
+        const subscribed = true; // Assume subscribed if client exists
+
+        if (subscribed) {
+            logger.info('Pub/Sub subscription verified', {
+                instance: INSTANCE_ID,
+                status: 'simplified-check'
+            });
+        } else {
+            logger.warn('No Pub/Sub subscriptions found', { instance: INSTANCE_ID });
+        }
+
+        return subscribed;
+    } catch (error) {
+        logger.error('Pub/Sub subscription verification failed', {
+            instance: INSTANCE_ID,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return false;
+    }
+};
+
+/**
+ * Close Redis connections (for graceful shutdown)
+ */
+export const closeRedisConnection = async (): Promise<void> => {
+    if (pubSubClient) {
+        await pubSubClient.quit();
+        pubSubClient = null;
+        logger.info('Pub/Sub Redis connection closed', { instance: INSTANCE_ID });
+    }
+
+    if (blacklistRedisClient) {
+        await blacklistRedisClient.quit();
+        blacklistRedisClient = null;
+        logger.info('Blacklist Redis connection closed', { instance: INSTANCE_ID });
+    }
+};

@@ -1,0 +1,329 @@
+{
+    "id": "us-dod",
+    "realm": "us-dod",
+    "displayName": "U.S. Department of Defense",
+    "displayNameHtml": "<div class=\"kc-logo-text\"><span>U.S. Department of Defense</span></div>",
+    "enabled": true,
+    "sslRequired": "external",
+    "registrationAllowed": false,
+    "loginWithEmailAllowed": true,
+    "duplicateEmailsAllowed": false,
+    "resetPasswordAllowed": true,
+    "editUsernameAllowed": false,
+    "bruteForceProtected": true,
+    "internationalizationEnabled": true,
+    "supportedLocales": [
+        "en",
+        "es"
+    ],
+    "defaultLocale": "en",
+    "accessTokenLifespan": 900,
+    "accessTokenLifespanForImplicitFlow": 900,
+    "ssoSessionIdleTimeout": 28800,
+    "ssoSessionMaxLifespan": 28800,
+    "roles": {
+        "realm": [
+            {
+                "name": "user",
+                "description": "Standard DoD user"
+            },
+            {
+                "name": "admin",
+                "description": "DoD administrator"
+            }
+        ]
+    },
+    "users": [
+        {
+            "username": "smith.john@mail.mil",
+            "email": "smith.john@mail.mil",
+            "emailVerified": true,
+            "enabled": true,
+            "firstName": "John",
+            "lastName": "Smith",
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "TopSecret123!"
+                }
+            ],
+            "attributes": {
+                "clearance": [
+                    "TOP_SECRET"
+                ],
+                "countryOfAffiliation": [
+                    "USA"
+                ],
+                "acpCOI": [
+                    "FVEY",
+                    "US-ONLY"
+                ],
+                "organization": [
+                    "U.S. Air Force"
+                ],
+                "rank": [
+                    "Colonel"
+                ],
+                "unit": [
+                    "Joint Staff J-6"
+                ],
+                "dodId": [
+                    "1234567890"
+                ]
+            },
+            "realmRoles": [
+                "user"
+            ]
+        },
+        {
+            "username": "johnson.emily@mail.mil",
+            "email": "johnson.emily@mail.mil",
+            "emailVerified": true,
+            "enabled": true,
+            "firstName": "Emily",
+            "lastName": "Johnson",
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "Secret456!"
+                }
+            ],
+            "attributes": {
+                "clearance": [
+                    "SECRET"
+                ],
+                "countryOfAffiliation": [
+                    "USA"
+                ],
+                "acpCOI": [
+                    "NATO-COSMIC",
+                    "FVEY"
+                ],
+                "organization": [
+                    "U.S. Navy"
+                ],
+                "rank": [
+                    "Lieutenant Commander"
+                ],
+                "unit": [
+                    "NSWC Dahlgren"
+                ],
+                "dodId": [
+                    "2345678901"
+                ]
+            },
+            "realmRoles": [
+                "user"
+            ]
+        },
+        {
+            "username": "williams.robert@mail.mil",
+            "email": "williams.robert@mail.mil",
+            "emailVerified": true,
+            "enabled": true,
+            "firstName": "Robert",
+            "lastName": "Williams",
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "Confidential789!"
+                }
+            ],
+            "attributes": {
+                "clearance": [
+                    "CONFIDENTIAL"
+                ],
+                "countryOfAffiliation": [
+                    "USA"
+                ],
+                "acpCOI": [
+                    "NATO-COSMIC"
+                ],
+                "organization": [
+                    "U.S. Army"
+                ],
+                "rank": [
+                    "Major"
+                ],
+                "unit": [
+                    "TRADOC"
+                ],
+                "dodId": [
+                    "3456789012"
+                ]
+            },
+            "realmRoles": [
+                "user"
+            ]
+        },
+        {
+            "username": "davis.sarah@mail.mil",
+            "email": "davis.sarah@mail.mil",
+            "emailVerified": true,
+            "enabled": true,
+            "firstName": "Sarah",
+            "lastName": "Davis",
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "Unclass000!"
+                }
+            ],
+            "attributes": {
+                "clearance": [
+                    "UNCLASSIFIED"
+                ],
+                "countryOfAffiliation": [
+                    "USA"
+                ],
+                "acpCOI": [
+                    "NATO-UNRESTRICTED"
+                ],
+                "organization": [
+                    "U.S. Marine Corps"
+                ],
+                "rank": [
+                    "Captain"
+                ],
+                "unit": [
+                    "HQMC"
+                ],
+                "dodId": [
+                    "4567890123"
+                ]
+            },
+            "realmRoles": [
+                "user"
+            ]
+        }
+    ],
+    "clients": [
+        {
+            "clientId": "dive-v3-client",
+            "name": "DIVE V3 Broker",
+            "description": "OIDC client for DIVE V3 federation",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "bearerOnly": false,
+            "standardFlowEnabled": true,
+            "implicitFlowEnabled": false,
+            "directAccessGrantsEnabled": true,
+            "serviceAccountsEnabled": false,
+            "consentRequired": false,
+            "rootUrl": "http://localhost:8081",
+            "baseUrl": "http://localhost:8081/realms/dive-v3-broker-usa",
+            "redirectUris": [
+                "http://localhost:8081/*",
+                "http://keycloak:8080/*",
+                "https://localhost:8443/*"
+            ],
+            "webOrigins": [
+                "+"
+            ],
+            "secret": "usa-dod-secret-change-in-production",
+            "attributes": {
+                "pkce.code.challenge.method": "S256"
+            },
+            "protocolMappers": [
+                {
+                    "name": "uniqueID",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "username",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "uniqueID",
+                        "jsonType.label": "String"
+                    }
+                },
+                {
+                    "name": "clearance",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "clearance",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "clearance",
+                        "jsonType.label": "String",
+                        "multivalued": "true"
+                    }
+                },
+                {
+                    "name": "countryOfAffiliation",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "countryOfAffiliation",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "countryOfAffiliation",
+                        "jsonType.label": "String",
+                        "multivalued": "true"
+                    }
+                },
+                {
+                    "name": "acpCOI",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "acpCOI",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "acpCOI",
+                        "jsonType.label": "String",
+                        "multivalued": "true"
+                    }
+                },
+                {
+                    "name": "organization",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "organization",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "organization",
+                        "jsonType.label": "String",
+                        "multivalued": "true"
+                    }
+                },
+                {
+                    "name": "rank",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "userinfo.token.claim": "true",
+                        "user.attribute": "rank",
+                        "id.token.claim": "true",
+                        "access.token.claim": "true",
+                        "claim.name": "rank",
+                        "jsonType.label": "String",
+                        "multivalued": "true"
+                    }
+                }
+            ]
+        }
+    ],
+    "browserSecurityHeaders": {
+        "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+        "xContentTypeOptions": "nosniff",
+        "xRobotsTag": "none",
+        "xFrameOptions": "SAMEORIGIN",
+        "xXSSProtection": "1; mode=block",
+        "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+    }
+}

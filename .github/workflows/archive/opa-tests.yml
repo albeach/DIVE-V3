@@ -1,0 +1,98 @@
+name: OPA Policy Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'policies/**'
+      - '.github/workflows/opa-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'policies/**'
+
+jobs:
+  opa-tests:
+    name: OPA Policy Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: 1.9.0
+
+      - name: Verify OPA Installation
+        run: opa version
+
+      - name: Run OPA Policy Tests
+        id: test
+        run: |
+          cd policies
+          opa test . -v > ../opa-test-results.txt
+          cat ../opa-test-results.txt
+
+      - name: Check Test Results
+        run: |
+          if grep -q "FAIL:" opa-test-results.txt; then
+            FAILURES=$(grep "FAIL:" opa-test-results.txt)
+            echo "❌ OPA tests failed:"
+            echo "$FAILURES"
+            exit 1
+          else
+            echo "✅ All OPA tests passed"
+          fi
+
+      - name: Verify 100% Test Coverage
+        run: |
+          TOTAL=$(grep "PASS:" opa-test-results.txt | awk '{print $2}' | cut -d'/' -f2)
+          PASSED=$(grep "PASS:" opa-test-results.txt | awk '{print $2}' | cut -d'/' -f1)
+          
+          echo "OPA Tests: ${PASSED}/${TOTAL}"
+          
+          if [ "$PASSED" != "$TOTAL" ]; then
+            echo "❌ Not all tests passed: ${PASSED}/${TOTAL}"
+            exit 1
+          fi
+          
+          echo "✅ All ${TOTAL} OPA tests passed (100%)"
+
+      - name: OPA Benchmark (Performance Test)
+        run: |
+          cd policies
+          opa bench . --count 100 || echo "Benchmark skipped (no benchmark files)"
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: opa-test-results
+          path: opa-test-results.txt
+
+      - name: Comment PR with Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            const fs = require('fs');
+            const results = fs.readFileSync('opa-test-results.txt', 'utf8');
+            const summary = results.split('\n').filter(line => line.includes('PASS:')).join('\n');
+            
+            const output = `#### OPA Policy Tests 🚦
+            
+            \`\`\`
+            ${summary}
+            \`\`\`
+            
+            *Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+

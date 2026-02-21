@@ -1,12 +1,15 @@
 /**
  * Session Heartbeat Hook
- * 
- * Handles:
- * - Periodic session validation with server
- * - Page visibility detection (pause timers when hidden)
+ *
+ * Modern 2025 session management patterns:
+ * - Periodic server-side session validation
+ * - Page visibility detection (pause when hidden)
  * - Clock skew detection and compensation
- * - Server-side session status synchronization
- * 
+ * - Proper loading and error states
+ * - Automatic retry with exponential backoff
+ *
+ * Security: All validation happens server-side. Client never parses JWTs.
+ *
  * Week 3.4+: Advanced Session Management
  */
 
@@ -14,6 +17,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 
 interface HeartbeatResponse {
     authenticated: boolean;
@@ -32,42 +36,68 @@ interface SessionHealthStatus {
     needsRefresh: boolean;
 }
 
-const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+const HEARTBEAT_INTERVAL = 120000; // 2 minutes (normal)
+const HEARTBEAT_INTERVAL_CRITICAL = 30000; // 30 seconds (when < 5 minutes remaining)
 const CLOCK_SKEW_TOLERANCE = 5000; // 5 seconds tolerance
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_BASE = 2000; // 2 seconds base delay
 
 export function useSessionHeartbeat() {
     const { status } = useSession();
     const [sessionHealth, setSessionHealth] = useState<SessionHealthStatus | null>(null);
     const [isPageVisible, setIsPageVisible] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [retryCount, setRetryCount] = useState(0);
+
     const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastHeartbeatRef = useRef<number>(0);
+    const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Perform heartbeat check
-    const performHeartbeat = useCallback(async () => {
+    // Perform heartbeat check with retry logic
+    const performHeartbeat = useCallback(async (isRetry = false): Promise<SessionHealthStatus | null> => {
         if (status !== 'authenticated') {
+            setIsLoading(false);
             return null;
         }
 
         try {
+            if (!isRetry) {
+                setIsLoading(true);
+                setError(null);
+            }
+
             const clientTimeBefore = Date.now();
 
             const response = await fetch('/api/session/refresh', {
                 method: 'GET',
                 cache: 'no-store',
+                // Add credentials to ensure cookies are sent
+                credentials: 'same-origin',
             });
 
             const clientTimeAfter = Date.now();
             const roundTripTime = clientTimeAfter - clientTimeBefore;
 
             if (!response.ok) {
-                console.warn('[Heartbeat] Session invalid:', response.status);
-                return {
-                    isValid: false,
-                    expiresAt: 0,
-                    serverTimeOffset: 0,
-                    lastChecked: Date.now(),
-                    needsRefresh: false,
-                };
+                // Handle authentication failures
+                if (response.status === 401) {
+                    console.warn('[Heartbeat] Session invalid - 401 Unauthorized');
+                    const invalidHealth = {
+                        isValid: false,
+                        expiresAt: 0,
+                        serverTimeOffset: 0,
+                        lastChecked: Date.now(),
+                        needsRefresh: false,
+                    };
+                    setSessionHealth(invalidHealth);
+                    setIsLoading(false);
+                    setError(null); // Don't treat 401 as an error - it's expected when not logged in
+                    return invalidHealth;
+                }
+
+                // Handle other errors with retry
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
             const data: HeartbeatResponse = await response.json();
@@ -90,27 +120,70 @@ export function useSessionHeartbeat() {
                 expiresAt: data.expiresAt ? new Date(data.expiresAt).getTime() : 0,
                 serverTimeOffset,
                 lastChecked: Date.now(),
-                needsRefresh: data.needsRefresh,
+                needsRefresh: data.needsRefresh,  // Pass through to TokenExpiryChecker
             };
 
-            console.log('[Heartbeat] Health check:', {
-                isValid: health.isValid,
-                expiresAt: new Date(health.expiresAt).toISOString(),
-                timeUntilExpiry: data.timeUntilExpiry,
-                clockSkew: Math.floor(serverTimeOffset / 1000) + 's',
-                needsRefresh: health.needsRefresh,
-            });
+            // Heartbeat-triggered logout failsafe
+            if (!health.isValid && data.authenticated === false) {
+                console.error('[Heartbeat] Server reports session invalid - forcing logout');
+                await federatedLogout({ reason: 'heartbeat_invalid' });
+                return null;
+            }
+
+            // Note: Refresh logic removed - delegated to TokenExpiryChecker
+            // to prevent race conditions and duplicate refresh attempts
 
             setSessionHealth(health);
+            setIsLoading(false);
+            setError(null);
+            setRetryCount(0); // Reset retry count on success
             lastHeartbeatRef.current = Date.now();
 
             return health;
 
-        } catch (error) {
-            console.error('[Heartbeat] Failed:', error);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error('[Heartbeat] Failed:', errorMessage, err);
+
+            // Check if it's a network error (Failed to fetch, Load failed, NetworkError)
+            // "Load failed" is Safari/WebKit-specific, "Failed to fetch" is Chrome/Firefox
+            const isNetworkError =
+                errorMessage.includes('Failed to fetch') ||
+                errorMessage.includes('Load failed') ||
+                errorMessage.includes('NetworkError') ||
+                errorMessage.includes('fetch failed') ||
+                errorMessage.includes('network');
+
+            if (isNetworkError) {
+                console.warn('[Heartbeat] Network error detected (browser-specific):', errorMessage);
+                // Don't retry on network errors during initial load - just fail silently
+                // These are usually CORS issues, connectivity problems, or the server is restarting
+                setIsLoading(false);
+                setError(null); // Don't show error for network issues
+                return null;
+            }
+
+            // Implement exponential backoff retry for other errors
+            if (retryCount < MAX_RETRY_ATTEMPTS) {
+                const delay = RETRY_DELAY_BASE * Math.pow(2, retryCount);
+                console.log(`[Heartbeat] Retry attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} in ${delay}ms`);
+
+                setRetryCount(prev => prev + 1);
+                setError(`Connection issue (retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS})`);
+
+                // Schedule retry
+                retryTimeoutRef.current = setTimeout(() => {
+                    performHeartbeat(true);
+                }, delay);
+            } else {
+                console.error('[Heartbeat] Max retry attempts reached');
+                setError('Unable to validate session. Please refresh the page.');
+                setIsLoading(false);
+            }
+
             return null;
         }
-    }, [status]);
+    }, [status, retryCount]);
 
     // Handle page visibility changes
     useEffect(() => {
@@ -118,18 +191,12 @@ export function useSessionHeartbeat() {
             const isVisible = document.visibilityState === 'visible';
             setIsPageVisible(isVisible);
 
-            console.log('[Heartbeat] Page visibility changed:', {
-                visible: isVisible,
-                timeSinceLastHeartbeat: Date.now() - lastHeartbeatRef.current
-            });
-
             // When page becomes visible, perform immediate heartbeat
             if (isVisible) {
                 const timeSinceLastHeartbeat = Date.now() - lastHeartbeatRef.current;
 
-                // If more than 30 seconds since last heartbeat, check immediately
+                // If more than 2 minutes since last heartbeat, check immediately
                 if (timeSinceLastHeartbeat > HEARTBEAT_INTERVAL) {
-                    console.log('[Heartbeat] Page became visible, performing immediate check');
                     performHeartbeat();
                 }
             }
@@ -145,11 +212,16 @@ export function useSessionHeartbeat() {
     // Setup heartbeat interval (only when page visible)
     useEffect(() => {
         if (status !== 'authenticated') {
-            // Clear any existing interval
+            // Clear any existing interval and timeouts
             if (heartbeatIntervalRef.current) {
                 clearInterval(heartbeatIntervalRef.current);
                 heartbeatIntervalRef.current = null;
             }
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
+            }
+            setIsLoading(false);
             return;
         }
 
@@ -158,15 +230,19 @@ export function useSessionHeartbeat() {
 
         // Only run interval when page is visible
         if (isPageVisible) {
-            console.log('[Heartbeat] Starting interval (page visible)');
+            // Dynamic heartbeat interval based on session health
+            const timeUntilExpiry = sessionHealth?.expiresAt
+                ? (sessionHealth.expiresAt - Date.now()) / 1000
+                : Infinity;
+
+            const intervalDuration = timeUntilExpiry < 300 // Less than 5 minutes
+                ? HEARTBEAT_INTERVAL_CRITICAL  // 30 seconds
+                : HEARTBEAT_INTERVAL;           // 2 minutes
 
             heartbeatIntervalRef.current = setInterval(() => {
-                console.log('[Heartbeat] Interval tick');
                 performHeartbeat();
-            }, HEARTBEAT_INTERVAL);
+            }, intervalDuration);
         } else {
-            console.log('[Heartbeat] Pausing interval (page hidden)');
-
             if (heartbeatIntervalRef.current) {
                 clearInterval(heartbeatIntervalRef.current);
                 heartbeatIntervalRef.current = null;
@@ -178,8 +254,12 @@ export function useSessionHeartbeat() {
                 clearInterval(heartbeatIntervalRef.current);
                 heartbeatIntervalRef.current = null;
             }
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
+            }
         };
-    }, [status, isPageVisible, performHeartbeat]);
+    }, [status, isPageVisible, sessionHealth?.expiresAt, performHeartbeat]);
 
     // Manual refresh function
     const triggerHeartbeat = useCallback(() => {
@@ -190,6 +270,7 @@ export function useSessionHeartbeat() {
         sessionHealth,
         isPageVisible,
         triggerHeartbeat,
+        isLoading,
+        error,
     };
 }
-

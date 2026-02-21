@@ -1,0 +1,430 @@
+# DIVE V3 - Resource Limits and Quotas
+# Phase 9: Performance Optimization & Scalability
+#
+# Defines resource limits, quotas, and priority classes for:
+# - OPA policy engine
+# - Redis cache cluster
+# - Backend API
+# - OPAL server/client
+#
+# Targets:
+# - OPA memory: <500MB per instance
+# - Total namespace quota: 8 CPU, 16GB RAM
+#
+# @version 1.0.0
+# @date 2025-12-03
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dive-v3
+  labels:
+    app.kubernetes.io/part-of: dive-v3
+    environment: production
+
+---
+# Resource Quota for the namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dive-v3-quota
+  namespace: dive-v3
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "50"
+    persistentvolumeclaims: "10"
+    services: "20"
+    secrets: "30"
+    configmaps: "30"
+
+---
+# LimitRange for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: dive-v3-limits
+  namespace: dive-v3
+spec:
+  limits:
+    # Default container limits
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: "4Gi"
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 10Gi
+      min:
+        storage: 100Mi
+
+---
+# Priority Classes for workload prioritization
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: dive-v3-critical
+  labels:
+    app.kubernetes.io/part-of: dive-v3
+value: 1000000
+globalDefault: false
+description: "Critical DIVE V3 components (OPA, Redis master)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: dive-v3-high
+  labels:
+    app.kubernetes.io/part-of: dive-v3
+value: 750000
+globalDefault: false
+description: "High priority DIVE V3 components (Backend API, OPAL)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: dive-v3-normal
+  labels:
+    app.kubernetes.io/part-of: dive-v3
+value: 500000
+globalDefault: false
+description: "Normal priority DIVE V3 components (Redis replicas, monitoring)"
+
+---
+# Network Policy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dive-v3-default-deny
+  namespace: dive-v3
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Network Policy: Allow OPA traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-opa-traffic
+  namespace: dive-v3
+spec:
+  podSelector:
+    matchLabels:
+      app: opa
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from backend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 8181
+    # Allow from OPAL client
+    - from:
+        - podSelector:
+            matchLabels:
+              app: opal-client
+      ports:
+        - protocol: TCP
+          port: 8181
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8181
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow OPAL server for bundle downloads
+    - to:
+        - podSelector:
+            matchLabels:
+              app: opal-server
+      ports:
+        - protocol: TCP
+          port: 7002
+
+---
+# Network Policy: Allow Redis traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-traffic
+  namespace: dive-v3
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from backend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow from other Redis pods (replication)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow from Sentinel
+    - from:
+        - podSelector:
+            matchLabels:
+              app: redis-sentinel
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9121
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow replication to other Redis pods
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# Network Policy: Allow Backend traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-traffic
+  namespace: dive-v3
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow OPA
+    - to:
+        - podSelector:
+            matchLabels:
+              app: opa
+      ports:
+        - protocol: TCP
+          port: 8181
+    # Allow Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow MongoDB
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - protocol: TCP
+          port: 27017
+    # Allow Keycloak
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+# ServiceMonitor for OPA (requires Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: opa-metrics
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opa
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+
+---
+# ServiceMonitor for Redis
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-metrics
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+
+---
+# PrometheusRule for Phase 9 SLA alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dive-v3-phase9-alerts
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/part-of: dive-v3
+    release: prometheus
+spec:
+  groups:
+    - name: dive-v3-performance
+      interval: 30s
+      rules:
+        # OPA decision latency alert
+        - alert: OPAHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="opa", handler="/v1/data/dive/authorization/decision"}[5m])) by (le)
+            ) > 0.020
+          for: 5m
+          labels:
+            severity: warning
+            phase: "9"
+          annotations:
+            summary: "OPA decision latency p95 > 20ms"
+            description: "OPA decision latency p95 is {{ $value | humanizeDuration }} (target: <20ms)"
+
+        # Throughput alert
+        - alert: LowThroughput
+          expr: |
+            sum(rate(http_requests_total{job="opa", handler="/v1/data/dive/authorization/decision"}[5m])) < 300
+          for: 10m
+          labels:
+            severity: warning
+            phase: "9"
+          annotations:
+            summary: "OPA throughput below 300 req/s"
+            description: "Current throughput is {{ $value | humanize }} req/s (target: ≥300)"
+
+        # OPA memory alert (Phase 9 target: <500MB)
+        - alert: OPAHighMemory
+          expr: |
+            container_memory_usage_bytes{namespace="dive-v3", container="opa"} > 500 * 1024 * 1024
+          for: 5m
+          labels:
+            severity: warning
+            phase: "9"
+          annotations:
+            summary: "OPA memory usage > 500MB"
+            description: "OPA container is using {{ $value | humanize1024 }}B (target: <500MB)"
+
+        # Cache hit rate alert
+        - alert: LowCacheHitRate
+          expr: |
+            sum(rate(decision_cache_hits_total{namespace="dive-v3"}[5m])) /
+            (sum(rate(decision_cache_hits_total{namespace="dive-v3"}[5m])) +
+             sum(rate(decision_cache_misses_total{namespace="dive-v3"}[5m]))) < 0.5
+          for: 10m
+          labels:
+            severity: warning
+            phase: "9"
+          annotations:
+            summary: "Decision cache hit rate below 50%"
+            description: "Cache hit rate is {{ $value | humanizePercentage }} (consider tuning TTL)"
+

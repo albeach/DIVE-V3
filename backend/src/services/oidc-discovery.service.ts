@@ -181,26 +181,27 @@ class OIDCDiscoveryService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
+      const err = error as Error & { response?: { status?: number; statusText?: string }; code?: string };
       logger.error('OIDC discovery validation failed', {
         issuer,
-        error: error.message,
+        error: err.message,
         durationMs: duration,
       });
 
       result.valid = false;
 
-      if (error.response) {
+      if (err.response) {
         result.errors.push(
-          `Discovery endpoint returned ${error.response.status}: ${error.response.statusText}`
+          `Discovery endpoint returned ${err.response.status}: ${err.response.statusText}`
         );
-      } else if (error.code === 'ECONNREFUSED') {
+      } else if (err.code === 'ECONNREFUSED') {
         result.errors.push('Connection refused - IdP may be offline');
-      } else if (error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      } else if (err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND') {
         result.errors.push('Discovery endpoint unreachable');
       } else {
-        result.errors.push(`Discovery fetch failed: ${error.message}`);
+        result.errors.push(`Discovery fetch failed: ${err.message}`);
       }
 
       return result;
@@ -243,7 +244,7 @@ class OIDCDiscoveryService {
 
       // Extract algorithms
       const algorithms: string[] = jwks.keys
-        .map((key: any) => key.alg)
+        .map((key: { alg: string }) => key.alg)
         .filter((alg: string | undefined): alg is string => !!alg);
 
       jwksInfo.algorithms = [...new Set(algorithms)]; // Deduplicate
@@ -255,8 +256,8 @@ class OIDCDiscoveryService {
       });
 
       return jwksInfo;
-    } catch (error: any) {
-      logger.error('JWKS validation failed', { jwksUri, error: error.message });
+    } catch (error) {
+      logger.error('JWKS validation failed', { jwksUri, error: error instanceof Error ? error.message : String(error) });
       return jwksInfo;
     }
   }
@@ -272,7 +273,7 @@ class OIDCDiscoveryService {
    * - acr_values_supported for MFA-related URNs
    * - claims_supported for 'amr' (authentication methods reference)
    */
-  private detectMFASupport(discovery: any): IMFASupportInfo {
+  private detectMFASupport(discovery: Record<string, unknown>): IMFASupportInfo {
     const mfaInfo: IMFASupportInfo = {
       detected: false,
       acrValues: [],
@@ -333,4 +334,3 @@ class OIDCDiscoveryService {
 
 // Export singleton instance
 export const oidcDiscoveryService = new OIDCDiscoveryService();
-

@@ -1,0 +1,21 @@
+# Grafana Dashboard Provisioning Configuration
+# DIVE V3 - Coalition Identity Platform
+#
+# This file configures Grafana to automatically load dashboards from the
+# specified folders on startup.
+
+apiVersion: 1
+
+providers:
+  - name: 'DIVE V3 Dashboards'
+    orgId: 1
+    folder: 'DIVE V3'
+    folderUid: 'dive-v3'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
+

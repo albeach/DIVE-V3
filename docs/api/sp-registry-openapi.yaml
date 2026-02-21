@@ -1,0 +1,878 @@
+openapi: 3.0.3
+info:
+  title: DIVE V3 SP Registry API
+  description: |
+    Administrative API for managing external Service Providers (SPs) in the DIVE V3 federated authorization system.
+    
+    This API enables administrators to:
+    - Register new external Service Providers
+    - Approve or reject pending registrations
+    - Manage OAuth credentials
+    - Suspend or reactivate SPs
+    - Monitor SP activity
+    
+    **Authentication**: All endpoints require admin authentication via NextAuth session.
+  version: 1.0.0
+  contact:
+    name: DIVE V3 Development Team
+    email: dive-v3-support@example.mil
+  license:
+    name: Proprietary
+    url: https://dive-v3.mil/license
+
+servers:
+  - url: https://localhost:3000
+    description: Local development (HTTPS with mkcert)
+  - url: https://api.dive-v3.mil
+    description: Production server (future deployment)
+
+tags:
+  - name: Service Providers
+    description: SP CRUD operations
+  - name: Approval
+    description: SP approval workflow
+  - name: Credentials
+    description: OAuth credential management
+  - name: Activity
+    description: SP activity monitoring
+
+security:
+  - sessionAuth: []
+
+paths:
+  /api/admin/sp-registry:
+    get:
+      tags:
+        - Service Providers
+      summary: List Service Providers
+      description: Retrieve a paginated list of all registered Service Providers with optional filtering
+      operationId: listServiceProviders
+      parameters:
+        - name: status
+          in: query
+          description: Filter by SP status
+          schema:
+            type: string
+            enum: [PENDING, ACTIVE, SUSPENDED, REVOKED]
+        - name: country
+          in: query
+          description: Filter by country (ISO 3166-1 alpha-3)
+          schema:
+            type: string
+            example: USA
+        - name: organizationType
+          in: query
+          description: Filter by organization type
+          schema:
+            type: string
+            enum: [GOVERNMENT, MILITARY, CONTRACTOR, ACADEMIC]
+        - name: search
+          in: query
+          description: Search by name, client ID, or technical contact
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Results per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Service Providers
+      summary: Register New Service Provider
+      description: Create a new Service Provider registration (status PENDING)
+      operationId: registerServiceProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SPRegistrationRequest'
+      responses:
+        '201':
+          description: SP registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/sp-registry/{spId}:
+    get:
+      tags:
+        - Service Providers
+      summary: Get Service Provider Details
+      description: Retrieve detailed information about a specific Service Provider
+      operationId: getServiceProvider
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalSP'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Service Providers
+      summary: Update Service Provider
+      description: Update an existing Service Provider's configuration
+      operationId: updateServiceProvider
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SPUpdateRequest'
+      responses:
+        '200':
+          description: SP updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Service Providers
+      summary: Delete Service Provider
+      description: Delete a Service Provider (soft delete - status changes to REVOKED)
+      operationId: deleteServiceProvider
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      responses:
+        '200':
+          description: SP deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: SP deleted successfully
+                  spId:
+                    type: string
+                    example: SP-1730678400000-A1B2C3D4
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/sp-registry/{spId}/approve:
+    post:
+      tags:
+        - Approval
+      summary: Approve/Reject Service Provider
+      description: Approve or reject a pending Service Provider registration
+      operationId: approveServiceProvider
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SPApprovalRequest'
+      responses:
+        '200':
+          description: Action completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPApprovalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/sp-registry/{spId}/suspend:
+    post:
+      tags:
+        - Service Providers
+      summary: Suspend Service Provider
+      description: Suspend an active Service Provider (blocks all OAuth requests)
+      operationId: suspendServiceProvider
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SPSuspensionRequest'
+      responses:
+        '200':
+          description: SP suspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPSuspensionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/sp-registry/{spId}/credentials:
+    post:
+      tags:
+        - Credentials
+      summary: Regenerate Client Secret
+      description: Regenerate the OAuth client secret for a confidential client (invalidates old secret)
+      operationId: regenerateClientSecret
+      parameters:
+        - $ref: '#/components/parameters/spId'
+      responses:
+        '200':
+          description: Client secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/sp-registry/{spId}/activity:
+    get:
+      tags:
+        - Activity
+      summary: Get Service Provider Activity
+      description: Retrieve recent activity logs for a Service Provider
+      operationId: getServiceProviderActivity
+      parameters:
+        - $ref: '#/components/parameters/spId'
+        - name: limit
+          in: query
+          description: Number of logs to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: offset
+          in: query
+          description: Pagination offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPActivityResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+      description: NextAuth session cookie (admin role required)
+
+  parameters:
+    spId:
+      name: spId
+      in: path
+      required: true
+      description: Service Provider ID
+      schema:
+        type: string
+        pattern: '^SP-\d+-[A-F0-9]{8}$'
+        example: SP-1730678400000-A1B2C3D4
+
+  schemas:
+    ExternalSP:
+      type: object
+      required:
+        - spId
+        - name
+        - organizationType
+        - country
+        - technicalContact
+        - clientId
+        - clientType
+        - redirectUris
+        - tokenEndpointAuthMethod
+        - requirePKCE
+        - allowedScopes
+        - allowedGrantTypes
+        - attributeRequirements
+        - rateLimit
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        spId:
+          type: string
+          example: SP-1730678400000-A1B2C3D4
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: France Defense Ministry
+        description:
+          type: string
+          maxLength: 500
+        organizationType:
+          type: string
+          enum: [GOVERNMENT, MILITARY, CONTRACTOR, ACADEMIC]
+        country:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: FRA
+        technicalContact:
+          $ref: '#/components/schemas/TechnicalContact'
+        clientId:
+          type: string
+          example: sp-fra-1730678400000
+        clientSecret:
+          type: string
+          description: Only returned on creation/regeneration
+          example: 5Up3rS3cr3tK3y123456789ABCDEF
+        clientType:
+          type: string
+          enum: [confidential, public]
+        redirectUris:
+          type: array
+          items:
+            type: string
+            format: uri
+          minItems: 1
+          maxItems: 10
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+            format: uri
+        jwksUri:
+          type: string
+          format: uri
+        tokenEndpointAuthMethod:
+          type: string
+          enum: [client_secret_basic, client_secret_post, private_key_jwt]
+        requirePKCE:
+          type: boolean
+        allowedScopes:
+          type: array
+          items:
+            type: string
+            enum: [openid, profile, email, offline_access, 'resource:read', 'resource:write', 'resource:search', 'scim:read', 'scim:write']
+        allowedGrantTypes:
+          type: array
+          items:
+            type: string
+            enum: [authorization_code, refresh_token, client_credentials]
+        attributeRequirements:
+          $ref: '#/components/schemas/AttributeRequirements'
+        rateLimit:
+          $ref: '#/components/schemas/RateLimit'
+        federationAgreements:
+          type: array
+          items:
+            $ref: '#/components/schemas/FederationAgreement'
+        status:
+          type: string
+          enum: [PENDING, APPROVED, ACTIVE, SUSPENDED, REVOKED]
+        approvedBy:
+          type: string
+        approvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastActivity:
+          type: string
+          format: date-time
+
+    TechnicalContact:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Jean Dupont
+        email:
+          type: string
+          format: email
+          example: jean.dupont@defense.gouv.fr
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: '+33123456789'
+
+    AttributeRequirements:
+      type: object
+      required:
+        - clearance
+        - country
+      properties:
+        clearance:
+          type: boolean
+        country:
+          type: boolean
+        coi:
+          type: boolean
+        customAttributes:
+          type: array
+          items:
+            type: string
+
+    RateLimit:
+      type: object
+      required:
+        - requestsPerMinute
+        - burstSize
+      properties:
+        requestsPerMinute:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          example: 100
+        burstSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        quotaPerDay:
+          type: integer
+          minimum: 1
+          example: 50000
+
+    FederationAgreement:
+      type: object
+      required:
+        - agreementId
+        - countries
+        - classifications
+        - validUntil
+      properties:
+        agreementId:
+          type: string
+          example: FA-2025-001
+        countries:
+          type: array
+          items:
+            type: string
+            pattern: '^[A-Z]{3}$'
+          example: [USA, FRA]
+        classifications:
+          type: array
+          items:
+            type: string
+            enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+        validUntil:
+          type: string
+          format: date-time
+
+    SPRegistrationRequest:
+      type: object
+      required:
+        - name
+        - organizationType
+        - country
+        - technicalContact
+        - clientType
+        - redirectUris
+        - tokenEndpointAuthMethod
+        - allowedScopes
+        - allowedGrantTypes
+        - attributeRequirements
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        organizationType:
+          type: string
+          enum: [GOVERNMENT, MILITARY, CONTRACTOR, ACADEMIC]
+        country:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        technicalContact:
+          $ref: '#/components/schemas/TechnicalContact'
+        clientType:
+          type: string
+          enum: [confidential, public]
+        redirectUris:
+          type: array
+          items:
+            type: string
+            format: uri
+          minItems: 1
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+            format: uri
+        jwksUri:
+          type: string
+          format: uri
+        tokenEndpointAuthMethod:
+          type: string
+          enum: [client_secret_basic, client_secret_post, private_key_jwt]
+        requirePKCE:
+          type: boolean
+          default: true
+        allowedScopes:
+          type: array
+          items:
+            type: string
+        allowedGrantTypes:
+          type: array
+          items:
+            type: string
+        attributeRequirements:
+          $ref: '#/components/schemas/AttributeRequirements'
+        rateLimit:
+          $ref: '#/components/schemas/RateLimit'
+
+    SPRegistrationResponse:
+      type: object
+      properties:
+        spId:
+          type: string
+        name:
+          type: string
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+          description: Only shown once
+        status:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    SPUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        technicalContact:
+          $ref: '#/components/schemas/TechnicalContact'
+        redirectUris:
+          type: array
+          items:
+            type: string
+        allowedScopes:
+          type: array
+          items:
+            type: string
+        rateLimit:
+          $ref: '#/components/schemas/RateLimit'
+
+    SPUpdateResponse:
+      type: object
+      properties:
+        spId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    SPListResponse:
+      type: object
+      properties:
+        sps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalSP'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+
+    SPApprovalRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+
+    SPApprovalResponse:
+      type: object
+      properties:
+        spId:
+          type: string
+        status:
+          type: string
+        approvedBy:
+          type: string
+        approvedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    SPSuspensionRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+
+    SPSuspensionResponse:
+      type: object
+      properties:
+        spId:
+          type: string
+        status:
+          type: string
+        suspendedBy:
+          type: string
+        suspendedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        message:
+          type: string
+
+    CredentialResponse:
+      type: object
+      properties:
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+          description: Only shown once
+        regeneratedBy:
+          type: string
+        regeneratedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    SPActivity:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+        actorId:
+          type: string
+        actorName:
+          type: string
+        details:
+          type: object
+        ipAddress:
+          type: string
+
+    SPActivityResponse:
+      type: object
+      properties:
+        spId:
+          type: string
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/SPActivity'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad Request - Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Validation Error
+            message: Invalid request body
+            details:
+              name: Name must be at least 3 characters
+
+    Unauthorized:
+      description: Unauthorized - Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized
+            message: Authentication required
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Forbidden
+            message: Admin access required
+
+    NotFound:
+      description: Not Found - Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Not Found
+            message: SP not found
+
+    Conflict:
+      description: Conflict - Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Conflict
+            message: SP with name already exists
+
+    InternalError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Internal Server Error
+            message: An unexpected error occurred

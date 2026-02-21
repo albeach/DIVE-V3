@@ -1,9 +1,9 @@
 /**
  * UUID Validation Utility
- * 
+ *
  * ACP-240 Section 2.1: Unique Identifier Requirements
  * "Globally unique (e.g., UUID per RFC 4122) for identities"
- * 
+ *
  * Validates that identity uniqueID fields conform to RFC 4122 UUID format.
  */
 
@@ -21,10 +21,10 @@ export interface IUUIDValidationResult {
 
 /**
  * Validate UUID format per RFC 4122
- * 
+ *
  * Accepted versions: 1, 3, 4, 5 (not version 2)
  * Preferred: v4 (random) or v5 (SHA-1 hash)
- * 
+ *
  * @param uniqueID - Identifier to validate
  * @param strict - If true, only accept v4/v5 (recommended for security)
  * @returns Validation result
@@ -81,11 +81,11 @@ export function validateUUID(
 
 /**
  * Validate and normalize uniqueID
- * 
+ *
  * - Validates RFC 4122 format
  * - Normalizes to lowercase (canonical form)
  * - Removes hyphens if standardized format needed
- * 
+ *
  * @param uniqueID - Raw identifier
  * @param normalize - If true, convert to lowercase
  * @returns Validated and normalized uniqueID
@@ -112,7 +112,7 @@ export function validateAndNormalizeUUID(
 /**
  * Check if string looks like a UUID (basic format check)
  * Does not validate checksum, just format
- * 
+ *
  * @param value - String to check
  * @returns True if matches UUID pattern
  */
@@ -128,10 +128,10 @@ export function looksLikeUUID(value: string): boolean {
 
 /**
  * Validate UUID or email-based identifier
- * 
+ *
  * Some IdPs may send email addresses as uniqueID.
  * This function accepts both UUIDs and emails, but logs non-UUID format.
- * 
+ *
  * @param uniqueID - Identifier (UUID or email)
  * @returns Validation result
  */
@@ -145,6 +145,11 @@ export function validateIdentifier(uniqueID: string): {
     }
 
     const trimmed = uniqueID.trim();
+
+    // Check if trimmed value is empty (whitespace-only input)
+    if (!trimmed) {
+        return { valid: false, type: 'other', error: 'Identifier is empty or whitespace-only' };
+    }
 
     // Check if UUID
     if (isValidUUID(trimmed)) {
@@ -169,4 +174,3 @@ export function validateIdentifier(uniqueID: string): {
 
     return { valid: true, type: 'other' };
 }
-

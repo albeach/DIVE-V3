@@ -14,15 +14,21 @@ export interface IJWTPayload {
     email?: string;
     preferred_username?: string;
     clearance?: string;
+    clearanceOriginal?: string;        // ACP-240 Section 4.3: Original national clearance
+    clearanceCountry?: string;         // ACP-240 Section 4.3: Country that issued clearance
     countryOfAffiliation?: string;
     acpCOI?: string[];
+    dutyOrg?: string;                  // Gap #4: User's duty organization
+    orgUnit?: string;                  // Gap #4: User's organizational unit
     iss?: string;
     exp?: number;
     iat?: number;
     // AAL2/FAL2 claims
     aud?: string | string[];
-    acr?: string;
-    amr?: string[];
+    // Phase 1: Support both numeric (new) and URN (legacy) ACR formats during migration
+    acr?: string | number;             // Numeric (0,1,2) or URN (urn:mace:incommon:iap:silver)
+    // Phase 1: Support both array (new) and JSON string (legacy) AMR formats during migration
+    amr?: string[] | string;           // Array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
     auth_time?: number;
 }
 
@@ -34,7 +40,7 @@ const TEST_SECRET = 'test-secret';
 /**
  * Default issuer (Keycloak realm)
  */
-const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-pilot';
+const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-broker-usa';
 
 /**
  * Create a mock JWT token with custom claims
@@ -185,5 +191,12 @@ export function verifyTestJWT(token: string): IJWTPayload {
     return jwt.verify(token, TEST_SECRET) as IJWTPayload;
 }
 
-
-
+/**
+ * Alias for createMockJWT (backward compatibility with E2E tests)
+ * @param claims Custom claims to include in the token
+ * @param secret Signing secret (defaults to test secret)
+ * @returns Signed JWT token string
+ */
+export function generateTestJWT(claims: Partial<IJWTPayload> = {}, secret: string = TEST_SECRET): Promise<string> {
+    return Promise.resolve(createMockJWT(claims, secret));
+}

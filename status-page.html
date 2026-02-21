@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIVE V3 Instance Status</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .instances {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .instance-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .instance-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .instance-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .flag {
+            font-size: 2.5em;
+            margin-right: 15px;
+        }
+
+        .instance-title {
+            flex: 1;
+        }
+
+        .instance-title h2 {
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .instance-title p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .status.running {
+            background: #10b981;
+            color: white;
+        }
+
+        .status.pending {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .status.error {
+            background: #ef4444;
+            color: white;
+        }
+
+        .links {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .link {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .link:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .link-icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .health-check {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+
+        .health-check.loading {
+            color: #666;
+        }
+
+        .health-check.success {
+            color: #10b981;
+            background: #d1fae5;
+        }
+
+        .health-check.error {
+            color: #ef4444;
+            background: #fee2e2;
+        }
+
+        .refresh-btn {
+            display: block;
+            margin: 20px auto;
+            padding: 12px 30px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🌐 DIVE V3 Instance Status</h1>
+
+        <div class="instances">
+            <!-- USA Instance -->
+            <div class="instance-card">
+                <div class="instance-header">
+                    <div class="flag">🇺🇸</div>
+                    <div class="instance-title">
+                        <h2>USA <span class="status running">RUNNING</span></h2>
+                        <p>United States</p>
+                    </div>
+                </div>
+                <div class="links">
+                    <a href="http://localhost:3000" class="link" target="_blank">
+                        <span class="link-icon">🌐</span>
+                        <span>Frontend App</span>
+                    </a>
+                    <a href="http://localhost:4000/health" class="link" target="_blank">
+                        <span class="link-icon">⚡</span>
+                        <span>Backend API Health</span>
+                    </a>
+                    <a href="http://localhost:8081/admin" class="link" target="_blank">
+                        <span class="link-icon">🔐</span>
+                        <span>Keycloak Admin</span>
+                    </a>
+                </div>
+                <div class="health-check loading" id="health-usa">Checking...</div>
+            </div>
+
+            <!-- FRA Instance -->
+            <div class="instance-card">
+                <div class="instance-header">
+                    <div class="flag">🇫🇷</div>
+                    <div class="instance-title">
+                        <h2>FRA <span class="status pending">STARTING</span></h2>
+                        <p>France</p>
+                    </div>
+                </div>
+                <div class="links">
+                    <a href="http://localhost:3001" class="link" target="_blank">
+                        <span class="link-icon">🌐</span>
+                        <span>Frontend App</span>
+                    </a>
+                    <a href="http://localhost:4001/health" class="link" target="_blank">
+                        <span class="link-icon">⚡</span>
+                        <span>Backend API Health</span>
+                    </a>
+                    <a href="https://localhost:8444/admin" class="link" target="_blank">
+                        <span class="link-icon">🔐</span>
+                        <span>Keycloak Admin</span>
+                    </a>
+                </div>
+                <div class="health-check loading" id="health-fra">Checking...</div>
+            </div>
+
+            <!-- GBR Instance -->
+            <div class="instance-card">
+                <div class="instance-header">
+                    <div class="flag">🇬🇧</div>
+                    <div class="instance-title">
+                        <h2>GBR <span class="status pending">STARTING</span></h2>
+                        <p>United Kingdom</p>
+                    </div>
+                </div>
+                <div class="links">
+                    <a href="http://localhost:3002" class="link" target="_blank">
+                        <span class="link-icon">🌐</span>
+                        <span>Frontend App</span>
+                    </a>
+                    <a href="http://localhost:4002/health" class="link" target="_blank">
+                        <span class="link-icon">⚡</span>
+                        <span>Backend API Health</span>
+                    </a>
+                    <a href="https://localhost:8445/admin" class="link" target="_blank">
+                        <span class="link-icon">🔐</span>
+                        <span>Keycloak Admin</span>
+                    </a>
+                </div>
+                <div class="health-check loading" id="health-gbr">Checking...</div>
+            </div>
+
+            <!-- DEU Instance -->
+            <div class="instance-card">
+                <div class="instance-header">
+                    <div class="flag">🇩🇪</div>
+                    <div class="instance-title">
+                        <h2>DEU <span class="status pending">STARTING</span></h2>
+                        <p>Germany</p>
+                    </div>
+                </div>
+                <div class="links">
+                    <a href="http://localhost:3003" class="link" target="_blank">
+                        <span class="link-icon">🌐</span>
+                        <span>Frontend App</span>
+                    </a>
+                    <a href="http://localhost:4003/health" class="link" target="_blank">
+                        <span class="link-icon">⚡</span>
+                        <span>Backend API Health</span>
+                    </a>
+                    <a href="https://localhost:8446/admin" class="link" target="_blank">
+                        <span class="link-icon">🔐</span>
+                        <span>Keycloak Admin</span>
+                    </a>
+                </div>
+                <div class="health-check loading" id="health-deu">Checking...</div>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="checkHealth()">🔄 Refresh Status</button>
+    </div>
+
+    <script>
+        async function checkHealth() {
+            const instances = [
+                { id: 'health-usa', url: 'http://localhost:4000/health' },
+                { id: 'health-fra', url: 'http://localhost:4001/health' },
+                { id: 'health-gbr', url: 'http://localhost:4002/health' },
+                { id: 'health-deu', url: 'http://localhost:4003/health' }
+            ];
+
+            for (const instance of instances) {
+                const element = document.getElementById(instance.id);
+                element.className = 'health-check loading';
+                element.textContent = 'Checking...';
+
+                try {
+                    const response = await fetch(instance.url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        element.className = 'health-check success';
+                        element.textContent = `✅ Healthy - Uptime: ${Math.floor(data.uptime / 60)}m ${data.uptime % 60}s`;
+                    } else {
+                        throw new Error('Not healthy');
+                    }
+                } catch (error) {
+                    element.className = 'health-check error';
+                    element.textContent = '❌ Not responding (may be starting up)';
+                }
+            }
+        }
+
+        // Check health on page load
+        checkHealth();
+
+        // Auto-refresh every 10 seconds
+        setInterval(checkHealth, 10000);
+    </script>
+</body>
+
+</html>
+

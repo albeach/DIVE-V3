@@ -125,4 +125,3 @@ export default function SLACountdown({ slaDeadline, slaStatus, action }: SLACoun
         </div>
     );
 }
-

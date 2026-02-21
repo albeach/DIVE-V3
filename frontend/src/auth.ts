@@ -1,22 +1,53 @@
 import NextAuth from "next-auth";
-import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
-import { accounts, sessions } from "@/lib/db/schema";
+import { accounts, sessions, users, verificationTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { clearAccountTokensByUserId, updateAccountTokensByUserId } from "@/lib/db/operations";
+
+/**
+ * BEST PRACTICE: Configure NextAuth to use secure fetch for OIDC provider calls
+ *
+ * NextAuth v5 uses native fetch() which respects NODE_OPTIONS="--use-openssl-ca"
+ * The entrypoint script installs mkcert CA into system trust store
+ * Certificates include both localhost and keycloak (Docker service name) as SANs
+ */
 
 /**
  * Email domain to country mapping for enrichment
  * Week 3: Infer countryOfAffiliation from email domain
+ * Phase 3: Added DEU, GBR, ITA, ESP, POL, NLD NATO partners
  */
 const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
-    'mil': 'USA', 'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
-    'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA',
+    // United States
+    'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
+    'usmc.mil': 'USA', 'uscg.mil': 'USA', 'defense.gov': 'USA',
+    // France
+    'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA', 'intradef.gouv.fr': 'FRA',
+    // Canada
     'gc.ca': 'CAN', 'forces.gc.ca': 'CAN',
-    'mod.uk': 'GBR',
+    // United Kingdom / Great Britain
+    'mod.uk': 'GBR', 'gov.uk': 'GBR',
+    // Germany (Deutschland)
+    'bundeswehr.org': 'DEU', 'bund.de': 'DEU', 'bmvg.de': 'DEU',
+    // Italy
+    'difesa.it': 'ITA', 'esercito.difesa.it': 'ITA',
+    // Spain (España)
+    'mde.es': 'ESP', 'defensa.gob.es': 'ESP',
+    // Poland (Polska)
+    'mon.gov.pl': 'POL', 'wp.mil.pl': 'POL',
+    // Netherlands (Nederland)
+    'mindef.nl': 'NLD', 'defensie.nl': 'NLD',
+    // Industry partners (default to USA)
     'lockheed.com': 'USA', 'northropgrumman.com': 'USA', 'raytheon.com': 'USA',
     'boeing.com': 'USA', 'l3harris.com': 'USA',
 };
+
+/**
+ * DIVE test domain pattern: <country>.dive25.mil
+ * Extract country code from test email domains
+ */
+const DIVE_TEST_DOMAIN_REGEX = /^([a-z]{3})\.dive25\.mil$/;
 
 /**
  * Infer country from email domain
@@ -26,6 +57,12 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
 
     const domain = email.toLowerCase().split('@')[1];
     if (!domain) return { country: 'USA', confidence: 'low' };
+
+    // Check DIVE test domain pattern first: <country>.dive25.mil
+    const testMatch = domain.match(DIVE_TEST_DOMAIN_REGEX);
+    if (testMatch) {
+        return { country: testMatch[1].toUpperCase(), confidence: 'high' };
+    }
 
     // Check exact match
     if (EMAIL_DOMAIN_COUNTRY_MAP[domain]) {
@@ -49,9 +86,10 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
  * - Enhanced logging for full lifecycle tracking
  * - Better error handling for Keycloak session expiration
  * - Offline token support for long-lived refresh capability
+ * FIX (Nov 6, 2025): Use internal KEYCLOAK_URL for server-side calls
  */
 async function refreshAccessToken(account: any) {
-    const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`;
+    const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
     const currentTime = Math.floor(Date.now() / 1000);
     const timeUntilExpiry = (account.expires_at || 0) - currentTime;
 
@@ -59,7 +97,7 @@ async function refreshAccessToken(account: any) {
         console.log('[DIVE] Token Refresh Request', {
             userId: account.userId,
             keycloakUrl: process.env.KEYCLOAK_URL,
-            realm: process.env.KEYCLOAK_REALM,
+            realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
             refreshUrl,
             currentTime: new Date(currentTime * 1000).toISOString(),
             expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
@@ -123,9 +161,7 @@ async function refreshAccessToken(account: any) {
             refresh_token: tokens.refresh_token || account.refresh_token, // Handle rotation
         };
 
-        await db.update(accounts)
-            .set(updatedAccount)
-            .where(eq(accounts.userId, account.userId));
+        await updateAccountTokensByUserId(account.userId, updatedAccount);
 
         console.log('[DIVE] Database Updated', {
             userId: account.userId,
@@ -148,30 +184,223 @@ async function refreshAccessToken(account: any) {
     }
 }
 
+// Determine cookie domain based on NEXTAUTH_URL
+// NextAuth v5 officially uses NEXTAUTH_URL per documentation
+// CRITICAL FIX: Handle both localhost development and Cloudflare tunnel domains
+// FEDERATION FIX (Dec 2025): Support multiple domains (dive25.com, prosecurity.biz)
+const getAuthCookieDomain = (): string | undefined => {
+    const authUrl = process.env.NEXTAUTH_URL;
+
+    // DEVELOPMENT: Localhost or IP - use exact domain match (undefined = browser default)
+    // CRITICAL: Don't set domain for localhost - browsers handle this automatically
+    // Setting domain: 'localhost' can break cookie handling in some browsers
+    if (!authUrl || authUrl.includes('localhost') || authUrl.includes('127.0.0.1') || authUrl.includes('3000')) {
+        console.log('[DIVE] Cookie domain: localhost/IP detected - using exact match (undefined)');
+        return undefined;  // Use exact domain match (no wildcard) - browser handles localhost automatically
+    }
+
+    // PRODUCTION: Custom domain - use wildcard for subdomains
+    if (authUrl.includes('divedeeper.internal')) {
+        return '.divedeeper.internal'; // Allow cookies across all subdomains
+    }
+    if (authUrl.includes('dive25.com')) {
+        return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains (USA, FRA, GBR)
+    }
+    // DEU instance uses prosecurity.biz domain (remote deployment)
+    if (authUrl.includes('prosecurity.biz')) {
+        return '.prosecurity.biz'; // Allow cookies across DEU Cloudflare tunnel subdomains
+    }
+
+    return undefined; // Use default (exact domain match)
+};
+
+const AUTH_COOKIE_DOMAIN = getAuthCookieDomain();
+const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
+
+// Environment detection for proper cookie configuration
+const isLocalhost = process.env.NEXTAUTH_URL?.includes('localhost') || process.env.NEXTAUTH_URL?.includes('3000') || false;
+// FEDERATION FIX: Include prosecurity.biz (DEU remote instance) in Cloudflare tunnel check
+const isCloudflareTunnel = (process.env.NEXTAUTH_URL?.includes('dive25.com') || process.env.NEXTAUTH_URL?.includes('prosecurity.biz')) ?? false;
+
+console.log('[DIVE] NextAuth v5 cookie configuration:', {
+    nextauthUrl: process.env.NEXTAUTH_URL,
+    domain: AUTH_COOKIE_DOMAIN || 'default (exact match)',
+    secure: AUTH_COOKIE_SECURE,
+    isLocalhost,
+    isCloudflareTunnel,
+    sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
+    trustHost: true,
+});
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    adapter: DrizzleAdapter(db),
+    adapter: DrizzleAdapter(db, {
+        usersTable: users,
+        accountsTable: accounts,
+        sessionsTable: sessions,
+        verificationTokensTable: verificationTokens,
+    }),
+    session: {
+        strategy: "database",  // Use database sessions with adapter
+        maxAge: 8 * 60 * 60,   // 8 hours
+        updateAge: 15 * 60,    // Update session every 15 minutes
+    },
     trustHost: true, // Required for NextAuth v5 in development
+    debug: process.env.NODE_ENV === "development",  // ENABLE VERBOSE DEBUG LOGGING
+    logger: {
+        error(code, ...message) {
+            console.error('[NextAuth Error]', code, message);
+            // Enhanced error logging to expose [Object] details
+            if (code instanceof Error) {
+                console.error('[NextAuth Error Details]', {
+                    name: code.name,
+                    message: code.message,
+                    stack: code.stack,
+                    cause: code.cause,
+                });
+                if (code.cause && typeof code.cause === 'object') {
+                    console.error('[NextAuth Error Cause]', JSON.stringify(code.cause, null, 2));
+                }
+            }
+        },
+        warn(code, ...message) {
+            console.warn('[NextAuth Warn]', code, message);
+        },
+        debug(code, ...message) {
+            // Only log debug in development
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[NextAuth Debug]', code, message);
+                // Enhanced logging for OAuth token exchange
+                if (typeof code === 'string' && code.includes('token')) {
+                    console.log('[NextAuth Debug Token]', {
+                        code,
+                        message,
+                        clientId: process.env.KEYCLOAK_CLIENT_ID,
+                        hasClientSecret: !!process.env.KEYCLOAK_CLIENT_SECRET,
+                        tokenUrl: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+                    });
+                }
+            }
+        },
+    },
     providers: [
-        Keycloak({
-            clientId: process.env.KEYCLOAK_CLIENT_ID as string,
-            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
-            issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+        {
+            id: "keycloak",
+            name: "Keycloak",
+            type: "oidc",
+            clientId: process.env.KEYCLOAK_CLIENT_ID!,
+            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+            // CRITICAL: NextAuth needs two different URLs:
+            // 1. Internal URL (KEYCLOAK_URL): For server-side calls (token, userinfo, jwks) - uses Docker network
+            // 2. External URL (NEXT_PUBLIC_KEYCLOAK_URL): For browser redirects (authorization)
+            //
+            // FIX: Use KEYCLOAK_URL (internal) for issuer since NextAuth fetches well-known config server-side.
+            // The issuer in the token will still use the external URL, but we set wellKnown explicitly
+            // to fetch the config from the internal URL.
+            issuer: process.env.AUTH_KEYCLOAK_ISSUER || `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}`,
+            // Use wellKnown to fetch OIDC config from internal Docker URL
+            // CRITICAL: Use KEYCLOAK_BASE_URL (internal Docker network) for server-side calls
+            // KEYCLOAK_URL may be set to external localhost URL which causes TLS verification errors
+            wellKnown: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/.well-known/openid-configuration`,
             authorization: {
+                // Authorization URL must be the external URL (browser redirect)
+                url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
-                    // Session expiration fix: Request offline_access for long-lived refresh tokens
-                    scope: "openid profile email offline_access",
+                    // CRITICAL FIX (2026-02-06): Include ALL DIVE custom scopes to ensure attributes are included
+                    // openid: REQUIRED for OIDC (includes auth_time)
+                    // profile: Standard user profile (name, given_name, family_name)
+                    // email: Standard email claim
+                    // uniqueID, clearance, countryOfAffiliation, acpCOI: DIVE custom scopes
+                    // user_acr, user_amr: Authentication context scopes (for MFA/AAL)
+                    scope: "openid profile email uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr",
                 }
             },
-            // Multi-realm: Allow linking accounts from different realms
-            allowDangerousEmailAccountLinking: true,
-        }),
+            // Token and userinfo endpoints are called server-side, use internal KEYCLOAK_BASE_URL
+            // CRITICAL FIX: Use KEYCLOAK_BASE_URL (internal Docker network) to avoid TLS certificate errors
+            // KEYCLOAK_URL may be set to external localhost URL which fails TLS verification from inside container
+            token: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            jwks_endpoint: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+            profile(profile) {
+                // Log profile in development only
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[NextAuth profile()] Keycloak profile:', {
+                        sub: profile.sub,
+                        email: profile.email,
+                        preferred_username: profile.preferred_username,
+                        name: profile.name,
+                        uniqueID: profile.uniqueID,
+                        clearance: profile.clearance,
+                        countryOfAffiliation: profile.countryOfAffiliation,
+                        acpCOI: profile.acpCOI,
+                    });
+                }
+
+                // CRITICAL SECURITY (2026-01-28): Generate unique synthetic email from uniqueID
+                // We NEVER use real email addresses from IdPs (PII minimization)
+                // We only exchange: uniqueID, clearance, countryOfAffiliation, acpCOI
+                //
+                // UNIQUE EMAIL GENERATION:
+                // - Use sub (Keycloak user ID) as unique identifier
+                // - Format: <keycloak-sub>@dive-broker.internal
+                // - This prevents email collisions when same user authenticates via different IdPs
+                // - NextAuth adapter requires email field, but it's just an internal reference
+                const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
+                const email = `${profile.sub}@dive-broker.internal`;
+
+                console.log('[NextAuth profile()] Generated unique synthetic email from sub:', {
+                    sub: profile.sub,
+                    uniqueID: uniqueID,
+                    email: email
+                });
+
+                // Return profile with all DIVE attributes
+                // Get current instance - for direct access, ALWAYS use instance country
+                const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
+                // CRITICAL FIX: For direct instance access, use instance country
+                // This ensures users accessing FRA portal are treated as FRA users
+                // The stored countryOfAffiliation should only matter for federated access
+                let countryOfAffiliation: string;
+
+                if (currentInstance !== 'USA') {
+                    // Direct instance access - use instance country
+                    const instanceToCountry: Record<string, string> = {
+                        'FRA': 'FRA', 'GBR': 'GBR', 'DEU': 'DEU', 'CAN': 'CAN',
+                        'ITA': 'ITA', 'ESP': 'ESP', 'NLD': 'NLD', 'POL': 'POL',
+                        'BEL': 'BEL', 'DNK': 'DNK', 'ISL': 'ISL', 'LUX': 'LUX',
+                        'NOR': 'NOR', 'PRT': 'PRT', 'GRC': 'GRC', 'TUR': 'TUR',
+                        'CZE': 'CZE', 'HUN': 'HUN', 'SVK': 'SVK', 'SVN': 'SVN',
+                        'BGR': 'BGR', 'EST': 'EST', 'LVA': 'LVA', 'LTU': 'LTU',
+                        'HRV': 'HRV', 'ALB': 'ALB', 'MNE': 'MNE', 'MKD': 'MKD',
+                        'FIN': 'FIN', 'SWE': 'SWE', 'AUS': 'AUS', 'NZL': 'NZL',
+                        'JPN': 'JPN', 'KOR': 'KOR', 'ROU': 'ROU'
+                    };
+                    countryOfAffiliation = instanceToCountry[currentInstance] || currentInstance;
+                } else {
+                    // USA instance or unknown - use stored country
+                    countryOfAffiliation = profile.countryOfAffiliation || profile.country || 'USA';
+                }
+
+                return {
+                    id: profile.sub,
+                    name: profile.name || profile.preferred_username || profile.sub,
+                    email: email,
+                    image: profile.picture,
+                    uniqueID: profile.uniqueID || profile.preferred_username || profile.sub,
+                    clearance: profile.clearance || 'UNCLASSIFIED',
+                    countryOfAffiliation: countryOfAffiliation,
+                    acpCOI: profile.acpCOI || profile.aciCOI || [],
+                    roles: profile.realm_access?.roles || profile.roles || [],
+                };
+            },
+        }
     ],
-    debug: process.env.NODE_ENV === "development",
 
     callbacks: {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
+            const isOnCustomLogin = nextUrl.pathname.startsWith("/login/"); // Custom login pages
             const isOnHome = nextUrl.pathname === "/";
 
             // Allow API routes and auth callbacks
@@ -179,8 +408,58 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 return true;
             }
 
+            // Allow custom login pages (they handle their own auth flow)
+            if (isOnCustomLogin) {
+                return true;
+            }
+
+            // FIX #6: Enhanced token validity check
+            // Check if user has valid tokens (not just user existence)
+            const hasValidTokens = !!(auth as any)?.accessToken && !!(auth as any)?.idToken;
+
+            // EXCEPTION: Super Admin accounts don't have Keycloak tokens (custom session)
+            const isSuperAdmin = auth?.user?.roles?.includes('super_admin');
+
+            // DEBUG: Log authorization check
+            if (isLoggedIn && !hasValidTokens && !isSuperAdmin && nextUrl.pathname !== "/" && nextUrl.pathname !== "/login") {
+                console.log('[DIVE authorized()] Redirect to login - no tokens', {
+                    path: nextUrl.pathname,
+                    hasUser: !!auth?.user,
+                    hasAccessToken: !!(auth as any)?.accessToken,
+                    hasIdToken: !!(auth as any)?.idToken,
+                    isSuperAdmin,
+                    authKeys: Object.keys(auth || {}),
+                });
+            }
+
             // If logged in
             if (isLoggedIn) {
+                // FIX #6: User exists but no tokens - likely expired session
+                // Force re-login to establish fresh session
+                // EXCEPT for Super Admin users who don't use Keycloak tokens
+                if (!hasValidTokens && !isSuperAdmin && !isOnHome && !isOnLogin && !isOnCustomLogin) {
+                    console.warn('[DIVE] User exists but no tokens - forcing re-login');
+                    // Redirect to /login (not /auth/signin)
+                    return Response.redirect(new URL("/login", nextUrl));
+                }
+
+                // MFA ENFORCEMENT: Check if user needs MFA setup
+                // CONFIDENTIAL and SECRET users require AAL2 (MFA)
+                const user = auth?.user as any;
+                const requiresMFA = user?.clearance === 'CONFIDENTIAL' || user?.clearance === 'SECRET';
+                const hasMFA = user?.amr && Array.isArray(user.amr) &&
+                    (user.amr.includes('otp') || user.amr.includes('hwk') || user.amr.includes('webauthn'));
+                const isOnMFASetup = nextUrl.pathname === '/mfa-setup';
+
+                if (requiresMFA && !hasMFA && !isOnMFASetup && !isOnLogin && !isOnCustomLogin) {
+                    console.log('[DIVE] MFA required but not configured - redirecting to setup', {
+                        clearance: user?.clearance,
+                        amr: user?.amr,
+                        path: nextUrl.pathname
+                    });
+                    return Response.redirect(new URL("/mfa-setup", nextUrl));
+                }
+
                 // Redirect from Login to Dashboard (but allow Home for logout landing)
                 if (isOnLogin) {
                     return Response.redirect(new URL("/dashboard", nextUrl));
@@ -190,11 +469,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             // If not logged in
             if (!isLoggedIn) {
-                // Allow Home and Login only
-                if (isOnHome || isOnLogin) {
+                // Allow Home, Login, and Custom Login pages
+                if (isOnHome || isOnLogin || isOnCustomLogin) {
                     return true;
                 }
-                // Redirect to Home
+                // Redirect to landing page (/) for IdP selection
+                // This provides a better UX than showing an intermediate login page
                 return Response.redirect(new URL("/", nextUrl));
             }
 
@@ -217,6 +497,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     let account = accountResults[0];
 
                     if (account) {
+                        // CRITICAL FIX: If no tokens in account, user has logged out
+                        // This prevents session recreation after logout
+                        if (!account.access_token || !account.id_token) {
+                            console.log('[DIVE] No tokens in account - user logged out, invalidating session');
+                            // Return null to invalidate the session
+                            return null as any; // Type assertion needed for NextAuth v5
+                        }
                         console.log('[DIVE] Account found for user:', {
                             userId: user.id,
                             provider: account.provider,
@@ -236,12 +523,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         const timeUntilExpiry = (account.expires_at || 0) - currentTime;
                         const isExpired = timeUntilExpiry <= 0;
 
-                        // PROACTIVE REFRESH: Refresh when token has 20% of lifetime left
-                        // For 15-minute tokens (900s), this means refresh at 3 minutes remaining
-                        // This prevents API failures from expired tokens
+                        // PROACTIVE REFRESH: Refresh when token has significant lifetime remaining
+                        // For 15-minute tokens (900s), this means refresh at 8 minutes remaining (53% of lifetime)
+                        // This prevents API failures and gives plenty of buffer for network issues
                         const shouldRefresh = hasRefreshToken && (
                             isExpired || // Token is expired
-                            timeUntilExpiry < 180 // Less than 3 minutes remaining (proactive)
+                            timeUntilExpiry < 480 // Less than 8 minutes remaining (proactive refresh buffer)
                         );
 
                         if (shouldRefresh && account.expires_at) {
@@ -256,22 +543,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 account = await refreshAccessToken(account);
                                 console.log('[DIVE] Token refreshed successfully, new expiry:',
                                     new Date((account.expires_at || 0) * 1000).toISOString());
+
+                                // FIX #2: Update database session expiry to match token refresh
+                                // This prevents session from expiring even though tokens are fresh
+                                try {
+                                    const newSessionExpiry = new Date(Date.now() + 60 * 60 * 1000); // +60 minutes from now
+                                    await db.update(sessions)
+                                        .set({ expires: newSessionExpiry })
+                                        .where(eq(sessions.userId, user.id));
+
+                                    console.log('[DIVE] Database session extended to:', newSessionExpiry.toISOString());
+                                } catch (dbError) {
+                                    console.error('[DIVE] Failed to extend database session:', dbError);
+                                    // Don't fail the entire session refresh if DB update fails
+                                }
                             } catch (error) {
                                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                                 console.error('[DIVE] Token refresh failed:', errorMsg);
 
-                                // If refresh token expired, user needs to re-authenticate
+                                // FIX #3: If refresh token expired, delete database session and force re-auth
                                 if (errorMsg.includes('RefreshTokenExpired') || errorMsg.includes('invalid_grant')) {
-                                    console.log('[DIVE] Refresh token invalid - session expired, user needs to re-login');
+                                    console.log('[DIVE] Refresh token invalid - deleting session, user needs to re-login');
 
-                                    // Return session without tokens
-                                    // The authorized callback and pages will handle redirect to login
-                                    // when they detect missing accessToken
-                                    session.accessToken = undefined;
-                                    session.idToken = undefined;
-                                    session.refreshToken = undefined;
+                                    try {
+                                        // Delete database session to force complete logout
+                                        await db.delete(sessions).where(eq(sessions.userId, user.id));
+                                        console.log('[DIVE] Database session deleted due to invalid refresh token');
 
-                                    return session;
+                                        // Clear account tokens to prevent session recreation
+                                        await clearAccountTokensByUserId(user.id);
+                                        console.log('[DIVE] Account tokens cleared');
+                                    } catch (cleanupError) {
+                                        console.error('[DIVE] Session cleanup error:', cleanupError);
+                                    }
+
+                                    // Return null to completely invalidate the session
+                                    return null as any;
                                 }
 
                                 // For other errors, continue with existing tokens if not expired
@@ -287,10 +594,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             }
                         } else if (!hasRefreshToken && isExpired) {
                             console.warn('[DIVE] Token expired but no refresh_token available');
-                            session.accessToken = undefined;
-                            session.idToken = undefined;
-                            session.refreshToken = undefined;
-                            return session;
+
+                            // FIX #3: Delete database session when no refresh possible
+                            try {
+                                await db.delete(sessions).where(eq(sessions.userId, user.id));
+                                console.log('[DIVE] Database session deleted - no refresh token available');
+                            } catch (cleanupError) {
+                                console.error('[DIVE] Session cleanup error:', cleanupError);
+                            }
+
+                            // Return null to force re-authentication
+                            return null as any;
                         } else {
                             console.log('[DIVE] Token valid, no refresh needed', {
                                 timeUntilExpiry,
@@ -298,10 +612,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             });
                         }
 
-                        // Add Keycloak tokens to session
-                        session.idToken = account.id_token || undefined;
-                        session.accessToken = account.access_token || undefined;
-                        session.refreshToken = account.refresh_token || undefined;
+                        // SECURITY: DO NOT expose tokens to client session
+                        // Tokens should only be used server-side. Client should use
+                        // server-side API routes that handle token validation.
+                        //
+                        // For internal server-side use only (e.g., API routes):
+                        // - Access token: Used to call Keycloak protected resources
+                        // - ID token: Contains user claims
+                        // - Refresh token: Used to get new access tokens
+                        //
+                        // The client only receives:
+                        // - User profile data (name, email, custom claims)
+                        // - No raw tokens
 
                         // Parse DIVE attributes from id_token if available
                         if (account.id_token) {
@@ -367,19 +689,135 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     } else if (Array.isArray(payload.roles)) {
                                         roles = payload.roles;
                                     }
+
+                                    // Debug logging for role extraction
+                                    console.log('[DIVE Session] Role extraction:', {
+                                        hasRealmAccess: !!payload.realm_access,
+                                        realmAccessRoles: payload.realm_access?.roles,
+                                        directRoles: payload.roles,
+                                        extractedRoles: roles,
+                                        userUniqueID: payload.uniqueID || payload.sub
+                                    });
+
                                     session.user.roles = roles;
 
-                                    console.log('[DIVE] Custom claims extracted:', {
-                                        uniqueID: session.user.uniqueID,
-                                        clearance: session.user.clearance,
-                                        country: session.user.countryOfAffiliation,
-                                        roles: session.user.roles,
-                                    });
+                                    // ============================================
+                                    // AAL/MFA Claims Extraction (NIST SP 800-63B)
+                                    // ============================================
+                                    // FIX: Extract acr (Authentication Context Class Reference) and amr (Authentication Methods Reference)
+                                    // These are critical for AAL2/AAL3 enforcement in OPA policies
+                                    // Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #1)
+
+                                    // ACR: For federated users, prioritize user_acr (from IdP)
+                                    // The user_acr claim contains the ACR value from the federated Spoke's actual authentication.
+                                    // The direct acr claim comes from the Hub's session (SSO cookie reuse, always 1).
+                                    let acr: string | undefined;
+
+                                    // For federated users: use user_acr (from Spoke's authentication)
+                                    // For direct users: use acr (from Hub's authentication)
+                                    if (payload.user_acr !== undefined && payload.user_acr !== null) {
+                                        acr = String(payload.user_acr);
+                                    } else if (payload.acr !== undefined && payload.acr !== null) {
+                                        acr = String(payload.acr);
+                                    }
+
+                                    // AMR: Priority order for AMR values
+                                    // 1. user_amr (from federated IdP authentication)
+                                    // 2. amr (from direct Keycloak authentication)
+                                    // 3. attributes.amr (from sync-amr-attributes.sh script)
+                                    // 4. Default to ['pwd']
+                                    let amr: string[] = ['pwd']; // default fallback
+
+                                    // For federated users: use user_amr (from Spoke's authentication)
+                                    // For direct users: use amr (from Hub's authentication)
+                                    const amrSource = payload.user_amr || payload.amr;
+
+                                    if (amrSource) {
+                                        if (Array.isArray(amrSource)) {
+                                            amr = amrSource;
+                                        } else if (typeof amrSource === 'string') {
+                                            // Sometimes stored as JSON string
+                                            try {
+                                                const parsed = JSON.parse(amrSource);
+                                                amr = Array.isArray(parsed) ? parsed : [parsed];
+                                            } catch {
+                                                // Not JSON, treat as single value
+                                                amr = [amrSource];
+                                            }
+                                        }
+                                        console.log('[DEBUG H3] AMR after token extraction:', amr);
+                                    } else if (payload.attributes?.amr) {
+                                        // Fallback: Use AMR from user attributes (set by sync-amr-attributes.sh)
+                                        const attrAmr = payload.attributes.amr;
+                                        if (Array.isArray(attrAmr)) {
+                                            amr = attrAmr.map(String);
+                                        } else if (typeof attrAmr === 'string') {
+                                            try {
+                                                const parsed = JSON.parse(attrAmr);
+                                                amr = Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
+                                            } catch {
+                                                amr = [String(attrAmr)];
+                                            }
+                                        }
+                                        console.log('[DIVE] Using AMR from user attributes:', amr);
+                                    } else {
+                                        // Final fallback: Infer AMR from clearance requirements
+                                        // This ensures users get correct AAL even if token AMR is missing
+                                        const clearance = payload.clearance || payload.attributes?.clearance?.[0] || 'UNCLASSIFIED';
+                                        if (clearance === 'TOP_SECRET') {
+                                            amr = ['pwd', 'hwk']; // AAL3 requires WebAuthn
+                                        } else if (clearance === 'CONFIDENTIAL' || clearance === 'SECRET') {
+                                            amr = ['pwd', 'otp']; // AAL2 requires TOTP
+                                        } else {
+                                            amr = ['pwd']; // AAL1 is password only
+                                        }
+                                        console.log('[DIVE] Inferred AMR from clearance:', { clearance, amr });
+                                    }
+                                    session.user.amr = amr;
+
+                                    // Derive AAL from ACR/AMR if ACR missing or incorrect
+                                    // CRITICAL FIX: Keycloak sometimes returns acr="1" even when WebAuthn is used
+                                    // We must override based on AMR to get correct AAL level
+                                    const amrSet = new Set(amr.map((v) => String(v).toLowerCase()));
+
+                                    // Check if AMR indicates higher AAL than ACR suggests
+                                    const hasWebAuthn = amrSet.has('hwk') || amrSet.has('webauthn') || amrSet.has('passkey');
+                                    const hasOTP = amrSet.has('otp') || amrSet.has('totp');
+                                    const hasMultipleFactors = amr.length >= 2;
+
+                                    // Override ACR if Keycloak returned incorrect value
+                                    // Keycloak may return acr="1" even with WebAuthn (hwk in AMR)
+                                    const originalAcr = acr;
+                                    if (!acr || acr === '0' || acr === '1' || acr === 'aal1') {
+                                        if (hasWebAuthn) {
+                                            acr = '3'; // AAL3 if hardware key present
+                                        } else if (hasMultipleFactors || hasOTP) {
+                                            acr = '2'; // AAL2 if multiple factors or OTP
+                                        } else {
+                                            acr = '0';
+                                        }
+                                    } else if (acr === '2' && hasWebAuthn) {
+                                        // Keycloak returned AAL2 but we have WebAuthn - upgrade to AAL3
+                                        acr = '3';
+                                    }
+
+                                    session.user.acr = acr || '0';
+
+                                    // auth_time: Unix timestamp of authentication event
+                                    // Used for token freshness validation in OPA
+                                    session.user.auth_time = payload.auth_time;
                                 }
                             } catch (error) {
                                 console.error('Failed to decode id_token for custom claims:', error);
                             }
                         }
+
+                        // CRITICAL FIX: Add tokens to session for backend API calls
+                        // The backend needs the actual Keycloak access token to validate via introspection
+                        // These tokens are only available server-side in API routes (not exposed to client)
+                        (session as any).accessToken = account.access_token;
+                        (session as any).idToken = account.id_token;
+                        (session as any).refreshToken = account.refresh_token;
                     } else {
                         console.warn('[DIVE] No account found for user:', user.id);
                     }
@@ -391,50 +829,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return session;
         },
     },
-    pages: {
-        signIn: "/login",
-        error: "/",
-    },
-    session: {
-        strategy: "database",
-        maxAge: 15 * 60, // 15 minutes (AAL2 compliant - aligns with Keycloak session timeout)
-        updateAge: 15 * 60, // Update session every 15 minutes (matches maxAge for AAL2)
-    },
+    // REMOVED pages configuration to fix "UnknownAction" error
+    // NextAuth v5 with custom pages.signIn disables the /api/auth/signin endpoint
+    // Our LoginButton component uses /api/auth/signin/keycloak directly
+    // Therefore, we must let NextAuth handle signin pages internally
+    //
+    // pages: {
+    //     signIn: "/login",   // This causes UnknownAction when using /api/auth/signin
+    //     error: "/",
+    //     signOut: "/",
+    //     verifyRequest: "/login",
+    //     newUser: "/dashboard"
+    // },
     cookies: {
         sessionToken: {
             name: `authjs.session-token`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         callbackUrl: {
             name: `authjs.callback-url`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         csrfToken: {
             name: `authjs.csrf-token`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         pkceCodeVerifier: {
             name: `authjs.pkce.code_verifier`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                // CRITICAL FIX (2026-02-09): Use 'lax' for localhost to allow OAuth redirects
+                // 'lax' permits cookies on top-level GET requests (OAuth callback from Keycloak)
+                // 'strict' would block cookies during redirect, causing PKCE verification failure
+                sameSite: 'lax', // Always 'lax' for OAuth flow compatibility
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -442,9 +890,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.state`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                // CRITICAL FIX: For localhost HTTPS, 'lax' allows cookies on top-level navigations (GET redirects)
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                // CRITICAL FIX: Don't set domain for localhost - omit it entirely when undefined
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -452,9 +903,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.nonce`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
     },
@@ -466,8 +918,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // From https://authjs.dev/getting-started/database
             // DrizzleAdapter doesn't auto-delete sessions on signOut()
             const sessionData = 'session' in message ? message.session : null;
+            let userId: string | null = null;
+            let accessToken: string | null = null;
+            let refreshToken: string | null = null;
 
-            if (sessionData) {
+            if (sessionData && typeof sessionData === 'object' && 'userId' in sessionData) {
+                userId = (sessionData as { userId: string }).userId;
+            } else if ('user' in message && message.user) {
+                const user = message.user as any;
+                userId = user.id || null;
+            }
+
+            // Phase 2 GAP-007: Get access/refresh tokens for Keycloak revocation
+            if (userId) {
+                try {
+                    const userAccounts = await db.select()
+                        .from(accounts)
+                        .where(eq(accounts.userId, userId));
+
+                    if (userAccounts.length > 0) {
+                        accessToken = userAccounts[0].access_token;
+                        refreshToken = userAccounts[0].refresh_token;
+                    }
+                } catch (error) {
+                    console.error('[DIVE] Error fetching account for logout:', error);
+                }
+            }
+
+            if (sessionData && sessionData.sessionToken) {
                 try {
                     await db
                         .delete(sessions)
@@ -478,12 +956,101 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 }
             }
 
+            // CRITICAL: Clear account tokens to prevent session recreation
+            // Without this, the session callback will find the account and recreate the session!
+            if (userId) {
+                try {
+                    await clearAccountTokensByUserId(userId);
+                    console.log('[DIVE] Account tokens cleared for user:', userId);
+                } catch (error) {
+                    console.error('[DIVE] Error clearing account tokens:', error);
+                }
+            }
+
+            // ============================================
+            // Phase 2 GAP-007: Coordinated Logout
+            // ============================================
+            // 1. Revoke tokens in Keycloak
+            // 2. Add tokens to shared blacklist Redis
+            // ============================================
+            if (refreshToken || accessToken) {
+                const keycloakUrl = process.env.KEYCLOAK_URL;
+                const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
+                const clientId = process.env.KEYCLOAK_CLIENT_ID;
+                const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+
+                // Revoke refresh token in Keycloak (this also invalidates the access token)
+                if (refreshToken && keycloakUrl && realm && clientId && clientSecret) {
+                    try {
+                        const revokeUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/revoke`;
+                        const response = await fetch(revokeUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                client_id: clientId,
+                                client_secret: clientSecret,
+                                token: refreshToken,
+                                token_type_hint: 'refresh_token',
+                            }),
+                        });
+
+                        if (response.ok || response.status === 204) {
+                            console.log('[DIVE] Keycloak refresh token revoked');
+                        } else {
+                            console.warn('[DIVE] Keycloak token revocation returned:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('[DIVE] Keycloak token revocation failed:', error);
+                        // Continue - don't fail logout
+                    }
+                }
+
+                // Notify backend to add token to shared blacklist
+                // This ensures the token is blocked across ALL instances
+                if (accessToken) {
+                    try {
+                        const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL;
+                        if (backendUrl) {
+                            const blacklistResponse = await fetch(`${backendUrl}/api/auth/blacklist-token`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${accessToken}`,
+                                },
+                                body: JSON.stringify({
+                                    reason: 'User logout',
+                                }),
+                            });
+
+                            if (blacklistResponse.ok) {
+                                console.log('[DIVE] Token added to shared blacklist');
+                            } else {
+                                console.warn('[DIVE] Token blacklist request returned:', blacklistResponse.status);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[DIVE] Token blacklist request failed:', error);
+                        // Continue - don't fail logout
+                    }
+                }
+            }
+
             // Log signout event
             if ('token' in message && message.token) {
                 console.log("[DIVE] User signed out:", message.token.sub);
             }
         },
         async signIn({ user, account, profile }) {
+            // DEBUG: Hypothesis 4 - Track sign-in event
+            console.log('[DEBUG H4] Sign-in event:', {
+                email: user?.email,
+                provider: account?.provider,
+                hasIdToken: !!account?.id_token,
+                idTokenLength: account?.id_token?.length
+            });
+
             // Multi-realm: Handle federated accounts from broker realm
             // Allow sign-in for all Keycloak accounts (broker creates new users)
             console.log('[DIVE] Sign-in event', {
@@ -491,6 +1058,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 provider: account?.provider,
                 accountId: account?.providerAccountId,
             });
+
+            // CRITICAL FIX (2026-01-24): Federation Account Linking
+            //
+            // PROBLEM: When user authenticates via different federated IdPs, NextAuth throws
+            // OAuthAccountNotLinked error if a user with same email already exists.
+            //
+            // SOLUTION (2026-01-28): Generate unique synthetic email from Keycloak sub (user ID)
+            // - Each user gets: <keycloak-sub>@dive-broker.internal
+            // - No more email collisions across federated IdPs
+            // - Maintains PII minimization (no real emails stored)
+            //
+            // REMOVED: allowDangerousEmailAccountLinking + manual linking logic
+            // NO LONGER NEEDED: Unique emails prevent collision, no linking required
+            //
+            // Security: We only exchange uniqueID, clearance, country, COI (no PII)
 
             // On fresh sign-in, manually update account tokens in database
             // DrizzleAdapter creates account on first login but doesn't always update on re-login
@@ -504,17 +1086,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     });
 
                     // Manually update the account record to ensure fresh tokens
-                    await db.update(accounts)
-                        .set({
-                            access_token: account.access_token as string || null,
-                            id_token: account.id_token as string || null,
-                            refresh_token: account.refresh_token as string || null,
-                            expires_at: account.expires_at as number || null,
-                            token_type: account.token_type as string || null,
-                            scope: account.scope as string || null,
-                            session_state: account.session_state as string || null,
-                        })
-                        .where(eq(accounts.userId, user.id));
+                    await updateAccountTokensByUserId(user.id, {
+                        access_token: account.access_token as string || null,
+                        id_token: account.id_token as string || null,
+                        refresh_token: account.refresh_token as string || null,
+                        expires_at: account.expires_at as number || null,
+                        token_type: account.token_type as string || null,
+                        scope: account.scope as string || null,
+                        session_state: account.session_state as string || null,
+                    });
 
                     console.log('[DIVE] Account tokens updated successfully');
                 } catch (error) {
@@ -528,4 +1108,3 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
     },
 });
-

@@ -1,0 +1,22 @@
+# =============================================================================
+# DIVE V3 Backend - Kubernetes Service
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: backend
+

@@ -1,0 +1,239 @@
+# DIVE V3 - OPA Horizontal Pod Autoscaler
+# Phase 9: Performance Optimization & Scalability
+#
+# Provides automatic scaling for OPA instances based on:
+# - CPU utilization (primary metric)
+# - Memory utilization (secondary metric)
+# - Custom metrics (decision latency)
+#
+# Targets:
+# - Scale-up: >70% CPU for 30s
+# - Scale-down: <30% CPU for 5min
+# - Min replicas: 2 (HA)
+# - Max replicas: 10
+#
+# @version 1.0.0
+# @date 2025-12-03
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: opa-hpa
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+    app.kubernetes.io/component: policy-engine
+    app.kubernetes.io/part-of: dive-v3
+    phase: "9"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: opa
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    # Primary: CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Secondary: Memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    # Custom: Decision latency p95 (requires metrics adapter)
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: opa_decision_latency_p95
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "20m"  # 20ms
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+        - type: Percent
+          value: 25
+          periodSeconds: 120
+      selectPolicy: Min
+
+---
+# OPA Deployment with resource limits
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+    app.kubernetes.io/component: policy-engine
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+        app.kubernetes.io/name: opa
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8181"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: opa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:0.68.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "run"
+            - "--server"
+            - "--addr=0.0.0.0:8181"
+            - "--diagnostic-addr=0.0.0.0:8282"
+            - "--log-level=info"
+            - "--log-format=json"
+            - "--set=decision_logs.console=true"
+            - "--set=status.console=true"
+            - "--set=bundles.dive-v3.service=opal"
+            - "--set=bundles.dive-v3.resource=bundle.tar.gz"
+            - "--set=bundles.dive-v3.persist=true"
+            - "--set=bundles.dive-v3.polling.min_delay_seconds=10"
+            - "--set=bundles.dive-v3.polling.max_delay_seconds=30"
+          ports:
+            - name: http
+              containerPort: 8181
+              protocol: TCP
+            - name: diagnostic
+              containerPort: 8282
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "500Mi"  # Phase 9 target: <500MB
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health?bundles
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: opa-policies
+              mountPath: /policies
+              readOnly: true
+            - name: opa-bundles
+              mountPath: /bundles
+      volumes:
+        - name: opa-policies
+          configMap:
+            name: opa-policies
+        - name: opa-bundles
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: opa
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: opa
+
+---
+# OPA Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+    app.kubernetes.io/component: policy-engine
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8181
+      targetPort: http
+      protocol: TCP
+    - name: diagnostic
+      port: 8282
+      targetPort: diagnostic
+      protocol: TCP
+  selector:
+    app: opa
+
+---
+# OPA ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opa
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+
+---
+# OPA PodDisruptionBudget for HA
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: opa-pdb
+  namespace: dive-v3
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: opa
+

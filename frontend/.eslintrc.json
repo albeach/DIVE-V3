@@ -1,0 +1,32 @@
+{
+  "root": true,
+  "extends": ["next/core-web-vitals"],
+  "ignorePatterns": ["**/__tests__/**", "**/__mocks__/**"],
+  "rules": {
+    "react/no-unescaped-entities": "warn",
+    "react-hooks/exhaustive-deps": "warn",
+    "react-hooks/rules-of-hooks": "warn",
+    "import/no-anonymous-default-export": "warn",
+    "@next/next/no-img-element": "warn",
+    "jsx-a11y/role-supports-aria-props": "warn",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='http://localhost']",
+        "message": "Hardcoded localhost URLs are not allowed. Use environment variables instead (e.g., process.env.NEXT_PUBLIC_API_URL)"
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='https://localhost']",
+        "message": "Hardcoded localhost URLs are not allowed. Use environment variables instead (e.g., process.env.NEXT_PUBLIC_API_URL)"
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='http://127.0.0.1']",
+        "message": "Hardcoded 127.0.0.1 URLs are not allowed. Use environment variables instead (e.g., process.env.NEXT_PUBLIC_API_URL)"
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='https://127.0.0.1']",
+        "message": "Hardcoded 127.0.0.1 URLs are not allowed. Use environment variables instead (e.g., process.env.NEXT_PUBLIC_API_URL)"
+      }
+    ]
+  }
+}

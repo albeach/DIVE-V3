@@ -1,0 +1,637 @@
+#!/usr/bin/env bash
+# =============================================================================
+# DIVE V3 CLI - Modular Unified Management Script
+# =============================================================================
+# Usage:
+#   ./dive [options] [command] [subcommand] [args...]
+#
+# Global Options:
+#   --env local|dev|staging|pilot  Set environment (default: local)
+#   --instance usa|fra|deu         Set instance (default: usa)
+#   --domain <suffix>              Set domain suffix (e.g., myorg.com)
+#   --cloud-provider aws|gcp|local Set cloud provider explicitly
+#   --secrets-provider vault|gcp|aws|local  Set secrets provider
+#   --guided                       Guided mode: wizard-like flow for new users
+#   --pro                          Pro mode: non-interactive, flags/env vars
+#   --non-interactive              Skip all prompts, use defaults (CI/CD mode)
+#   --yes / -y                     Alias for --non-interactive
+#   --dry-run / -n                 Show what would be done without executing
+#   --verbose / -v                 Show detailed output
+#   --quiet / -q                   Suppress non-essential output
+#
+# Examples:
+#   ./dive up                      # Start locally with defaults
+#   ./dive --dry-run deploy        # Preview full deployment
+#   ./dive --env dev hub deploy    # Deploy hub in dev environment
+#   ./dive --non-interactive --domain myorg.com hub deploy  # CI/CD mode
+#   ./dive --yes nuke              # Non-interactive nuke
+# =============================================================================
+
+set -e
+
+# Project root
+DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export DIVE_ROOT
+
+# Modules directory
+MODULES_DIR="${DIVE_ROOT}/scripts/dive-modules"
+
+# =============================================================================
+# LOAD COMMON MODULE
+# =============================================================================
+
+if [ -f "${MODULES_DIR}/common.sh" ]; then
+    source "${MODULES_DIR}/common.sh"
+    export DIVE_COMMON_LOADED=1
+else
+    echo "ERROR: Common module not found at ${MODULES_DIR}/common.sh"
+    echo "Please ensure the dive-modules directory exists."
+    exit 1
+fi
+
+# =============================================================================
+# ARGUMENT PARSING
+# =============================================================================
+
+# Parse global options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --env)
+            ENVIRONMENT="$2"
+            shift 2
+            ;;
+        --instance)
+            INSTANCE="$2"
+            export INSTANCE
+            shift 2
+            ;;
+        --dry-run|-n)
+            export DRY_RUN=true
+            export DIVE_DRY_RUN=true
+            shift
+            ;;
+        --verbose|-v)
+            export VERBOSE=true
+            shift
+            ;;
+        --quiet|-q)
+            export QUIET=true
+            shift
+            ;;
+        --guided)
+            export DIVE_MODE=guided
+            shift
+            ;;
+        --pro)
+            export DIVE_MODE=pro
+            export DIVE_NON_INTERACTIVE=true
+            shift
+            ;;
+        --non-interactive|--yes|-y)
+            export DIVE_NON_INTERACTIVE=true
+            shift
+            ;;
+        --domain)
+            export DIVE_DOMAIN_SUFFIX="$2"
+            shift 2
+            ;;
+        --cloud-provider)
+            export DIVE_CLOUD_PROVIDER="$2"
+            shift 2
+            ;;
+        --secrets-provider)
+            export SECRETS_PROVIDER="$2"
+            shift 2
+            ;;
+        --profile)
+            DIVE_PROFILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            source "${MODULES_DIR}/utilities/help.sh"
+            cmd_help
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Guard against misplaced global flags after the command
+for arg in "$@"; do
+    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" || "$arg" == "--guided" || "$arg" == "--pro" ]]; then
+        log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
+        exit 1
+    fi
+done
+
+# Re-apply environment-specific defaults after --env parsing
+# (common.sh is sourced before args are parsed, so we re-evaluate here)
+export ENVIRONMENT
+case "$ENVIRONMENT" in
+    dev)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-100}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.dive25.com}"
+        ;;
+    staging)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.2xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-200}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.dive25.com}"
+        ;;
+esac
+
+# =============================================================================
+# MAIN COMMAND DISPATCH
+# =============================================================================
+
+COMMAND="${1:-help}"
+shift || true
+
+cd "$DIVE_ROOT"
+
+# Load profile if --profile was specified
+if [ -n "${DIVE_PROFILE:-}" ]; then
+    _profile_file="${DIVE_ROOT}/config/profiles/${DIVE_PROFILE}.env"
+    if [ -f "$_profile_file" ]; then
+        if type _load_dive_config_file &>/dev/null; then
+            _load_dive_config_file "$_profile_file"
+        fi
+        log_verbose "Loaded profile: $DIVE_PROFILE"
+    else
+        log_error "Profile '$DIVE_PROFILE' not found at $_profile_file"
+        exit 1
+    fi
+    unset _profile_file
+fi
+
+case "$COMMAND" in
+    # Core commands (core.sh)
+    up|down|restart|logs|ps|exec)
+        source "${MODULES_DIR}/core.sh"
+        case "$COMMAND" in
+            up)      cmd_up "$@" ;;
+            down)    cmd_down "$@" ;;
+            restart) cmd_restart "$@" ;;
+            logs)    cmd_logs "$@" ;;
+            ps)      cmd_ps "$@" ;;
+            exec)    cmd_exec "$@" ;;
+        esac
+        ;;
+
+    # Status commands (status.sh)
+    status|health|validate|info|diagnostics|brief)
+        source "${MODULES_DIR}/status.sh"
+        case "$COMMAND" in
+            status)   cmd_status "$@" ;;
+            health)   cmd_health "$@" ;;
+            diagnostics) cmd_diagnostics "$@" ;;
+            validate) cmd_validate "$@" ;;
+            info)     cmd_info "$@" ;;
+            brief)    cmd_status_brief "$@" ;;
+        esac
+        ;;
+
+    # Deployment commands (deploy.sh)
+    deploy|reset|clean|nuke)
+        source "${MODULES_DIR}/deploy.sh"
+        case "$COMMAND" in
+            deploy) cmd_deploy "$@" ;;
+            reset)  cmd_reset "$@" ;;
+            clean)  cmd_reset "$@" ;;
+            nuke)   cmd_nuke "$@" ;;
+        esac
+        ;;
+
+    # Database commands (db.sh)
+    seed|backup|restore)
+        source "${MODULES_DIR}/db.sh"
+        case "$COMMAND" in
+            seed)    cmd_seed "$@" ;;
+            backup)  cmd_backup ;;
+            restore) cmd_restore "$@" ;;
+        esac
+        ;;
+
+    # Terraform commands (configuration/terraform.sh)
+    tf|terraform)
+        source "${MODULES_DIR}/configuration/terraform.sh"
+        module_terraform "$@"
+        ;;
+
+    # Secrets commands (configuration/secrets.sh)
+    secrets)
+        source "${MODULES_DIR}/configuration/secrets.sh"
+        module_secrets "$@"
+        ;;
+
+    # Vault commands (vault/module.sh)
+    vault)
+        source "${MODULES_DIR}/vault/module.sh"
+        module_vault "$@"
+        ;;
+
+    # Orchestration database commands (orchestration/state.sh)
+    orchestration-db|orch-db|odb)
+        source "${MODULES_DIR}/orchestration/state.sh"
+        case "${1:-help}" in
+            migrate|migrate-state)
+                shift
+                orch_db_migrate_state_files "$@"
+                ;;
+            validate|validate-consistency)
+                shift
+                orch_db_validate_consistency "$@"
+                ;;
+            rollback|rollback-state)
+                shift
+                orch_db_rollback_state "$@"
+                ;;
+            status|db-status)
+                shift
+                if orch_db_check_connection; then
+                    echo "✅ Orchestration database is connected"
+                    state_count=$(orch_db_exec "SELECT COUNT(*) FROM deployment_states" 2>/dev/null || echo "0")
+                    echo "📊 State records: $state_count"
+                    transition_count=$(orch_db_exec "SELECT COUNT(*) FROM state_transitions" 2>/dev/null || echo "0")
+                    echo "🔄 Transition records: $transition_count"
+                else
+                    echo "❌ Orchestration database is not available"
+                fi
+                ;;
+            *)
+                echo "DIVE V3 Orchestration Database Management"
+                echo "=========================================="
+                echo ""
+                echo "Commands:"
+                echo "  ./dive orch-db migrate              Migrate existing .dive-state files to database"
+                echo "  ./dive orch-db validate             Validate consistency between files and database"
+                echo "  ./dive orch-db rollback <instance>  Rollback last state transition for instance"
+                echo "  ./dive orch-db status               Show database connection and statistics"
+                echo ""
+                echo "Examples:"
+                echo "  ./dive orch-db migrate              # Migrate all state files"
+                echo "  ./dive orch-db validate NZL         # Check consistency for NZL"
+                echo "  ./dive orch-db rollback NZL         # Rollback NZL to previous state"
+                ;;
+        esac
+        ;;
+
+    # Pilot VM commands (utilities/pilot.sh)
+    pilot)
+        source "${MODULES_DIR}/utilities/pilot.sh"
+        module_pilot "$@"
+        ;;
+
+    # Federation commands (federation/setup.sh)
+    federation|fed)
+        source "${MODULES_DIR}/federation/setup.sh"
+        module_federation "$@"
+        ;;
+
+    # Deployment profiles
+    profile|profiles)
+        source "${MODULES_DIR}/configuration/profiles.sh"
+        module_profile "$@"
+        ;;
+
+    # Setup wizard (first-time configuration)
+    setup)
+        source "${MODULES_DIR}/configuration/setup-wizard.sh"
+        cmd_setup "$@"
+        ;;
+
+    # Config management
+    config)
+        source "${MODULES_DIR}/configuration/config-manager.sh"
+        module_config "$@"
+        ;;
+
+    # DNS management (Cloudflare)
+    dns)
+        source "${MODULES_DIR}/configuration/dns.sh"
+        module_dns "$@"
+        ;;
+
+    # Shared tier commands (shared/module.sh)
+    shared)
+        source "${MODULES_DIR}/shared/module.sh"
+        module_shared "$@"
+        ;;
+
+    # Hub commands (deployment/hub.sh - Phase 3 enhanced spoke management)
+    hub)
+        source "${MODULES_DIR}/deployment/hub.sh"
+        module_hub "$@"
+        ;;
+
+    # Spoke commands (deployment/spoke.sh)
+    spoke)
+        source "${MODULES_DIR}/deployment/spoke.sh"
+        module_spoke "$@"
+        ;;
+
+    # SP Client commands (utilities/sp.sh)
+    sp)
+        source "${MODULES_DIR}/utilities/sp.sh"
+        module_sp "$@"
+        ;;
+
+    # Policy commands (utilities/policy.sh)
+    policy)
+        source "${MODULES_DIR}/utilities/policy.sh"
+        module_policy "$@"
+        ;;
+
+    # Certificate commands (certificates.sh)
+    certs|certificates)
+        source "${MODULES_DIR}/certificates.sh"
+        module_certificates "$@"
+        ;;
+
+    # Naming conventions (utilities/naming.sh)
+    naming)
+        source "${MODULES_DIR}/utilities/naming.sh"
+        module_naming "$@"
+        ;;
+
+    # Federation setup commands (now handled by federation/setup.sh)
+    federation-setup|fed-setup)
+        source "${MODULES_DIR}/federation/setup.sh"
+        module_federation "$@"
+        ;;
+
+    # Test commands (test.sh) - Phase 4: Testing & Validation
+    test)
+        TEST_TARGET="${1:-help}"
+        shift || true
+        case "$TEST_TARGET" in
+            orchestration|orch)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_category "$@"
+                ;;
+            multi-instance|multi)
+                source "${MODULES_DIR}/utilities/multi-instance-test.sh"
+                case "${1:-help}" in
+                    concurrent)
+                        multi_test_concurrent_all
+                        ;;
+                    staggered)
+                        multi_test_staggered_deployment
+                        ;;
+                    federation)
+                        multi_test_federation_scaling
+                        ;;
+                    load)
+                        multi_load_test
+                        ;;
+                    cleanup)
+                        multi_test_cleanup_all
+                        ;;
+                    *)
+                        echo "Multi-Instance Test Commands:"
+                        echo "  ./dive test multi concurrent     Run concurrent deployment test"
+                        echo "  ./dive test multi staggered      Run staggered deployment test"
+                        echo "  ./dive test multi federation     Test federation scaling"
+                        echo "  ./dive test multi load           Run load testing scenarios"
+                        echo "  ./dive test multi cleanup        Clean up test instances"
+                        ;;
+                esac
+                ;;
+            all)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_all
+                ;;
+            unit)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_category "unit"
+                ;;
+            integration)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_category "integration"
+                ;;
+            resilience)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_category "resilience"
+                ;;
+            performance)
+                source "${MODULES_DIR}/orchestration/testing.sh"
+                orch_test_run_category "performance"
+                ;;
+            comprehensive|full|suite)
+                # Phase 4: Comprehensive Testing Suite (80%+ coverage)
+                source "${DIVE_ROOT}/scripts/test-framework.sh"
+                test_cli "$@"
+                ;;
+            cli)
+                # CLI Module Unit Tests
+                source "${DIVE_ROOT}/scripts/test-cli-modules.sh"
+                test_run_cli_module_tests
+                ;;
+            load)
+                # Load Testing Suite (100 req/s target)
+                source "${DIVE_ROOT}/scripts/load-test-suite.sh"
+                load_test_cli "$@"
+                ;;
+            isolation|e2e)
+                # Environment Isolation Tests
+                source "${DIVE_ROOT}/scripts/test-environment-isolation.sh"
+                test_run_environment_isolation_tests
+                ;;
+            security|vulnerabilities)
+                # Security Vulnerability Tests
+                source "${DIVE_ROOT}/scripts/test-security-vulnerabilities.sh"
+                test_run_security_vulnerability_tests
+                ;;
+            *)
+                echo "DIVE V3 Testing Framework - Phase 4"
+                echo "==================================="
+                echo ""
+                echo "Orchestration Tests (Phase 3 Validation):"
+                echo "  ./dive test all                    Run complete test suite"
+                echo "  ./dive test unit                   Run unit tests only"
+                echo "  ./dive test integration            Run integration tests"
+                echo "  ./dive test resilience             Run resilience tests"
+                echo "  ./dive test performance            Run performance tests"
+                echo "  ./dive test orchestration <type>   Run specific orchestration tests"
+                echo ""
+                echo "Multi-Instance Tests (Enterprise Validation):"
+                echo "  ./dive test multi concurrent       Concurrent NATO deployments"
+                echo "  ./dive test multi staggered        Staggered deployment testing"
+                echo "  ./dive test multi federation       Federation scaling tests"
+                echo "  ./dive test multi load             Load testing scenarios"
+                echo "  ./dive test multi cleanup          Clean up test instances"
+                echo ""
+                echo "Comprehensive Testing Suite (Phase 4 - 80%+ Coverage):"
+                echo "  ./dive test comprehensive          Run complete testing suite (all categories)"
+                echo "  ./dive test cli                    CLI module unit tests"
+                echo "  ./dive test load                   Load testing (100 req/s targets)"
+                echo "  ./dive test isolation              Environment isolation tests"
+                echo "  ./dive test security               Security vulnerability tests"
+                echo "  ./dive test suite run unit         Run unit tests only"
+                echo "  ./dive test suite run integration  Run integration tests only"
+                echo "  ./dive test suite run load         Run load tests only"
+                echo "  ./dive test suite coverage         Show test coverage"
+                echo "  ./dive test suite report           Generate test report"
+                echo ""
+                echo "Test Coverage (Phase 4):"
+                echo "  ✅ Circuit breaker functionality"
+                echo "  ✅ Smart retry algorithms"
+                echo "  ✅ State management integrity"
+                echo "  ✅ Error handling & recovery"
+                echo "  ✅ Checkpoint & rollback"
+                echo "  ✅ Real-time metrics"
+                echo "  ✅ Multi-instance concurrent deployments"
+                echo "  ✅ Federation scaling validation"
+                echo "  ✅ Enterprise load testing"
+                echo "  ✅ CLI module testing (42 modules)"
+                echo "  ✅ Unit test coverage (80%+ target)"
+                echo "  ✅ Integration test coverage"
+                echo "  ✅ Load testing (100 req/s targets)"
+                echo "  ✅ Environment isolation validation"
+                echo "  ✅ Security vulnerability testing"
+                ;;
+        esac
+        ;;
+
+    # Verify commands - Phase 6
+    verify)
+        VERIFY_TARGET="${1:-help}"
+        shift || true
+        case "$VERIFY_TARGET" in
+            hub)
+                source "${MODULES_DIR}/deployment/hub.sh"
+                hub_verify "$@"
+                ;;
+            spoke)
+                source "${MODULES_DIR}/deployment/spoke.sh"
+                spoke_verify "$@"
+                ;;
+            *)
+                echo -e "${BOLD}DIVE Verify Commands (Phase 6):${NC}"
+                echo ""
+                echo "Usage:"
+                echo "  ./dive verify hub                    10-point hub verification"
+                echo "  ./dive verify spoke                  12-point spoke verification"
+                echo "  ./dive --instance <code> verify spoke   Verify specific spoke"
+                echo ""
+                ;;
+        esac
+        ;;
+
+    # Environment helpers (status.sh)
+    env)
+        source "${MODULES_DIR}/status.sh"
+        cmd_env_print "$@"
+        ;;
+
+    # Fix command - run federation fixes
+    fix)
+        FIX_TARGET="${1:-all}"
+        shift || true
+        case "$FIX_TARGET" in
+            federation|fed)
+                # Run federation issues fix script
+                if [ -n "$INSTANCE" ] && [ "$INSTANCE" != "usa" ]; then
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --spoke "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
+                else
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" "$@"
+                fi
+                ;;
+            hub)
+                bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --hub-only
+                ;;
+            spoke)
+                if [ -n "$INSTANCE" ]; then
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --spoke "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
+                else
+                    log_error "Specify instance with --instance <CODE> or use: ./dive fix federation"
+                    exit 1
+                fi
+                ;;
+            session-resilience|session|token)
+                # REMOVED: deploy-session-resilience-fix.sh was a one-time hotfix (deleted Phase 5)
+                log_error "Session resilience fix has been applied and the deployment script removed."
+                log_info "If you need to re-apply, check git history for deploy-session-resilience-fix.sh"
+                ;;
+            diagnose-session|session-diagnose)
+                # Run session diagnostics
+                if [ -z "$1" ]; then
+                    log_error "Usage: ./dive fix diagnose-session <user-email>"
+                    log_info "Example: ./dive fix diagnose-session testuser-usa-4@mil"
+                    exit 1
+                fi
+
+                bash "${DIVE_ROOT}/scripts/diagnose-session-token-flow.sh" "$1"
+                ;;
+            all)
+                bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" "$@"
+                ;;
+            *)
+                echo -e "${BOLD}DIVE Fix Commands:${NC}"
+                echo ""
+                echo "Usage:"
+                echo "  ./dive fix federation                Fix all federation issues (hub + all spokes)"
+                echo "  ./dive fix hub                       Fix hub logout/redirect issues only"
+                echo "  ./dive --instance ALB fix spoke      Fix specific spoke federation"
+                echo "  ./dive fix session-resilience        Deploy session token resilience fix"
+                echo "  ./dive fix diagnose-session <email>  Diagnose session/token issues for user"
+                echo "  ./dive fix all                       Fix all federation issues"
+                echo ""
+                echo "Federation Fixes:"
+                echo "  1. Logout redirect to internal container name"
+                echo "  2. 'Invalid parameter: redirect_uri' errors"
+                echo "  3. Cross-border IdP not loading"
+                echo ""
+                echo "Session Resilience Fixes:"
+                echo "  - Automatic token refresh in API routes"
+                echo "  - Race condition handling (session callback vs API routes)"
+                echo "  - Improved error messages"
+                echo ""
+                ;;
+        esac
+        ;;
+
+    # AWS commands (aws/module.sh) - dev/staging environment management
+    aws)
+        source "${MODULES_DIR}/aws/module.sh"
+        module_aws "$@"
+        ;;
+
+    # Redis commands (hub/redis.sh)
+    redis)
+        source "${MODULES_DIR}/hub/redis.sh"
+        module_redis "$@"
+        ;;
+
+    # KAS commands (hub/kas.sh)
+    kas)
+        source "${MODULES_DIR}/hub/kas.sh"
+        module_kas "$@"
+        ;;
+
+    # Bootstrap (auto-install dependencies)
+    bootstrap)
+        source "${MODULES_DIR}/bootstrap.sh"
+        cmd_bootstrap "$@"
+        ;;
+
+    # Help
+    help|--help|-h)
+        source "${MODULES_DIR}/utilities/help.sh"
+        cmd_help
+        ;;
+
+    # Unknown command
+    *)
+        log_error "Unknown command: $COMMAND"
+        echo ""
+        echo "Run './dive help' for usage information."
+        exit 1
+        ;;
+esac

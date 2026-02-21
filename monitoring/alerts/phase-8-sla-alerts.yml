@@ -1,0 +1,295 @@
+#
+# DIVE V3 Phase 8 SLA Alerting Rules
+# Observability & Alerting
+#
+# SLA Targets:
+# - p95 Latency < 30ms (0.030s)
+# - Error Rate < 1%
+# - Cache Hit Rate > 80%
+# - Policy Sync within 5 minutes
+#
+
+groups:
+  - name: dive_v3_phase8_sla_alerts
+    interval: 15s
+    rules:
+      # ============================================
+      # LATENCY SLA ALERTS
+      # ============================================
+
+      - alert: AuthorizationLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(dive_v3_authorization_latency_seconds_bucket[5m])) by (le, tenant)) > 0.030
+        for: 2m
+        labels:
+          severity: warning
+          sla: latency
+          phase: "8"
+        annotations:
+          summary: "Authorization p95 latency exceeds 30ms SLA"
+          description: "Tenant {{ $labels.tenant }} has p95 latency of {{ $value | humanizeDuration }} (threshold: 30ms)"
+          runbook_url: "https://docs.dive25.com/runbooks/latency-high"
+
+      - alert: AuthorizationLatencyP95Critical
+        expr: histogram_quantile(0.95, sum(rate(dive_v3_authorization_latency_seconds_bucket[5m])) by (le, tenant)) > 0.050
+        for: 1m
+        labels:
+          severity: critical
+          sla: latency
+          phase: "8"
+        annotations:
+          summary: "Authorization p95 latency critically high (>50ms)"
+          description: "Tenant {{ $labels.tenant }} has p95 latency of {{ $value | humanizeDuration }} (critical threshold: 50ms)"
+          runbook_url: "https://docs.dive25.com/runbooks/latency-critical"
+
+      - alert: AuthorizationLatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(dive_v3_authorization_latency_seconds_bucket[5m])) by (le, tenant)) > 0.100
+        for: 5m
+        labels:
+          severity: warning
+          sla: latency
+          phase: "8"
+        annotations:
+          summary: "Authorization p99 latency exceeds 100ms"
+          description: "Tenant {{ $labels.tenant }} has p99 latency of {{ $value | humanizeDuration }}"
+
+      # ============================================
+      # ERROR RATE SLA ALERTS
+      # ============================================
+
+      - alert: AuthorizationErrorRateHigh
+        expr: sum(rate(dive_v3_authorization_decisions_total{decision="DENY"}[5m])) by (tenant) / sum(rate(dive_v3_authorization_decisions_total[5m])) by (tenant) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          sla: error_rate
+          phase: "8"
+        annotations:
+          summary: "Authorization denial rate exceeds 1% SLA"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} denial rate (threshold: 1%)"
+          runbook_url: "https://docs.dive25.com/runbooks/error-rate-high"
+
+      - alert: AuthorizationErrorRateCritical
+        expr: sum(rate(dive_v3_authorization_decisions_total{decision="DENY"}[5m])) by (tenant) / sum(rate(dive_v3_authorization_decisions_total[5m])) by (tenant) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          sla: error_rate
+          phase: "8"
+        annotations:
+          summary: "Authorization denial rate critically high (>5%)"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} denial rate. Investigate immediately."
+
+      # ============================================
+      # CACHE PERFORMANCE SLA ALERTS
+      # ============================================
+
+      - alert: DecisionCacheHitRateLow
+        expr: dive_v3_cache_hit_rate{cache_type="decision"} < 0.80
+        for: 5m
+        labels:
+          severity: warning
+          sla: cache
+          phase: "8"
+        annotations:
+          summary: "Decision cache hit rate below 80% SLA"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} cache hit rate (threshold: 80%)"
+          runbook_url: "https://docs.dive25.com/runbooks/cache-hit-rate-low"
+
+      - alert: DecisionCacheHitRateCritical
+        expr: dive_v3_cache_hit_rate{cache_type="decision"} < 0.50
+        for: 2m
+        labels:
+          severity: critical
+          sla: cache
+          phase: "8"
+        annotations:
+          summary: "Decision cache hit rate critically low (<50%)"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} cache hit rate. Cache may be failing."
+
+      - alert: CacheEvictionRateHigh
+        expr: sum(rate(dive_v3_cache_evictions_total[5m])) by (tenant, cache_type) > 100
+        for: 5m
+        labels:
+          severity: warning
+          sla: cache
+          phase: "8"
+        annotations:
+          summary: "High cache eviction rate"
+          description: "{{ $labels.cache_type }} cache for {{ $labels.tenant }} is evicting {{ $value }} entries/sec. Consider increasing cache size."
+
+      # ============================================
+      # POLICY SYNC SLA ALERTS
+      # ============================================
+
+      - alert: PolicySyncStale
+        expr: (time() - dive_v3_policy_version) > 300
+        for: 1m
+        labels:
+          severity: warning
+          sla: policy_sync
+          phase: "8"
+        annotations:
+          summary: "Policy bundle is stale (>5 minutes old)"
+          description: "Tenant {{ $labels.tenant }} bundle {{ $labels.bundle_name }} hasn't synced in {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.dive25.com/runbooks/policy-sync-stale"
+
+      - alert: PolicySyncFailure
+        expr: increase(dive_v3_drift_detections_total{severity="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          sla: policy_sync
+          phase: "8"
+        annotations:
+          summary: "Critical policy drift detected"
+          description: "Tenant {{ $labels.tenant }} detected critical policy drift. Immediate remediation required."
+
+      # ============================================
+      # FEDERATION SLA ALERTS
+      # ============================================
+
+      - alert: FederationLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(dive_v3_federation_latency_seconds_bucket[5m])) by (le, source_tenant, target_tenant)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          sla: federation
+          phase: "8"
+        annotations:
+          summary: "Federation latency exceeds 5 seconds"
+          description: "Federation from {{ $labels.source_tenant }} to {{ $labels.target_tenant }} has p95 latency of {{ $value | humanizeDuration }}"
+
+      - alert: FederationFailureRateHigh
+        expr: sum(rate(dive_v3_federation_logins_total{status="failure"}[5m])) by (source_tenant, target_tenant) / sum(rate(dive_v3_federation_logins_total[5m])) by (source_tenant, target_tenant) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          sla: federation
+          phase: "8"
+        annotations:
+          summary: "Federation failure rate exceeds 10%"
+          description: "Federation from {{ $labels.source_tenant }} to {{ $labels.target_tenant }} has {{ $value | humanizePercentage }} failure rate"
+
+      # ============================================
+      # KAS SLA ALERTS
+      # ============================================
+
+      - alert: KASKeyDenialRateHigh
+        expr: sum(rate(dive_v3_kas_key_releases_total{decision="DENY"}[5m])) by (tenant) / sum(rate(dive_v3_kas_key_releases_total[5m])) by (tenant) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          sla: kas
+          phase: "8"
+        annotations:
+          summary: "KAS key denial rate exceeds 30%"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} KAS denial rate"
+
+      - alert: KASLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(dive_v3_kas_request_duration_seconds_bucket[5m])) by (le, tenant)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          sla: kas
+          phase: "8"
+        annotations:
+          summary: "KAS request latency exceeds 1 second"
+          description: "Tenant {{ $labels.tenant }} has p95 KAS latency of {{ $value | humanizeDuration }}"
+
+      # ============================================
+      # COMPLIANCE ALERTS
+      # ============================================
+
+      - alert: ComplianceCheckFailureRateHigh
+        expr: sum(rate(dive_v3_compliance_checks_failed_total[5m])) by (tenant, check_type) / (sum(rate(dive_v3_compliance_checks_passed_total[5m])) by (tenant, check_type) + sum(rate(dive_v3_compliance_checks_failed_total[5m])) by (tenant, check_type)) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          sla: compliance
+          phase: "8"
+        annotations:
+          summary: "Compliance check failure rate exceeds 5%"
+          description: "Tenant {{ $labels.tenant }} has {{ $value | humanizePercentage }} failure rate for {{ $labels.check_type }} checks"
+
+      - alert: AuditLogLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(dive_v3_audit_log_latency_seconds_bucket[5m])) by (le, tenant)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          sla: audit
+          phase: "8"
+        annotations:
+          summary: "Audit log latency exceeds 100ms"
+          description: "Tenant {{ $labels.tenant }} has p95 audit log latency of {{ $value | humanizeDuration }}"
+
+      # ============================================
+      # THROUGHPUT ALERTS
+      # ============================================
+
+      - alert: LowThroughput
+        expr: sum(rate(dive_v3_authorization_decisions_total[5m])) by (tenant) < 10
+        for: 10m
+        labels:
+          severity: info
+          phase: "8"
+        annotations:
+          summary: "Low authorization throughput"
+          description: "Tenant {{ $labels.tenant }} has only {{ $value }} decisions/sec. System may be idle or experiencing issues."
+
+      - alert: ThroughputDrop
+        expr: sum(rate(dive_v3_authorization_decisions_total[5m])) by (tenant) < sum(rate(dive_v3_authorization_decisions_total[30m])) by (tenant) * 0.5
+        for: 5m
+        labels:
+          severity: warning
+          phase: "8"
+        annotations:
+          summary: "Authorization throughput dropped significantly"
+          description: "Tenant {{ $labels.tenant }} throughput dropped by more than 50% from baseline"
+
+  - name: dive_v3_phase8_health_alerts
+    interval: 30s
+    rules:
+      # ============================================
+      # SERVICE HEALTH ALERTS
+      # ============================================
+
+      - alert: OPAServiceUnhealthy
+        expr: dive_v3_opa_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          phase: "8"
+        annotations:
+          summary: "OPA service is unhealthy"
+          description: "OPA instance {{ $labels.instance }} is not responding. Authorization decisions will fail."
+
+      - alert: RedisClusterUnhealthy
+        expr: dive_v3_redis_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          phase: "8"
+        annotations:
+          summary: "Redis cluster is unhealthy"
+          description: "Redis cluster {{ $labels.cluster }} is not responding. Decision caching will fail."
+
+      - alert: MongoDBUnhealthy
+        expr: dive_v3_mongodb_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          phase: "8"
+        annotations:
+          summary: "MongoDB is unhealthy"
+          description: "MongoDB replica set {{ $labels.replica_set }} is not responding. Resource access will fail."
+
+      - alert: MultipleServicesUnhealthy
+        expr: count(dive_v3_service_health == 0) > 1
+        for: 1m
+        labels:
+          severity: critical
+          phase: "8"
+        annotations:
+          summary: "Multiple services are unhealthy"
+          description: "{{ $value }} services are down. System degradation likely."
+
