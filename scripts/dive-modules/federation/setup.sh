@@ -2252,6 +2252,195 @@ cmd_federation_verify_fingerprint() {
     log_info "Next: ./dive federation approve ${enrollment_id}"
 }
 
+##
+# Approve enrollment (admin)
+# Usage: ./dive federation approve-enrollment <ENROLLMENT_ID>
+##
+cmd_federation_approve_enrollment() {
+    local enrollment_id="${1:-}"
+
+    if [ -z "$enrollment_id" ]; then
+        log_error "Usage: ./dive federation approve-enrollment <ENROLLMENT_ID>"
+        return 1
+    fi
+
+    local api_url
+    api_url="$(_fed_hub_api_url)"
+    local admin_key
+    admin_key="$(_fed_admin_key)"
+
+    log_info "Approving enrollment ${enrollment_id}..."
+
+    local response
+    response=$(curl -sS --max-time 30 -k \
+        -X POST "${api_url}/api/federation/enrollment/${enrollment_id}/approve" \
+        -H "Content-Type: application/json" \
+        -H "X-Admin-Key: ${admin_key}" 2>&1)
+
+    if [ $? -ne 0 ] || echo "$response" | jq -e '.error' &>/dev/null; then
+        log_error "Approval failed: $(echo "$response" | jq -r '.message // .error // "unknown"')"
+        return 1
+    fi
+
+    local status
+    status=$(echo "$response" | jq -r '.status // "unknown"')
+    local requester
+    requester=$(echo "$response" | jq -r '.requesterInstanceCode // "unknown"')
+
+    log_success "Enrollment ${enrollment_id} approved (${requester})"
+    log_info "Credential generation started. Spoke can now run:"
+    log_info "  ./dive federation exchange ${enrollment_id} ${api_url}"
+}
+
+##
+# Exchange credentials (spoke side)
+# Polls Hub for approver credentials, creates local OIDC client, pushes credentials back
+# Usage: ./dive federation exchange <ENROLLMENT_ID> <HUB_URL>
+##
+cmd_federation_exchange() {
+    local enrollment_id="${1:-}"
+    local hub_url="${2:-}"
+
+    if [ -z "$enrollment_id" ] || [ -z "$hub_url" ]; then
+        log_error "Usage: ./dive federation exchange <ENROLLMENT_ID> <HUB_URL>"
+        log_info "  ENROLLMENT_ID: From the enrollment submission"
+        log_info "  HUB_URL:       Hub API URL (e.g., https://hub.dive25.com)"
+        return 1
+    fi
+
+    hub_url="${hub_url%/}"
+
+    # Step 1: Poll Hub for approver credentials
+    log_info "Step 1/3: Fetching Hub credentials..."
+    local max_attempts=20
+    local attempt=0
+    local credentials=""
+
+    while [ $attempt -lt $max_attempts ]; do
+        attempt=$((attempt + 1))
+        local response
+        response=$(curl -sS --max-time 15 -k \
+            "${hub_url}/api/federation/enrollment/${enrollment_id}/credentials" 2>&1)
+
+        if [ $? -ne 0 ]; then
+            log_error "Cannot reach Hub at ${hub_url}"
+            return 1
+        fi
+
+        local status
+        status=$(echo "$response" | jq -r '.status // ""')
+
+        if echo "$response" | jq -e '.credentials' &>/dev/null; then
+            credentials=$(echo "$response" | jq '.credentials')
+            log_success "Hub credentials received"
+            break
+        fi
+
+        if echo "$response" | jq -e '.error' &>/dev/null; then
+            local err_msg
+            err_msg=$(echo "$response" | jq -r '.message // .error')
+            log_error "Error: ${err_msg}"
+            return 1
+        fi
+
+        # 202 — still generating
+        if [ $attempt -lt $max_attempts ]; then
+            log_info "  Credentials generating... retrying in 3s (${attempt}/${max_attempts})"
+            sleep 3
+        fi
+    done
+
+    if [ -z "$credentials" ]; then
+        log_error "Timed out waiting for Hub credentials"
+        return 1
+    fi
+
+    # Extract Hub metadata for creating local client
+    local hub_idp_url hub_realm hub_instance_code
+    hub_idp_url=$(echo "$credentials" | jq -r '.oidcIssuerUrl // ""' | sed 's|/realms/.*||')
+    hub_realm=$(echo "$credentials" | jq -r '.oidcIssuerUrl // ""' | grep -oP 'realms/\K[^/]+')
+    hub_instance_code=$(echo "$hub_realm" | sed 's/dive-v3-broker-//' | tr '[:lower:]' '[:upper:]')
+
+    if [ -z "$hub_idp_url" ] || [ -z "$hub_realm" ]; then
+        log_error "Invalid Hub credential metadata"
+        log_debug "Credentials: ${credentials}"
+        return 1
+    fi
+
+    log_info "Hub: ${hub_instance_code} (${hub_idp_url}, realm: ${hub_realm})"
+
+    # Step 2: Create reciprocal OIDC client on local Keycloak
+    log_info "Step 2/3: Creating local OIDC client for ${hub_instance_code}..."
+
+    local local_api_url="${API_URL:-https://localhost:4000}"
+    local admin_key
+    admin_key="$(_fed_admin_key)"
+
+    local local_response
+    local_response=$(curl -sS --max-time 30 -k \
+        -X POST "${local_api_url}/api/federation/create-local-client" \
+        -H "Content-Type: application/json" \
+        -H "X-Admin-Key: ${admin_key}" \
+        -d "{
+            \"partnerInstanceCode\": \"${hub_instance_code}\",
+            \"partnerIdpUrl\": \"${hub_idp_url}\",
+            \"partnerRealm\": \"${hub_realm}\"
+        }" 2>&1)
+
+    if [ $? -ne 0 ] || echo "$local_response" | jq -e '.error' &>/dev/null; then
+        log_error "Failed to create local OIDC client"
+        log_debug "Response: ${local_response:0:300}"
+        return 1
+    fi
+
+    local local_creds
+    local_creds=$(echo "$local_response" | jq '.credentials')
+    if [ "$local_creds" = "null" ] || [ -z "$local_creds" ]; then
+        log_error "No credentials returned from local backend"
+        return 1
+    fi
+
+    log_success "Local OIDC client created"
+
+    # Step 3: Push spoke credentials back to Hub
+    log_info "Step 3/3: Pushing credentials to Hub..."
+
+    local push_response
+    push_response=$(curl -sS --max-time 15 -k \
+        -X POST "${hub_url}/api/federation/enrollment/${enrollment_id}/credentials" \
+        -H "Content-Type: application/json" \
+        -d "$local_creds" 2>&1)
+
+    if [ $? -ne 0 ] || echo "$push_response" | jq -e '.error' &>/dev/null; then
+        log_error "Failed to push credentials to Hub"
+        log_debug "Response: ${push_response:0:300}"
+        return 1
+    fi
+
+    local final_status
+    final_status=$(echo "$push_response" | jq -r '.status // "unknown"')
+
+    echo ""
+    echo "============================================"
+    echo "  Credential Exchange Complete"
+    echo "============================================"
+    echo ""
+    echo "  Enrollment:  ${enrollment_id}"
+    echo "  Status:      ${final_status}"
+    echo "  Hub:         ${hub_instance_code}"
+    echo ""
+    echo "  Both sides now have OIDC client metadata."
+    echo "  No admin passwords were exchanged."
+    echo ""
+    if [ "$final_status" = "credentials_exchanged" ]; then
+        echo "  NEXT: Phase C — IdP creation and trust cascade"
+        echo "    (Coming soon: ./dive federation activate ${enrollment_id})"
+    fi
+    echo ""
+
+    return 0
+}
+
 module_federation() {
     local action="${1:-help}"
     shift || true
@@ -2369,6 +2558,12 @@ module_federation() {
         verify-fingerprint)
             cmd_federation_verify_fingerprint "$@"
             ;;
+        approve-enrollment)
+            cmd_federation_approve_enrollment "$@"
+            ;;
+        exchange)
+            cmd_federation_exchange "$@"
+            ;;
 
         help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
@@ -2391,6 +2586,8 @@ module_federation() {
             echo "  enroll <URL>           Request federation enrollment with a remote instance"
             echo "  enrollments            List pending enrollment requests (admin)"
             echo "  verify-fingerprint <ID>  Mark enrollment fingerprint as verified (admin)"
+            echo "  approve-enrollment <ID>  Approve an enrollment request (admin)"
+            echo "  exchange <ID> <HUB_URL>  Exchange credentials after approval (spoke)"
             echo "  approve <CODE|ID>      Approve a pending spoke or enrollment"
             echo "  reject <ID> --reason TEXT  Reject an enrollment request"
             echo ""
@@ -2445,6 +2642,8 @@ export -f cmd_federation_show_fingerprint
 export -f cmd_federation_enroll
 export -f cmd_federation_enrollments
 export -f cmd_federation_verify_fingerprint
+export -f cmd_federation_approve_enrollment
+export -f cmd_federation_exchange
 export -f _federation_update_trusted_issuers
 export -f federation_register_external_spoke
 export -f federation_register_hub_on_spoke

@@ -1064,6 +1064,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 // ============================================
 
 import { enrollmentService, type EnrollmentRequest } from '../services/enrollment.service';
+import { credentialExchangeService } from '../services/credential-exchange.service';
 
 const enrollmentRequestSchema = z.object({
     instanceCode: z.string().min(2).max(5).toUpperCase(),
@@ -1258,6 +1259,15 @@ router.post('/enrollment/:enrollmentId/approve', authenticateJWT, requireAdmin, 
         const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
 
         const enrollment = await enrollmentService.approve(enrollmentId, actor);
+
+        // Generate approver credentials asynchronously (non-blocking).
+        // The GET /credentials endpoint returns 202 until credentials are ready.
+        credentialExchangeService.generateApproverCredentials(enrollment)
+            .then(() => logger.info('Approver credentials generated', { enrollmentId }))
+            .catch((err: unknown) => logger.error('Failed to generate approver credentials', {
+                enrollmentId,
+                error: err instanceof Error ? err.message : 'Unknown error',
+            }));
 
         res.json({
             success: true,
@@ -1485,6 +1495,53 @@ router.get('/enrollment-stats', authenticateJWT, requireAdmin, async (_req: Requ
     } catch (error) {
         logger.error('Failed to get enrollment stats', { error: error instanceof Error ? error.message : 'Unknown error' });
         res.status(500).json({ error: 'InternalError', message: 'Failed to get enrollment statistics' });
+    }
+});
+
+/**
+ * POST /api/federation/create-local-client
+ * Create an OIDC client on the local Keycloak for a federation partner.
+ * Used by spoke CLI during credential exchange to create a reciprocal client.
+ * Admin-only (X-Admin-Key or JWT).
+ */
+const createLocalClientSchema = z.object({
+    partnerInstanceCode: z.string().min(2).max(5).toUpperCase(),
+    partnerIdpUrl: z.string().url(),
+    partnerRealm: z.string().min(1),
+});
+
+router.post('/create-local-client', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const parsed = createLocalClientSchema.safeParse(req.body);
+        if (!parsed.success) {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'Invalid request body',
+                details: parsed.error.issues,
+            });
+            return;
+        }
+
+        const { partnerInstanceCode, partnerIdpUrl, partnerRealm } = parsed.data;
+
+        const credentials = await credentialExchangeService.generateLocalClient(
+            partnerInstanceCode,
+            partnerIdpUrl,
+            partnerRealm,
+        );
+
+        res.json({
+            success: true,
+            credentials,
+        });
+    } catch (error) {
+        logger.error('Failed to create local federation client', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to create local federation client',
+        });
     }
 });
 
