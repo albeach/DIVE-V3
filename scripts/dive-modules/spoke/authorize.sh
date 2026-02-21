@@ -196,7 +196,10 @@ during deployment. The code expires in ${ttl_hours} hours." 2>/dev/null
             return 1
         fi
     else
-        # Load vault module
+        # Load vault modules (module.sh defines vault_is_running, pki.sh defines module_vault_provision)
+        if [ -f "${MODULES_DIR}/vault/module.sh" ]; then
+            source "${MODULES_DIR}/vault/module.sh"
+        fi
         if [ -f "${MODULES_DIR}/vault/pki.sh" ]; then
             source "${MODULES_DIR}/vault/pki.sh"
             if type -t module_vault_provision &>/dev/null; then
