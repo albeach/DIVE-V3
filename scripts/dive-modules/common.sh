@@ -340,7 +340,7 @@ is_pro()    { [ "$(dive_mode)" = "pro" ]; }
 export AWS_REGION="${AWS_REGION:-us-gov-east-1}"
 export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
-export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
+export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME:-/root}/.ssh/ABeach-SSH-Key.pem}"
 
 # Source key vars from .env.hub early (before EC2 auto-config and Caddy domain computation).
 # Only pulls specific vars to avoid overriding unrelated shell settings.
