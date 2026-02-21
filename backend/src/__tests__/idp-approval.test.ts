@@ -46,4 +46,3 @@ describe('IdP Approval Service', () => {
         });
     });
 });
-

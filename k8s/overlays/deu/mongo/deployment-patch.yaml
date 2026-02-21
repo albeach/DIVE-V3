@@ -1,0 +1,31 @@
+# =============================================================================
+# DIVE V3 MongoDB - DEU Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: dive-v3-deu
+spec:
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+        app.kubernetes.io/instance: deu
+    spec:
+      containers:
+        - name: mongo
+          env:
+            - name: MONGO_INITDB_DATABASE
+              value: "dive-v3-deu"
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-data

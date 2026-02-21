@@ -1,0 +1,529 @@
+/**
+ * DIVE V3 - Spanish SAML IdP Theme
+ * Matches Keycloak dive-v3-esp theme exactly
+ * Spanish Defense Ministry styling with red/yellow flag colors
+ */
+
+/* ============================================
+   CSS RESET & BASE
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   BACKGROUND (Spanish Colors)
+   ============================================ */
+
+body {
+    position: relative;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #AA151B 0%, #F1BF00 100%);
+    background-attachment: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4));
+    z-index: 0;
+}
+
+/* ============================================
+   LAYOUT WRAPPER
+   ============================================ */
+
+#wrap {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+#header {
+    display: none; /* Hide SimpleSAMLphp default header */
+}
+
+/* ============================================
+   MAIN CARD (Glassmorphism)
+   ============================================ */
+
+#content {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: 1.5rem;
+    padding: 3rem 2.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: slideUp 0.6s ease-out;
+}
+
+/* Spanish Flag Accent Bar */
+#content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(to right, 
+        #AA151B 0%, #AA151B 25%, 
+        #F1BF00 25%, #F1BF00 75%, 
+        #AA151B 75%, #AA151B 100%
+    );
+    border-radius: 1.5rem 1.5rem 0 0;
+}
+
+@media (max-width: 640px) {
+    #content {
+        padding: 2rem 1.5rem;
+    }
+}
+
+/* ============================================
+   LOGO
+   ============================================ */
+
+.logo-container {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.logo-container img {
+    max-height: 96px;
+    max-width: 280px;
+    height: auto;
+    width: auto;
+    margin: 0 auto;
+    display: block;
+}
+
+/* ============================================
+   TYPOGRAPHY
+   ============================================ */
+
+h1, h2, h3 {
+    color: #AA151B;
+    font-weight: 700;
+    margin: 0 0 1rem 0;
+}
+
+h1 {
+    font-size: 1.875rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+h2 {
+    font-size: 1.25rem;
+    color: #374151;
+    font-weight: 600;
+    text-align: center;
+}
+
+p {
+    color: #6b7280;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+    text-align: center;
+}
+
+.realm-description {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+/* ============================================
+   LANGUAGE SELECTOR
+   ============================================ */
+
+#languagebar {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+#languagebar ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: inline-flex;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.25rem;
+    border-radius: 0.75rem;
+}
+
+#languagebar li {
+    display: inline-block;
+}
+
+#languagebar a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    color: #6b7280;
+    text-decoration: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+#languagebar a:hover,
+#languagebar a.current {
+    background: white;
+    color: #AA151B;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   FORMS
+   ============================================ */
+
+form {
+    margin-top: 2rem;
+}
+
+form > table {
+    width: 100%;
+    border-spacing: 0;
+    border-collapse: collapse;
+}
+
+form > table tr {
+    display: block;
+    margin-bottom: 1.25rem;
+}
+
+form > table td {
+    display: block;
+    width: 100%;
+    padding: 0;
+}
+
+label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    color: #111827;
+    background-color: #ffffff;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: #AA151B;
+    box-shadow: 0 0 0 3px rgba(170, 21, 27, 0.1);
+}
+
+input::placeholder {
+    color: #9ca3af;
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+button,
+input[type="submit"],
+.btn {
+    width: 100%;
+    padding: 0.875rem 1.5rem;
+    margin-top: 1.5rem;
+    background: linear-gradient(135deg, #AA151B 0%, #F1BF00 100%);
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 10px 15px -3px rgba(170, 21, 27, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+button:hover,
+input[type="submit"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(170, 21, 27, 0.4);
+}
+
+button:active,
+input[type="submit"]:active {
+    transform: translateY(0);
+}
+
+button:disabled,
+input[type="submit"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================
+   ALERTS
+   ============================================ */
+
+.success,
+.info,
+.warning,
+.error,
+.alert {
+    padding: 1rem;
+    border-radius: 0.75rem;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.success {
+    background-color: #d1fae5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+}
+
+.info {
+    background-color: #dbeafe;
+    border: 1px solid #93c5fd;
+    color: #1e40af;
+}
+
+.warning {
+    background-color: #fef3c7;
+    border: 1px solid #fbbf24;
+    color: #92400e;
+}
+
+.error {
+    background-color: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+
+#footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.875rem;
+}
+
+#footer a {
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s ease;
+}
+
+#footer a:hover {
+    opacity: 0.8;
+}
+
+/* ============================================
+   LINKS
+   ============================================ */
+
+a {
+    color: #AA151B;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: #8a1116;
+    text-decoration: underline;
+}
+
+/* ============================================
+   SECURITY INDICATORS
+   ============================================ */
+
+.security-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(72, 187, 120, 0.1);
+    color: #065f46;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 1.5rem auto 0;
+    border: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+.security-badge::before {
+    content: '🔒';
+}
+
+/* ============================================
+   SPANISH MINISTRY BRANDING
+   ============================================ */
+
+.ministry-title {
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.ministry-title::before {
+    content: '🇪🇸';
+    margin-right: 0.5rem;
+}
+
+/* ============================================
+   DATA TABLES (for attribute display)
+   ============================================ */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table:not(form table) {
+    margin: 1rem 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+table:not(form table) th {
+    background: #f9fafb;
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+table:not(form table) td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+table:not(form table) tr:last-child td {
+    border-bottom: none;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 640px) {
+    body {
+        padding: 1rem 0.5rem;
+    }
+
+    #wrap {
+        max-width: 100%;
+    }
+
+    #content {
+        padding: 2rem 1.5rem;
+        border-radius: 1.25rem;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    h2 {
+        font-size: 1.125rem;
+    }
+
+    button,
+    input[type="submit"] {
+        padding: 0.875rem 1rem;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+input:focus,
+button:focus,
+a:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #AA151B;
+    outline-offset: 2px;
+}

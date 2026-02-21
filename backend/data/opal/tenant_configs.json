@@ -1,0 +1,143 @@
+{
+  "$schema": "./schemas/tenant_configs.schema.json",
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-01-17T02:58:11.876Z",
+    "description": "OPAL-managed per-tenant configuration for DIVE V3",
+    "compliance": [
+      "ACP-240",
+      "NIST 800-63B"
+    ],
+    "managedBy": "opal-data-publisher"
+  },
+  "tenant_configs": {
+    "USA": {
+      "code": "USA",
+      "name": "United States",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 12,
+      "default_coi": [
+        "US-ONLY",
+        "FVEY",
+        "NATO"
+      ],
+      "aal_requirements": {
+        "UNCLASSIFIED": 1,
+        "CONFIDENTIAL": 2,
+        "SECRET": 2,
+        "TOP_SECRET": 3
+      },
+      "classification_system": "US_STANDARD",
+      "clearance_mapping": {
+        "U": "UNCLASSIFIED",
+        "C": "CONFIDENTIAL",
+        "S": "SECRET",
+        "TS": "TOP_SECRET",
+        "TS/SCI": "TOP_SECRET"
+      },
+      "allowed_protocols": [
+        "oidc",
+        "saml"
+      ],
+      "require_device_compliance": false,
+      "allow_industry_access": true,
+      "industry_max_classification": "SECRET"
+    },
+    "FRA": {
+      "code": "FRA",
+      "name": "France",
+      "locale": "fr-FR",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "FRA-US",
+        "NATO"
+      ],
+      "aal_requirements": {
+        "UNCLASSIFIED": 1,
+        "CONFIDENTIAL": 2,
+        "SECRET": 2,
+        "TOP_SECRET": 3
+      },
+      "classification_system": "FRENCH_STANDARD",
+      "clearance_mapping": {
+        "NON_PROTEGE": "UNCLASSIFIED",
+        "DIFFUSION_RESTREINTE": "CONFIDENTIAL",
+        "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
+        "SECRET_DEFENSE": "SECRET",
+        "TRES_SECRET_DEFENSE": "TOP_SECRET"
+      },
+      "allowed_protocols": [
+        "saml",
+        "oidc"
+      ],
+      "require_device_compliance": false,
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "GBR": {
+      "code": "GBR",
+      "name": "United Kingdom",
+      "locale": "en-GB",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "GBR-US",
+        "FVEY",
+        "NATO"
+      ],
+      "aal_requirements": {
+        "UNCLASSIFIED": 1,
+        "CONFIDENTIAL": 2,
+        "SECRET": 2,
+        "TOP_SECRET": 3
+      },
+      "classification_system": "UK_STANDARD",
+      "clearance_mapping": {
+        "OFFICIAL": "UNCLASSIFIED",
+        "OFFICIAL_SENSITIVE": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      },
+      "allowed_protocols": [
+        "oidc",
+        "saml"
+      ],
+      "require_device_compliance": false,
+      "allow_industry_access": true,
+      "industry_max_classification": "SECRET"
+    },
+    "DEU": {
+      "code": "DEU",
+      "name": "Germany",
+      "locale": "de-DE",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "DEU-US",
+        "NATO"
+      ],
+      "aal_requirements": {
+        "UNCLASSIFIED": 1,
+        "CONFIDENTIAL": 2,
+        "SECRET": 2,
+        "TOP_SECRET": 3
+      },
+      "classification_system": "GERMAN_STANDARD",
+      "clearance_mapping": {
+        "OFFEN": "UNCLASSIFIED",
+        "VS_NUR_FUER_DEN_DIENSTGEBRAUCH": "CONFIDENTIAL",
+        "VS_VERTRAULICH": "CONFIDENTIAL",
+        "GEHEIM": "SECRET",
+        "STRENG_GEHEIM": "TOP_SECRET"
+      },
+      "allowed_protocols": [
+        "oidc"
+      ],
+      "require_device_compliance": false,
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    }
+  }
+}

@@ -1,0 +1,296 @@
+/**
+ * Federated Query Routes
+ * Phase 3: Direct MongoDB Federation for high-performance cross-instance queries
+ *
+ * Provides two modes of federated search:
+ * 1. /api/resources/federated-search (HTTP relay - existing)
+ * 2. /api/resources/federated-query (Direct MongoDB - new, faster for local instances)
+ *
+ * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
+ */
+
+import { Router, Request, Response, NextFunction } from 'express';
+import { federatedResourceService, IFederatedSearchOptions, IUserAttributes } from '../services/federated-resource.service';
+import { authenticateJWT } from '../middleware/authz.middleware';
+import { logger } from '../utils/logger';
+
+const router = Router();
+
+// ============================================
+// Initialize Service on Import
+// ============================================
+
+// Async initialization - will complete before first request if possible
+federatedResourceService.initialize().catch(err => {
+    logger.warn('FederatedResourceService initialization failed on import', {
+        error: err instanceof Error ? err.message : 'Unknown error'
+    });
+});
+
+// ============================================
+// Routes
+// ============================================
+
+/**
+ * POST /api/resources/federated-query
+ * Execute federated search using direct MongoDB connections
+ *
+ * Request body:
+ * {
+ *   query?: string,           // Text search
+ *   classification?: string[], // Filter by classification(s)
+ *   releasableTo?: string[],  // Filter by releasability
+ *   coi?: string[],           // Filter by COI(s)
+ *   encrypted?: boolean,      // Filter by encryption status
+ *   instances?: string[],     // Target specific instances (e.g., ["USA", "FRA"])
+ *   limit?: number,           // Max results (default: 100)
+ *   offset?: number           // Pagination offset
+ * }
+ */
+router.post('/federated-query', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `fed-q-${Date.now()}`;
+    const user = (req as any).user;
+
+    try {
+        // SSOT: User attributes come from Keycloak token via protocol mappers
+        // If missing, Keycloak protocol mappers are not configured - see fix-mappers command
+        // The frontend enrichment (auth.ts) handles session-level fallbacks
+        if (!user?.clearance) {
+            logger.warn('User clearance missing from token - check Keycloak protocol mappers', {
+                requestId,
+                uniqueID: user?.uniqueID,
+                hint: 'Run: ./dive --instance <CODE> spoke fix-mappers'
+            });
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'User clearance not available - Keycloak protocol mappers may be missing',
+                hint: 'Run: ./dive --instance <CODE> spoke fix-mappers',
+                requestId
+            });
+            return;
+        }
+
+        if (!user?.countryOfAffiliation) {
+            logger.warn('User countryOfAffiliation missing from token', {
+                requestId,
+                uniqueID: user?.uniqueID
+            });
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'User countryOfAffiliation not available',
+                requestId
+            });
+            return;
+        }
+
+        // Build search options
+        // Accept filters at top level (canonical) OR nested in filters.* (proxy compat)
+        const rawClassification = req.body.classification || req.body.filters?.classification;
+        const rawReleasableTo = req.body.releasableTo || req.body.filters?.releasableTo;
+        const rawCoi = req.body.coi || req.body.filters?.coi;
+        const rawLimit = req.body.limit || req.body.pagination?.limit;
+
+        const searchOptions: IFederatedSearchOptions = {
+            query: req.body.query,
+            classification: rawClassification ?
+                (Array.isArray(rawClassification) ? rawClassification : [rawClassification]) :
+                undefined,
+            releasableTo: rawReleasableTo ?
+                (Array.isArray(rawReleasableTo) ? rawReleasableTo : [rawReleasableTo]) :
+                undefined,
+            coi: rawCoi ?
+                (Array.isArray(rawCoi) ? rawCoi : [rawCoi]) :
+                undefined,
+            encrypted: req.body.encrypted ?? req.body.filters?.encrypted,
+            instances: req.body.instances,
+            limit: parseInt(rawLimit || '100'),
+            offset: parseInt(req.body.offset || '0'),
+            // Forward auth header for API-based federation to remote instances
+            authHeader: req.headers.authorization
+        };
+
+        // Build user attributes for ABAC filtering
+        const userAttributes: IUserAttributes = {
+            uniqueID: user.uniqueID || user.sub || user.preferred_username,
+            clearance: user.clearance,
+            countryOfAffiliation: user.countryOfAffiliation,
+            acpCOI: user.acpCOI || []
+        };
+
+        logger.info('Federated query initiated', {
+            requestId,
+            user: userAttributes.uniqueID,
+            country: userAttributes.countryOfAffiliation,
+            clearance: userAttributes.clearance,
+            searchOptions: {
+                query: searchOptions.query,
+                classification: searchOptions.classification,
+                releasableTo: searchOptions.releasableTo,
+                coi: searchOptions.coi,
+                instances: searchOptions.instances,
+                limit: searchOptions.limit
+            },
+            rawBody: {
+                hasTopLevelFilters: !!(req.body.classification || req.body.releasableTo || req.body.coi),
+                hasNestedFilters: !!req.body.filters,
+                hasTopLevelLimit: !!req.body.limit,
+                hasNestedLimit: !!req.body.pagination?.limit,
+                instanceCount: req.body.instances?.length || 0
+            }
+        });
+
+        // Execute federated search
+        const response = await federatedResourceService.search(searchOptions, userAttributes);
+
+        logger.info('Federated query completed', {
+            requestId,
+            totalResults: response.totalResults,
+            totalAccessible: response.totalAccessible, // Sum of ABAC-accessible docs
+            returnedResults: response.results.length,
+            executionTimeMs: response.executionTimeMs,
+            instanceResults: Object.entries(response.instanceResults).map(([k, v]) => ({
+                instance: k,
+                count: v.count,
+                accessibleCount: v.accessibleCount,  // Include accessibleCount
+                latencyMs: v.latencyMs,
+                error: v.error
+            }))
+        });
+
+        res.json({
+            requestId,
+            ...response,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logger.error('Federated query failed', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        next(error);
+    }
+});
+
+/**
+ * GET /api/resources/federated-query
+ * Alias for POST (convenience for simple queries)
+ */
+router.get('/federated-query', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `fed-q-${Date.now()}`;
+    const user = (req as any).user;
+
+    try {
+        if (!user?.clearance || !user?.countryOfAffiliation) {
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'User attributes not available',
+                requestId
+            });
+            return;
+        }
+
+        // Parse query params
+        const searchOptions: IFederatedSearchOptions = {
+            query: req.query.query as string,
+            classification: req.query.classification ?
+                (Array.isArray(req.query.classification) ? req.query.classification as string[] : [req.query.classification as string]) :
+                undefined,
+            releasableTo: req.query.releasableTo ?
+                (Array.isArray(req.query.releasableTo) ? req.query.releasableTo as string[] : [req.query.releasableTo as string]) :
+                undefined,
+            coi: req.query.coi ?
+                (Array.isArray(req.query.coi) ? req.query.coi as string[] : [req.query.coi as string]) :
+                undefined,
+            instances: req.query.instances ?
+                (Array.isArray(req.query.instances) ? req.query.instances as string[] : [req.query.instances as string]) :
+                undefined,
+            limit: parseInt(req.query.limit as string || '100'),
+            offset: parseInt(req.query.offset as string || '0'),
+            // CRITICAL FIX (Issue #4 - 2026-02-03): Forward auth header for API-based federation
+            authHeader: req.headers.authorization
+        };
+
+        const userAttributes: IUserAttributes = {
+            uniqueID: user.uniqueID || user.sub,
+            clearance: user.clearance,
+            countryOfAffiliation: user.countryOfAffiliation,
+            acpCOI: user.acpCOI || []
+        };
+
+        const response = await federatedResourceService.search(searchOptions, userAttributes);
+
+        res.json({
+            requestId,
+            ...response,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logger.error('Federated query (GET) failed', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        next(error);
+    }
+});
+
+/**
+ * GET /api/resources/federated-status
+ * Get status of all federated instances
+ */
+router.get('/federated-status', authenticateJWT, async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const status = federatedResourceService.getInstanceStatus();
+        const available = federatedResourceService.getAvailableInstances();
+
+        res.json({
+            currentInstance: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA',
+            federatedQueryEnabled: true,
+            mode: 'direct-mongodb',
+            instances: status,
+            availableInstances: available,
+            totalInstances: Object.keys(status).length,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * POST /api/resources/federated-reconnect
+ * Force reconnection to specific instance(s)
+ */
+router.post('/federated-reconnect', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const user = (req as any).user;
+
+    try {
+        // Admin-only operation
+        if (!user?.preferred_username?.includes('admin')) {
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'Admin privileges required'
+            });
+            return;
+        }
+
+        // Reinitialize the service (will reconnect all instances)
+        await federatedResourceService.shutdown();
+        await federatedResourceService.initialize();
+
+        const status = federatedResourceService.getInstanceStatus();
+
+        res.json({
+            message: 'Reconnection initiated',
+            instances: status,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        next(error);
+    }
+});
+
+export default router;

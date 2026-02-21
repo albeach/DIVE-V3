@@ -1,0 +1,9 @@
+{
+  "marking": "NATO CONFIDENTIAL",
+  "document_id": "1227530e-0336-43fe-b5a5-8634e2ca27db",
+  "created": "2026-01-22T12:11:28Z",
+  "dummy": true,
+  "payload": {
+    "example": "This is dummy JSON content."
+  }
+}

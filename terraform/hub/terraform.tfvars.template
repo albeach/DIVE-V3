@@ -1,0 +1,24 @@
+# DIVE V3 Hub Terraform Variables
+# Copy this file to terraform.tfvars and fill in the values
+# Or set via environment variables: TF_VAR_keycloak_admin_password=xxx
+
+# Keycloak Configuration
+keycloak_url              = "https://localhost:8443"
+keycloak_admin_username   = "admin"
+# keycloak_admin_password = "REPLACE_WITH_ACTUAL_PASSWORD"  # Read from .env automatically
+
+# Application URLs
+app_url = "https://localhost:3000"
+api_url = "https://localhost:4000"
+idp_url = "https://localhost:8443"
+
+# Secrets (auto-generated if not provided)
+# client_secret = "OPTIONAL_OVERRIDE"
+
+# Test User Passwords (defaults provided)
+# test_user_password  = "DiveTestSecure2025!"
+# admin_user_password = "DiveAdminSecure2025!"
+
+# WebAuthn Configuration
+webauthn_rp_id = "localhost"
+

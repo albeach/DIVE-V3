@@ -1,10 +1,11 @@
 /**
  * IdP Approvals Page
- * 
+ *
  * Review and approve/reject pending IdP submissions
  */
 
 'use client';
+
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,6 +16,8 @@ import RiskBreakdown from '@/components/admin/risk-breakdown';
 import ComplianceStatusCard from '@/components/admin/compliance-status-card';
 import SLACountdown from '@/components/admin/sla-countdown';
 import RiskFactorAnalysis from '@/components/admin/risk-factor-analysis';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
+import { AdminPageTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 
 interface IIdPSubmission {
     submissionId: string;
@@ -69,31 +72,24 @@ export default function ApprovalsPage() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
-        if (status === 'authenticated' && session?.accessToken) {
+        if (status === 'authenticated') {
             fetchPending();
         }
-    }, [status, session?.accessToken]);
+    }, [status]);
+
+    // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+    useEffect(() => {
+        if (status !== 'loading' && status === 'unauthenticated') {
+            router.push('/login');
+        }
+    }, [status, router]);
 
     const fetchPending = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) {
-                setError('No access token available. Please refresh the page.');
-                setLoading(false);
-                return;
-            }
-
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/pending`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
-            );
+            const response = await fetch('/api/admin/approvals/pending');
 
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
@@ -125,17 +121,10 @@ export default function ApprovalsPage() {
         setIsProcessing(true);
 
         try {
-            const token = (session as any)?.accessToken;
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/${alias}/approve`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
+            const response = await fetch(`/api/admin/approvals/${alias}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
 
             const result = await response.json();
 
@@ -162,18 +151,11 @@ export default function ApprovalsPage() {
         setIsProcessing(true);
 
         try {
-            const token = (session as any)?.accessToken;
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/${alias}/reject`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ reason: rejectReason })
-                }
-            );
+            const response = await fetch(`/api/admin/approvals/${alias}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: rejectReason }),
+            });
 
             const result = await response.json();
 
@@ -204,24 +186,25 @@ export default function ApprovalsPage() {
     }
 
     if (status === 'unauthenticated') {
-        router.push('/login');
         return null;
     }
 
     return (
-        <PageLayout 
+        <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'Approvals', href: null }
-            ]}
         >
+            <AdminPageTransition pageKey="/admin/approvals">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
-                <p className="mt-2 text-sm text-gray-600">
-                    Review and approve or reject pending identity provider submissions.
-                </p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 data-testid="admin-heading" className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
+                        <p className="mt-2 text-sm text-gray-600">
+                            Review and approve or reject pending identity provider submissions.
+                        </p>
+                    </div>
+                    <PresenceIndicator page="approvals" />
+                </div>
             </div>
 
                 {/* Error Message */}
@@ -293,7 +276,7 @@ export default function ApprovalsPage() {
                                                 )}
                                             </div>
                                         </div>
-                                        
+
                                         {/* Phase 2: Risk Score Badge */}
                                         {submission.comprehensiveRiskScore && (
                                             <div className="flex-shrink-0">
@@ -387,12 +370,12 @@ export default function ApprovalsPage() {
                                     )}
 
                                     {/* View Details Button */}
-                                    <button
+                                    <AnimatedButton
                                         onClick={() => setSelectedIdP(selectedIdP?.alias === submission.alias ? null : submission)}
                                         className="text-sm text-gray-600 hover:text-gray-500 mb-4"
                                     >
                                         {selectedIdP?.alias === submission.alias ? 'Hide' : 'Show'} Configuration Details
-                                    </button>
+                                    </AnimatedButton>
 
                                     {/* Configuration Details (Expandable) */}
                                     {selectedIdP?.alias === submission.alias && (
@@ -412,7 +395,7 @@ export default function ApprovalsPage() {
 
                                     {/* Actions */}
                                     <div className="flex items-center space-x-4">
-                                        <button
+                                        <AnimatedButton
                                             onClick={() => handleApprove(submission.alias)}
                                             disabled={isProcessing}
                                             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
@@ -421,7 +404,7 @@ export default function ApprovalsPage() {
                                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                             </svg>
                                             Approve
-                                        </button>
+                                        </AnimatedButton>
 
                                         <div className="flex-1">
                                             <input
@@ -436,7 +419,7 @@ export default function ApprovalsPage() {
                                             />
                                         </div>
 
-                                        <button
+                                        <AnimatedButton
                                             onClick={() => handleReject(submission.alias)}
                                             disabled={isProcessing}
                                             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
@@ -445,14 +428,14 @@ export default function ApprovalsPage() {
                                                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                                             </svg>
                                             Reject
-                                        </button>
+                                        </AnimatedButton>
                                     </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
+        </AdminPageTransition>
         </PageLayout>
     );
 }
-

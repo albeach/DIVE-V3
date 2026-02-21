@@ -1,0 +1,152 @@
+# =============================================================================
+# DIVE V3 - Prometheus Alerting Rules
+# =============================================================================
+# Custom alerting rules for DIVE V3 services
+# =============================================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dive-v3-alerts
+  namespace: monitoring
+  labels:
+    app: dive-v3
+    app.kubernetes.io/name: dive-v3-alerts
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  groups:
+    - name: dive-v3-backend
+      interval: 30s
+      rules:
+        - alert: BackendDown
+          expr: up{job="dive-v3-backend"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: backend
+          annotations:
+            summary: "Backend service is down"
+            description: "Backend service has been down for more than 1 minute"
+
+        - alert: BackendHighErrorRate
+          expr: rate(http_requests_total{job="dive-v3-backend",status=~"5.."}[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            service: backend
+          annotations:
+            summary: "Backend high error rate"
+            description: "Backend error rate is above 10% for 5 minutes"
+
+        - alert: BackendHighLatency
+          expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="dive-v3-backend"}[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            service: backend
+          annotations:
+            summary: "Backend high latency"
+            description: "Backend p95 latency is above 500ms for 5 minutes"
+
+        - alert: BackendAuthorizationFailureRate
+          expr: rate(authorization_decisions_total{job="dive-v3-backend",decision="deny"}[5m]) / rate(authorization_decisions_total{job="dive-v3-backend"}[5m]) > 0.2
+          for: 5m
+          labels:
+            severity: warning
+            service: backend
+          annotations:
+            summary: "High authorization failure rate"
+            description: "Authorization denial rate is above 20% for 5 minutes"
+
+    - name: dive-v3-frontend
+      interval: 30s
+      rules:
+        - alert: FrontendDown
+          expr: up{job="dive-v3-frontend"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: frontend
+          annotations:
+            summary: "Frontend service is down"
+            description: "Frontend service has been down for more than 1 minute"
+
+        - alert: FrontendHighErrorRate
+          expr: rate(http_requests_total{job="dive-v3-frontend",status=~"5.."}[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: frontend
+          annotations:
+            summary: "Frontend high error rate"
+            description: "Frontend error rate is above 5% for 5 minutes"
+
+    - name: dive-v3-opa
+      interval: 30s
+      rules:
+        - alert: OPADown
+          expr: up{job="dive-v3-opa"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: opa
+          annotations:
+            summary: "OPA service is down"
+            description: "OPA service has been down for more than 1 minute"
+
+        - alert: OPAHighLatency
+          expr: histogram_quantile(0.95, rate(opa_server_request_duration_seconds_bucket[5m])) > 0.2
+          for: 5m
+          labels:
+            severity: warning
+            service: opa
+          annotations:
+            summary: "OPA high latency"
+            description: "OPA p95 latency is above 200ms for 5 minutes"
+
+    - name: dive-v3-keycloak
+      interval: 30s
+      rules:
+        - alert: KeycloakDown
+          expr: up{job="dive-v3-keycloak"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: keycloak
+          annotations:
+            summary: "Keycloak service is down"
+            description: "Keycloak service has been down for more than 1 minute"
+
+    - name: dive-v3-databases
+      interval: 30s
+      rules:
+        - alert: MongoDBDown
+          expr: up{job="dive-v3-mongodb"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: mongodb
+          annotations:
+            summary: "MongoDB is down"
+            description: "MongoDB has been down for more than 1 minute"
+
+        - alert: PostgreSQLDown
+          expr: up{job="dive-v3-postgres"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: postgres
+          annotations:
+            summary: "PostgreSQL is down"
+            description: "PostgreSQL has been down for more than 1 minute"
+
+        - alert: RedisDown
+          expr: up{job="dive-v3-redis"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: redis
+          annotations:
+            summary: "Redis is down"
+            description: "Redis has been down for more than 1 minute"
+

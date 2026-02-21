@@ -1,0 +1,305 @@
+# =============================================================================
+# DIVE V3 - Deployment Workflow
+# =============================================================================
+# Deploys to GCP Compute Engine on merge to main.
+# Includes automatic rollback on E2E test failure.
+#
+# Stages:
+# 1. Build Docker images and push to Artifact Registry
+# 2. Create checkpoint before deployment
+# 3. Deploy to pilot VM
+# 4. Run E2E tests
+# 5. Rollback on failure
+# =============================================================================
+
+name: DIVE Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target environment (normalized input)'
+        required: false
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+      skip_tests:
+        description: 'Skip E2E tests'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Dry run (build only, no deployment)'
+        required: false
+        default: false
+        type: boolean
+      force:
+        description: 'Force deployment'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Deployment reason'
+        required: false
+        default: 'Manual deployment'
+        type: string
+env:
+  GCP_PROJECT: dive25
+  GCP_ZONE: us-east4-c
+  PILOT_VM: dive-v3-pilot
+  REGISTRY: us-east4-docker.pkg.dev/dive25/dive-v3-images
+permissions:
+  contents: read
+concurrency:
+  group: dive-deploy-${{ github.event.inputs.target_env || github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 1: Build Docker Images
+  # ═══════════════════════════════════════════════════════════════════════════
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Calculate Version
+      id: version
+      run: |
+        if git describe --tags --exact-match 2>/dev/null; then
+          VERSION=$(git describe --tags --exact-match)
+        else
+          VERSION="0.0.0-$(git rev-list --count HEAD)-g$(git rev-parse --short HEAD)"
+        fi
+        SHA=$(git rev-parse --short HEAD)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "sha=${SHA}" >> $GITHUB_OUTPUT
+        echo "Version: ${VERSION}, SHA: ${SHA}"
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker us-east4-docker.pkg.dev --quiet
+    - name: Build and Push Backend
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./backend
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/backend:${{ steps.version.outputs.sha }}
+          ${{ env.REGISTRY }}/backend:${{ steps.version.outputs.version }}
+          ${{ env.REGISTRY }}/backend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        labels: |
+          org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          org.opencontainers.image.revision=${{ github.sha }}
+    - name: Build and Push Frontend
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./frontend
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.sha }}
+          ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.version }}
+          ${{ env.REGISTRY }}/frontend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Build and Push Keycloak
+      uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+      with:
+        context: ./keycloak
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/keycloak:${{ steps.version.outputs.sha }}
+          ${{ env.REGISTRY }}/keycloak:${{ steps.version.outputs.version }}
+          ${{ env.REGISTRY }}/keycloak:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 2: Deploy
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    if: ${{ inputs.dry_run != true }}
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: ${{ github.event.inputs.target_env || github.event.inputs.environment || 'dev' }}
+      url: https://usa-app.dive25.com
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+    - name: Create Pre-Deploy Checkpoint
+      run: |
+        echo "Creating checkpoint before deployment..."
+        gcloud compute ssh ${{ env.PILOT_VM }} \
+          --zone=${{ env.GCP_ZONE }} \
+          --project=${{ env.GCP_PROJECT }} \
+          --command="cd /opt/dive-v3 && ./dive checkpoint create pre-deploy-${{ needs.build.outputs.sha }}"
+    - name: Sync Code to Pilot VM
+      run: |
+        gcloud compute ssh ${{ env.PILOT_VM }} \
+          --zone=${{ env.GCP_ZONE }} \
+          --project=${{ env.GCP_PROJECT }} \
+          --command="cd /opt/dive-v3 && git fetch origin && git checkout ${{ github.sha }}"
+    - name: Deploy to Pilot VM
+      run: |
+        gcloud compute ssh ${{ env.PILOT_VM }} \
+          --zone=${{ env.GCP_ZONE }} \
+          --project=${{ env.GCP_PROJECT }} \
+          --command="cd /opt/dive-v3 && ./dive deploy"
+    - name: Wait for Health
+      run: |
+        echo "Waiting for services to be healthy..."
+        max_attempts=30
+        attempt=0
+        while [ $attempt -lt $max_attempts ]; do
+          if curl -sf --max-time 10 https://usa-app.dive25.com > /dev/null 2>&1; then
+            echo "✅ Services healthy!"
+            exit 0
+          fi
+          attempt=$((attempt + 1))
+          echo "Attempt $attempt/$max_attempts..."
+          sleep 10
+        done
+
+        echo "❌ Services did not become healthy"
+        exit 1
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 3: E2E Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: deploy
+    if: ${{ inputs.dry_run != true && !inputs.skip_tests }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    - name: Run Federation E2E Tests
+      run: |
+        if compgen -G "./tests/e2e/federation/*.sh" > /dev/null; then
+          chmod +x ./tests/e2e/federation/*.sh
+        fi
+        ./dive test federation
+      env:
+        DIVE_ENV: gcp
+        BASE_URL: https://usa-app.dive25.com
+    - name: Run Playwright Tests
+      run: |
+        cd frontend
+        npm ci
+        npx playwright install --with-deps chromium
+        npx playwright test --project=chromium
+      env:
+        BASE_URL: https://usa-app.dive25.com
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 4: Rollback on Failure
+  # ═══════════════════════════════════════════════════════════════════════════
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build, deploy, e2e-tests]
+    if: failure() && needs.deploy.result == 'success' && inputs.dry_run != true
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+    - name: Rollback Deployment
+      run: |
+        echo "🔄 Rolling back deployment..."
+        gcloud compute ssh ${{ env.PILOT_VM }} \
+          --zone=${{ env.GCP_ZONE }} \
+          --project=${{ env.GCP_PROJECT }} \
+          --command="cd /opt/dive-v3 && ./dive rollback pre-deploy-${{ needs.build.outputs.sha }}"
+    - name: Create Issue for Failed Deploy
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+      with:
+        script: "github.rest.issues.create({\n  owner: context.repo.owner,\n  repo: context.repo.repo,\n  title: '🚨 Deployment Rollback: ${{ needs.build.outputs.sha }}',\n  body: `## Deployment Failed - Automatic Rollback Performed\n\n  **Commit**: \\`${{ github.sha }}\\`\n  **Version**: \\`${{ needs.build.outputs.version }}\\`\n  **Run**: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n  E2E tests failed after deployment. Automatic rollback was performed.\n\n  ### Next Steps\n  1. Review the E2E test logs in the workflow run\n  2. Identify and fix the failing tests\n  3. Create a new PR with the fix\n\n  /cc @${context.actor}`,\n  labels: ['deployment-failure', 'needs-investigation', 'auto-rollback']\n})\n"
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Summary
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build, deploy, e2e-tests]
+    if: always()
+    steps:
+    - name: Create Summary
+      run: |
+        echo "## 🚀 DIVE V3 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Build Info" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: \`${{ needs.build.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **SHA**: \`${{ needs.build.outputs.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Pipeline Status" >> $GITHUB_STEP_SUMMARY
+        echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Build | ${{ needs.build.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Deploy | ${{ needs.deploy.result == 'success' && '✅ Pass' || needs.deploy.result == 'skipped' && '⏭️ Skipped' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| E2E Tests | ${{ needs.e2e-tests.result == 'success' && '✅ Pass' || needs.e2e-tests.result == 'skipped' && '⏭️ Skipped' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [[ "${{ needs.build.result }}" == "success" && "${{ needs.deploy.result }}" == "success" ]]; then
+          echo "### 🌐 Live Endpoints" >> $GITHUB_STEP_SUMMARY
+          echo "- **App**: https://usa-app.dive25.com" >> $GITHUB_STEP_SUMMARY
+          echo "- **API**: https://usa-api.dive25.com" >> $GITHUB_STEP_SUMMARY
+          echo "- **IdP**: https://usa-idp.dive25.com" >> $GITHUB_STEP_SUMMARY
+        fi
+    timeout-minutes: 30

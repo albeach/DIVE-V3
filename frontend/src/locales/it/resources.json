@@ -1,0 +1,191 @@
+{
+  "title": "Risorse",
+  "subtitle": "Gestire e accedere alle risorse informative della coalizione",
+  "list": {
+    "title": "Browser risorse",
+    "searchPlaceholder": "Cerca risorse per titolo, classificazione o tag...",
+    "noResults": "Nessuna risorsa trovata",
+    "totalResources": "{{count}} risorse",
+    "showing": "Mostrando {{start}}-{{end}} di {{total}}",
+    "loadMore": "Carica altro",
+    "refresh": "Aggiorna"
+  },
+  "filters": {
+    "title": "Filtri",
+    "clearAll": "Cancella tutto",
+    "classification": "Classificazione",
+    "releasability": "Diffusibilità",
+    "coi": "Comunità di interesse",
+    "dateRange": "Intervallo di date",
+    "encrypted": "Solo risorse crittografate",
+    "apply": "Applica filtri",
+    "reset": "Ripristina"
+  },
+  "table": {
+    "title": "Titolo",
+    "classification": "Classificazione",
+    "releasability": "Diffusibilità",
+    "created": "Creato",
+    "modified": "Modificato",
+    "actions": "Azioni",
+    "view": "Visualizza",
+    "edit": "Modifica",
+    "delete": "Elimina",
+    "download": "Scarica",
+    "requestAccess": "Richiedi accesso"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "Nessun risultato trovato",
+      "description": "Non abbiamo trovato documenti che corrispondano a \"{{query}}\". Prova a regolare i termini di ricerca o i filtri.",
+      "clearSearch": "Cancella ricerca"
+    },
+    "noMatchingDocuments": {
+      "title": "Nessun documento corrispondente",
+      "description": "I tuoi filtri attuali non corrispondono a nessun documento. Prova ad allentare i tuoi criteri di filtro.",
+      "clearFilters": "Cancella filtri"
+    },
+    "error": {
+      "title": "Si è verificato un errore",
+      "description": "Abbiamo riscontrato un errore durante il caricamento dei documenti. Riprova.",
+      "tryAgain": "Riprova"
+    }
+  },
+  "detail": {
+    "title": "Dettagli risorsa",
+    "metadata": "Metadati",
+    "resourceId": "ID risorsa",
+    "createdBy": "Creato da",
+    "createdDate": "Data creazione",
+    "lastModified": "Ultima modifica",
+    "fileSize": "Dimensione file",
+    "contentType": "Tipo contenuto",
+    "accessLog": "Registro accessi",
+    "noAccessHistory": "Nessuna cronologia accessi disponibile"
+  },
+  "upload": {
+    "title": "Carica risorsa",
+    "dragDrop": "Trascina e rilascia i file qui, o fai clic per sfogliare",
+    "selectFile": "Seleziona file",
+    "maxSize": "Dimensione massima file: {{size}}MB",
+    "allowedTypes": "Tipi consentiti: {{types}}",
+    "metadata": {
+      "title": "Metadati risorsa",
+      "titleLabel": "Titolo",
+      "titlePlaceholder": "Inserisci titolo risorsa",
+      "description": "Descrizione",
+      "descriptionPlaceholder": "Inserisci descrizione risorsa",
+      "classification": "Livello classificazione",
+      "releasability": "Diffondibile a",
+      "coi": "Comunità di interesse",
+      "tags": "Tag",
+      "encryption": "Crittografia"
+    },
+    "uploading": "Caricamento...",
+    "uploadProgress": "{{percent}}% caricato",
+    "uploadSuccess": "Risorsa caricata con successo",
+    "uploadError": "Errore nel caricamento della risorsa",
+    "cancel": "Annulla caricamento"
+  },
+  "access": {
+    "requesting": "Richiesta accesso...",
+    "granted": "Accesso concess",
+    "denied": "Accesso negato",
+    "pending": "Accesso in attesa",
+    "reasonDenied": "Motivo: {{reason}}",
+    "requestKey": "Richiedi chiave decrittografia",
+    "keyReceived": "Chiave decrittografia ricevuta",
+    "decrypting": "Decrittografia...",
+    "decrypted": "Decrittografato con successo"
+  },
+  "errors": {
+    "notFound": "Risorsa non trovata",
+    "accessDenied": "Non hai permessi per accedere a questa risorsa",
+    "loadFailed": "Errore nel caricamento della risorsa",
+    "uploadFailed": "Errore nel caricamento della risorsa",
+    "deleteFailed": "Errore nell'eliminazione della risorsa",
+    "insufficientClearance": "Livello autorizzazione insufficiente",
+    "countryNotReleased": "Risorsa non diffusa al tuo paese",
+    "coiNotMember": "Non sei membro della COI richiesta"
+  },
+  "breadcrumbs": {
+    "resources": "Risorse",
+    "upload": "Carica",
+    "detail": "Dettagli"
+  },
+  "federation": {
+    "local": "Locale",
+    "federated": "Federato"
+  },
+  "classifications": {
+    "unclassified": "NON CLASSIFICATO",
+    "restricted": "RISERVATO",
+    "confidential": "CONFIDENZIALE",
+    "secret": "SEGRETO",
+    "topSecret": "SEGRETISSIMO"
+  },
+  "auth": {
+    "signInToView": "Accedi per vedere le risorse",
+    "needAuthentication": "Devi essere autenticato per accedere alle risorse della coalizione."
+  },
+  "sorting": {
+    "titleAZ": "Titolo A-Z",
+    "titleZA": "Titolo Z-A",
+    "newest": "Più recente",
+    "oldest": "Più vecchio"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Documenti totali",
+    "ztdfEncrypted": "Crittografato ZTDF",
+    "local": "Locale",
+    "federated": "Federato",
+    "classification": "Classificazione",
+    "instances": "istanze",
+    "accessRate": "Tasso di accesso",
+    "avgAge": "Età media",
+    "topCOIs": "Top COI",
+    "coalition": "Coalizione"
+  },
+  "viewModes": {
+    "grid": "Griglia",
+    "list": "Lista",
+    "compact": "Compatto"
+  },
+  "bulkActions": {
+    "selected": "selezionato",
+    "deselectAll": "Deseleziona tutto",
+    "selectAll": "Seleziona tutto",
+    "export": "Esporta",
+    "compare": "Confronta",
+    "compareTooltip": {
+      "selectMin": "Seleziona almeno 2 elementi da confrontare",
+      "maxItems": "Può confrontare fino a 4 elementi",
+      "compareSelected": "Confronta elementi selezionati"
+    }
+  },
+  "comparison": {
+    "title": "Confronta risorse",
+    "closeTooltip": "Chiudi (Escape)",
+    "metadata": "Metadati"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Nessun segnalibro ancora",
+      "description": "Aggiungi segnalibri a documenti e politiche per accesso rapido. Fai clic sull'icona segnalibro su qualsiasi risorsa per salvarla qui."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Data creazione",
+    "quickSelect": "Selezione rapida",
+    "today": "Oggi",
+    "last7Days": "Ultimi 7 giorni",
+    "last30Days": "Ultimi 30 giorni",
+    "last90Days": "Ultimi 90 giorni",
+    "thisMonth": "Questo mese",
+    "lastMonth": "Mese scorso",
+    "customRange": "Intervallo personalizzato",
+    "placeholder": "Filtra per intervallo date",
+    "clickToStart": "Fai clic su una data per iniziare la selezione",
+    "clickToComplete": "Fai clic su un'altra data per completare l'intervallo"
+  }
+}

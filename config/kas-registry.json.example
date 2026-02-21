@@ -1,0 +1,114 @@
+{
+  "kasInstances": [
+    {
+      "kasId": "usa-kas",
+      "organization": "United States",
+      "kasUrl": "https://kas.usa.mil/request-key",
+      "authMethod": "mtls",
+      "authConfig": {
+        "clientCert": "/etc/kas/certs/usa-kas-client.crt",
+        "clientKey": "/etc/kas/certs/usa-kas-client.key",
+        "caCert": "/etc/kas/certs/usa-kas-ca.crt"
+      },
+      "trustLevel": "high",
+      "supportedCountries": ["USA"],
+      "supportedCOIs": ["FVEY", "US-ONLY"],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        },
+        "countryMapping": {
+          "USA": "USA"
+        },
+        "coiMapping": {
+          "FVEY": "FVEY",
+          "US-ONLY": "US-ONLY"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["key-release", "policy-evaluation", "audit-logging"],
+        "contact": "kas-admin@usa.mil",
+        "lastVerified": "2025-01-15T10:00:00Z"
+      }
+    },
+    {
+      "kasId": "gbr-kas",
+      "organization": "United Kingdom",
+      "kasUrl": "https://kas.uk.gov/request-key",
+      "authMethod": "apikey",
+      "authConfig": {
+        "apiKey": "${GBR_KAS_API_KEY}",
+        "apiKeyHeader": "X-API-Key"
+      },
+      "trustLevel": "high",
+      "supportedCountries": ["GBR"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC"],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "OFFICIAL",
+          "CONFIDENTIAL": "SECRET",
+          "SECRET": "TOP SECRET",
+          "TOP_SECRET": "TOP SECRET"
+        },
+        "countryMapping": {
+          "GBR": "GBR"
+        },
+        "coiMapping": {
+          "FVEY": "FVEY",
+          "NATO-COSMIC": "NATO-COSMIC"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["key-release", "policy-evaluation"],
+        "contact": "kas-admin@uk.gov",
+        "lastVerified": "2025-01-15T10:00:00Z"
+      }
+    },
+    {
+      "kasId": "nato-kas",
+      "organization": "NATO",
+      "kasUrl": "https://kas.nato.int/request-key",
+      "authMethod": "oauth2",
+      "authConfig": {
+        "oauth2ClientId": "${NATO_KAS_CLIENT_ID}",
+        "oauth2ClientSecret": "${NATO_KAS_CLIENT_SECRET}",
+        "oauth2TokenUrl": "https://auth.nato.int/oauth2/token"
+      },
+      "trustLevel": "high",
+      "supportedCountries": ["USA", "GBR", "FRA", "CAN", "DEU"],
+      "supportedCOIs": ["NATO-COSMIC", "NATO-RESTRICTED"],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "NATO UNCLASSIFIED",
+          "CONFIDENTIAL": "NATO CONFIDENTIAL",
+          "SECRET": "NATO SECRET",
+          "TOP_SECRET": "NATO COSMIC TOP SECRET"
+        },
+        "countryMapping": {
+          "USA": "USA",
+          "GBR": "GBR",
+          "FRA": "FRA",
+          "CAN": "CAN",
+          "DEU": "DEU"
+        },
+        "coiMapping": {
+          "NATO-COSMIC": "NATO-COSMIC",
+          "NATO-RESTRICTED": "NATO-RESTRICTED"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["key-release", "policy-evaluation", "audit-logging", "key-escrow"],
+        "contact": "kas-admin@nato.int",
+        "lastVerified": "2025-01-15T10:00:00Z"
+      }
+    }
+  ]
+}
+
+

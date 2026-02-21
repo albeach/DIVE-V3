@@ -1,6 +1,6 @@
 /**
  * Admin API Integration Tests
- * 
+ *
  * Tests for Keycloak Admin API integration
  * Note: These tests require Keycloak to be running
  */
@@ -209,11 +209,11 @@ describe('Keycloak Admin Service', () => {
                 return;
             }
 
-            const users = await keycloakAdminService.listUsers(10);
+            const result = await keycloakAdminService.listUsers(10);
 
-            expect(users).toBeInstanceOf(Array);
-            expect(users.length).toBeGreaterThanOrEqual(0);
+            expect(result).toBeDefined();
+            expect(Array.isArray(result.users)).toBe(true);
+            expect(result.total).toBeGreaterThanOrEqual(0);
         }, 10000);
     });
 });
-

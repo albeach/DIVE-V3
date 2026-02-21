@@ -1,0 +1,23 @@
+name: Terraform Validate (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      terraform_version:
+        description: Terraform version to use
+        required: false
+        default: "1.13.4"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-validate-manual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: ./.github/workflows/reusable-terraform-validate.yml
+    with:
+      terraform_version: ${{ inputs.terraform_version }}

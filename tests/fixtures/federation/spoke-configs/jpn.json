@@ -1,0 +1,35 @@
+{
+  "identity": {
+    "spokeId": "spoke-jpn-test",
+    "instanceCode": "JPN",
+    "name": "Japan Test Spoke",
+    "description": "Test fixture for Japan spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://jpn-app.dive25.com",
+    "apiUrl": "https://jpn-api.dive25.com",
+    "idpUrl": "https://jpn-idp.dive25.com",
+    "kasUrl": "https://jpn-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "development",
+    "maxClassification": "CONFIDENTIAL"
+  },
+  "contact": {
+    "email": "jpn-admin@dive25.com",
+    "organization": "Japan Test Organization"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}

@@ -207,4 +207,3 @@ export function resetSessionSyncManager() {
         instance = null;
     }
 }
-

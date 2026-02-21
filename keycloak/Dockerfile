@@ -1,0 +1,124 @@
+# ============================================
+# Custom Keycloak Image with curl for Admin Operations
+# ============================================
+# Extends official Keycloak image to add curl utility
+# Required for: MFA user attribute management scripts
+#
+# VERSION SSOT: The default version is defined here but can be overridden
+# at build time via: docker build --build-arg KEYCLOAK_VERSION=26.4.7 ...
+# The authoritative version is in scripts/dive-modules/common.sh
+#
+# NOTE: Keycloak 26.x uses a minimal base image with NO package managers
+# We download a statically-linked curl binary from the official curl project
+
+ARG KEYCLOAK_VERSION=26.5.2
+FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
+
+USER root
+
+# ============================================
+# Multi-Platform curl Installation
+# ============================================
+# Download appropriate curl binary based on architecture
+# Supports: AMD64 (x86_64) and ARM64 (aarch64)
+# Use ADD instead of curl to avoid chicken-and-egg problem
+ARG TARGETARCH
+RUN echo "Building for architecture: ${TARGETARCH}"
+
+# Download curl binary using ADD (works without curl being present)
+ADD --chmod=755 https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-amd64 /tmp/curl-amd64
+ADD --chmod=755 https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-aarch64 /tmp/curl-aarch64
+
+# Copy the appropriate binary based on architecture
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        cp /tmp/curl-amd64 /usr/bin/curl; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        cp /tmp/curl-aarch64 /usr/bin/curl; \
+    else \
+        echo "Unsupported architecture: ${TARGETARCH}" && exit 1; \
+    fi && \
+    rm /tmp/curl-* && \
+    chmod +x /usr/bin/curl && \
+    /usr/bin/curl --version
+
+# ============================================
+# Import mkcert SSL Certificate into Java Truststore (DEPRECATED - REMOVED)
+# ============================================
+# DEPRECATED PATTERN (Build-time cert copying):
+# The following lines were removed because certificates should be provided
+# at RUNTIME via docker-compose volume mounts, not baked into the image.
+#
+# OLD (Deprecated):
+#   COPY certs/ /opt/keycloak/certs/              # Build-time
+#   COPY certs/rootCA.pem /tmp/rootCA.pem         # Build-time
+#   RUN keytool -importcert ...                   # Build-time
+#
+# NEW (Best Practice):
+#   Certificates are mounted at runtime via docker-compose volumes:
+#   - ./instances/hub/certs:/opt/keycloak/certs:ro
+#   This allows the same image to work with different certificates
+#   See: docker-compose.hub.yml line 296
+#
+# mkcert root CA trust is handled by mounting to /opt/keycloak/certs/
+# and Keycloak's KC_TRUSTSTORE_PATHS configuration at runtime
+# See: docker-compose.hub.yml line 265
+
+# Copy custom DIVE V3 themes (base + all country variants)
+COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
+
+# ============================================
+# DIVE V3 Realm Import (Best Practice)
+# ============================================
+# Copy realm templates for automatic import on startup
+# Environment variables are substituted at runtime
+COPY --chown=1000:1000 realms/ /opt/keycloak/realm-templates/
+COPY --chown=1000:1000 scripts/import-realm.sh /opt/keycloak/scripts/import-realm.sh
+
+# Create import directory with correct ownership BEFORE switching to user 1000
+# This ensures the keycloak user can write to it at runtime
+RUN mkdir -p /opt/keycloak/data/import && \
+    chown -R 1000:1000 /opt/keycloak/data/import && \
+    chmod +x /opt/keycloak/scripts/import-realm.sh
+
+# ============================================
+# DIVE V3 Custom SPI Providers - REMOVED (v3.2.0 - January 24, 2026)
+# ============================================
+# CRITICAL FIX: Removed deprecated AMR extension that was corrupting user attributes
+#
+# ROOT CAUSE: AMREnrichmentEventListener was incorrectly identifying federated users
+# as local users, calling user.setAttribute() which OVERWROTE all user attributes
+# including countryOfAffiliation. This caused FRA users to appear as USA users.
+#
+# WHY NATIVE FEATURES WORK:
+# - Keycloak 26 native AMR/ACR features use SESSION NOTES (not user attributes)
+# - Session notes don't modify user attributes, preventing data corruption
+# - Native features properly handle both local and federated authentication
+#
+# REPLACED WITH:
+# - Native Keycloak 26 AMR/ACR tracking (RFC 8176 compliant)
+# - Configured via Terraform protocol mappers (oidc-amr-mapper)
+# - No custom code needed - all functionality built-in
+#
+# Reference: .cursor/AMR_ENRICHMENT_ROOT_CAUSE.md
+# COPY --chown=1000:1000 extensions/archived/target/dive-keycloak-extensions.jar /opt/keycloak/providers/
+
+# ============================================
+# Certificate Trust Configuration
+# ============================================
+# Certificates are imported at RUNTIME (not build time) for flexibility
+# This allows the same image to work with different certificates
+# See: scripts/import-keycloak-certs-runtime.sh
+#
+# Certificate mounting handled via docker-compose volumes:
+#   - /opt/keycloak/certs/certificate.pem (Keycloak's own cert)
+#   - /opt/keycloak/certs/key.pem (Keycloak's private key)
+#   - /opt/app/certs/rootCA.pem (mkcert CA for trust)
+#   - /opt/keycloak/certs/dive-root-cas/ (DIVE Root CAs for federation)
+#
+# Runtime import is handled by deploy-ubuntu.sh Phase 10
+# or manually via: ./scripts/import-keycloak-certs-runtime.sh
+
+USER 1000
+
+# Keep the original entrypoint and command from base image
+

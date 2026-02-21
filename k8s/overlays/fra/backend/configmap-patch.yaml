@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 Backend - FRA ConfigMap Patch
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: dive-v3-fra
+data:
+  keycloak_url: "https://keycloak.dive-v3-fra.svc.cluster.local:8443"
+  keycloak_realm: "dive-v3-broker-fra"
+  opa_url: "http://opa.dive-v3-fra.svc.cluster.local:8181"

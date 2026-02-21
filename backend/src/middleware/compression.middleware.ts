@@ -1,5 +1,5 @@
 import compression from 'compression';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -91,7 +91,7 @@ export const compressionMiddleware = compression({
  * Logs compression ratio for monitoring
  * (Should be placed AFTER compression middleware)
  */
-export const compressionStats = (req: Request, res: Response, next: Function): void => {
+export const compressionStats = (req: Request, res: Response, next: NextFunction): void => {
     const requestId = req.headers['x-request-id'] as string;
 
     // Wrap res.end to calculate compression stats
@@ -100,14 +100,16 @@ export const compressionStats = (req: Request, res: Response, next: Function): v
 
     // Intercept res.write to track original size
     const originalWrite = res.write;
-    res.write = function(chunk: any, ...args: any[]): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express res.write has complex overloaded signatures
+    res.write = function (chunk: any, ...args: any[]): boolean {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
         }
         return originalWrite.apply(res, [chunk, ...args] as any);
     };
 
-    res.end = function(chunk: any, ...args: any[]): any {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express res.end has complex overloaded signatures
+    res.end = function (chunk: any, ...args: any[]): any {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
         }
@@ -118,7 +120,7 @@ export const compressionStats = (req: Request, res: Response, next: Function): v
         // Log compression stats
         if (contentEncoding === 'gzip' && compressedSize && originalSize > 0) {
             const ratio = ((1 - (parseInt(compressedSize as string, 10) / originalSize)) * 100).toFixed(2);
-            
+
             logger.debug('Response compressed', {
                 requestId,
                 path: req.path,
@@ -151,4 +153,3 @@ export const getCompressionConfig = (): {
         strategy: 'default',
     };
 };
-

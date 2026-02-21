@@ -1,0 +1,113 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    DIVE V3 CLOUDFLARED TUNNEL ENDPOINTS                      ║
+║                     All Services Now Publicly Accessible                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🇺🇸 USA (HUB) - 6 SERVICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🖥️  Frontend (Next.js)
+    https://usa-app.dive25.com
+
+🔌 Backend API (Express.js)
+    https://usa-api.dive25.com
+    https://usa-api.dive25.com/api/health
+
+🔐 Keycloak (Identity Provider)
+    https://usa-idp.dive25.com
+    https://usa-idp.dive25.com/realms/dive-v3-broker-usa
+
+🔑 KAS (Key Access Service)
+    https://usa-kas.dive25.com
+    https://usa-kas.dive25.com/health
+
+📋 OPA (Policy Decision Point) ⭐ NEW
+    https://usa-opa.dive25.com
+    https://usa-opa.dive25.com/v1/data
+
+📡 OPAL Server (Policy Distribution) ⭐ NEW
+    https://usa-opal.dive25.com
+    https://usa-opal.dive25.com/healthcheck
+    https://usa-opal.dive25.com/statistics
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🇫🇷 FRA (FRANCE) - 6 SERVICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🖥️  Frontend (Next.js)
+    https://fra-app.dive25.com
+
+🔌 Backend API (Express.js)
+    https://fra-api.dive25.com
+    https://fra-api.dive25.com/api/health
+
+🔐 Keycloak (Identity Provider)
+    https://fra-idp.dive25.com
+    https://fra-idp.dive25.com/realms/dive-v3-broker-fra
+
+🔑 KAS (Key Access Service)
+    https://fra-kas.dive25.com
+    https://fra-kas.dive25.com/health
+
+📋 OPA (Policy Decision Point) ⭐ NEW
+    https://fra-opa.dive25.com
+    https://fra-opa.dive25.com/v1/data
+
+📡 OPAL Client (Policy Sync) ⭐ NEW
+    https://fra-opal.dive25.com
+    https://fra-opal.dive25.com/healthcheck
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🇬🇧 GBR (UNITED KINGDOM) - 6 SERVICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🖥️  Frontend (Next.js)
+    https://gbr-app.dive25.com
+
+🔌 Backend API (Express.js)
+    https://gbr-api.dive25.com
+    https://gbr-api.dive25.com/api/health
+
+🔐 Keycloak (Identity Provider)
+    https://gbr-idp.dive25.com
+    https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr
+
+🔑 KAS (Key Access Service)
+    https://gbr-kas.dive25.com
+    https://gbr-kas.dive25.com/health
+
+📋 OPA (Policy Decision Point) ⭐ NEW
+    https://gbr-opa.dive25.com
+    https://gbr-opa.dive25.com/v1/data
+
+📡 OPAL Client (Policy Sync) ⭐ NEW
+    https://gbr-opal.dive25.com
+    https://gbr-opal.dive25.com/healthcheck
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Endpoints:  18 (6 per instance × 3 instances)
+New in This Update:  6 (OPA + OPAL endpoints)
+
+Tunnel Status:    All 3 running with 4 connections each
+Metrics:          http://localhost:9126-9128/metrics
+Logs:             logs/cloudflared-{usa,fra,gbr}.log
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔧 MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Status:    ./scripts/cloudflared-status.sh
+Stop:      ./scripts/stop-cloudflared-tunnels.sh
+Restart:   ./scripts/stop-cloudflared-tunnels.sh && ./scripts/start-cloudflared-tunnels.sh
+Test:      ./scripts/test-cloudflared-connectivity.sh
+
+Docs:      cloudflared/DEPLOYMENT_SUMMARY.md
+Quick Ref: cloudflared/QUICK_REFERENCE.md
+Full Docs: cloudflared/README.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

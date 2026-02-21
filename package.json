@@ -1,38 +1,43 @@
 {
-    "name": "dive-v3",
-    "version": "1.0.0",
-    "private": true,
-    "description": "DIVE V3 - Coalition-Friendly ICAM Web Application",
-    "scripts": {
-        "prepare": "husky install",
-        "precommit": "lint-staged"
-    },
-    "devDependencies": {
-        "husky": "^8.0.3",
-        "lint-staged": "^15.2.0"
-    },
-    "lint-staged": {
-        "backend/src/**/*.ts": [
-            "cd backend && npm run lint --fix",
-            "cd backend && npm run typecheck"
-        ],
-        "frontend/src/**/*.{ts,tsx}": [
-            "cd frontend && npm run lint --fix"
-        ]
-    },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/your-org/dive-v3.git"
-    },
-    "keywords": [
-        "dive",
-        "icam",
-        "abac",
-        "opa",
-        "keycloak",
-        "nato",
-        "federation"
+  "name": "dive-v3",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DIVE V3 - Coalition-Friendly ICAM Web Application",
+  "scripts": {
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "otplib": "^12.0.1",
+    "ts-node": "^10.9.2"
+  },
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "cd backend && npm run lint --fix"
     ],
-    "author": "DIVE V3 Team",
-    "license": "MIT"
+    "frontend/src/**/*.{ts,tsx}": [
+      "cd frontend && npm run lint --fix"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/albeach/DIVE-V3.git"
+  },
+  "keywords": [
+    "dive",
+    "icam",
+    "abac",
+    "opa",
+    "keycloak",
+    "nato",
+    "federation"
+  ],
+  "author": "DIVE V3 Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
 }

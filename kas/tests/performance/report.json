@@ -1,0 +1,53 @@
+{
+  "single-kas": {
+    "p50": 26,
+    "p95": 65,
+    "p99": 80,
+    "mean": 30.4,
+    "min": 7,
+    "max": 95,
+    "requestsPerSecond": 32.89473684210526,
+    "concurrentConnections": 1,
+    "totalRequests": 100,
+    "successfulRequests": 0,
+    "failedRequests": 100,
+    "errorRate": 100,
+    "timeoutRate": 0,
+    "testDuration": 3040,
+    "timestamp": "2026-02-15T00:00:31.794Z"
+  },
+  "2-kas": {
+    "p50": 82,
+    "p95": 134,
+    "p99": 136,
+    "mean": 84.16,
+    "min": 36,
+    "max": 136,
+    "requestsPerSecond": 11.88212927756654,
+    "concurrentConnections": 1,
+    "totalRequests": 50,
+    "successfulRequests": 0,
+    "failedRequests": 50,
+    "errorRate": 100,
+    "timeoutRate": 0,
+    "testDuration": 4208,
+    "timestamp": "2026-02-15T00:00:36.051Z"
+  },
+  "3-kas": {
+    "p50": 109,
+    "p95": 147,
+    "p99": 151,
+    "mean": 106.43333333333334,
+    "min": 56,
+    "max": 151,
+    "requestsPerSecond": 9.395552771688067,
+    "concurrentConnections": 1,
+    "totalRequests": 30,
+    "successfulRequests": 0,
+    "failedRequests": 30,
+    "errorRate": 100,
+    "timeoutRate": 0,
+    "testDuration": 3193,
+    "timestamp": "2026-02-15T00:00:39.287Z"
+  }
+}

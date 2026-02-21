@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DIVE V3 - OTP Code Generator</title>
+    <!-- Local TOTP implementation - no CDN dependency -->
+    <script>
+        // Base32 decoding function
+        function base32Decode(str) {
+            const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+            let bits = 0;
+            let value = 0;
+            let index = 0;
+            const output = new Uint8Array(((str.length * 5) / 8) | 0);
+
+            for (let i = 0; i < str.length; i++) {
+                value = (value << 5) | base32chars.indexOf(str[i].toUpperCase());
+                bits += 5;
+                if (bits >= 8) {
+                    output[index++] = (value >>> (bits - 8)) & 255;
+                    bits -= 8;
+                }
+            }
+            return output;
+        }
+
+        // HMAC-SHA256 implementation using Web Crypto API
+        async function hmacSha256(key, message) {
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                key,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, message);
+            return new Uint8Array(signature);
+        }
+
+        // TOTP generation
+        async function generateTOTP(secret, timeStep = 30) {
+            const key = base32Decode(secret);
+            const time = Math.floor(Date.now() / 1000 / timeStep);
+            const timeBuffer = new ArrayBuffer(8);
+            const timeView = new DataView(timeBuffer);
+            timeView.setUint32(4, time, false);
+
+            const hmac = await hmacSha256(key, timeBuffer);
+            const offset = hmac[hmac.length - 1] & 0x0f;
+            const code = ((hmac[offset] & 0x7f) << 24) |
+                        ((hmac[offset + 1] & 0xff) << 16) |
+                        ((hmac[offset + 2] & 0xff) << 8) |
+                        (hmac[offset + 3] & 0xff);
+
+            return (code % 1000000).toString().padStart(6, '0');
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #00ff00;
+        }
+        h1 {
+            color: #00ff00;
+            text-align: center;
+        }
+        .otp-display {
+            font-size: 48px;
+            text-align: center;
+            padding: 20px;
+            background: #000;
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            margin: 20px 0;
+            letter-spacing: 5px;
+        }
+        .info {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .countdown {
+            text-align: center;
+            color: #ffff00;
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 DIVE V3 OTP Generator</h1>
+        <div class="info">
+            <strong>Secret:</strong> DEMO123456789012345678901234567890<br>
+            <strong>Algorithm:</strong> SHA256<br>
+            <strong>Period:</strong> 30 seconds
+        </div>
+        <div class="otp-display" id="otp">000000</div>
+        <div class="countdown" id="countdown">30</div>
+        <button onclick="copyOTP()">Copy OTP Code</button>
+    </div>
+
+    <script>
+        const SECRET = 'DEMO123456789012345678901234567890';
+        let countdown = 30;
+        let interval;
+
+        async function generateOTP() {
+            try {
+                // Use local TOTP implementation (no CDN)
+                const token = await generateTOTP(SECRET, 30);
+                document.getElementById('otp').textContent = token;
+
+                // Reset countdown
+                countdown = 30;
+            } catch (error) {
+                console.error('OTP generation error:', error);
+                document.getElementById('otp').textContent = 'ERROR';
+            }
+        }
+
+        function updateCountdown() {
+            countdown--;
+            document.getElementById('countdown').textContent = countdown + 's';
+
+            if (countdown <= 0) {
+                generateOTP();
+            }
+        }
+
+        function copyOTP() {
+            const otp = document.getElementById('otp').textContent;
+            navigator.clipboard.writeText(otp).then(() => {
+                alert('OTP code copied to clipboard!');
+            });
+        }
+
+        // Generate initial OTP
+        generateOTP();
+
+        // Update countdown every second
+        setInterval(updateCountdown, 1000);
+
+        // Regenerate OTP every 30 seconds
+        setInterval(generateOTP, 30000);
+    </script>
+</body>
+</html>

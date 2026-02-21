@@ -1,0 +1,412 @@
+name: CI - Comprehensive Test Suite
+on:
+  push:
+    branches: [main]
+    paths:
+    - 'backend/**'
+    - 'frontend/**'
+    - 'policies/**'
+    - 'docker/**'
+    - 'kas/**'
+    - '.github/workflows/ci-comprehensive.yml'
+    - '.github/actions/backend-test-setup/**'
+  schedule:
+  - cron: '0 2 * * *'   # Daily at 2 AM UTC
+  workflow_dispatch:
+concurrency:
+  group: ci-comprehensive-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  # ============================================
+  # Backend Tests - Split into Parallel Jobs
+  # ============================================
+  # Uses shared backend-test-setup composite to eliminate duplication.
+  # Coverage is merged into the unit test job to avoid re-running all tests.
+  backend-unit-tests:
+    name: Backend - Unit Tests + Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Backend Test Setup
+      uses: ./.github/actions/backend-test-setup
+      with:
+        generate-rsa-keys: 'true'
+        start-opa: 'true'
+    - name: COI Logic Lint
+      run: cd backend && SKIP_MONGODB=true npm run lint:coi
+    - name: Run Unit Tests with Coverage
+      run: |
+        cd backend
+        START_TIME=$(date +%s)
+        npm run test:unit -- --coverage
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - START_TIME))
+        echo "## Backend Unit Tests + Coverage" >> $GITHUB_STEP_SUMMARY
+        echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
+        if [ -f "coverage/coverage-summary.json" ]; then
+          echo "**Coverage:** $(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')% lines" >> $GITHUB_STEP_SUMMARY
+        fi
+      env:
+        NODE_ENV: test
+        MONGODB_AUTH_DISABLED: true
+        OPA_URL: https://localhost:8181
+        KAS_URL: http://localhost:8080
+        JWT_SECRET: test-jwt-secret-for-ci
+        JWT_ISSUER: dive-v3-test
+        JWT_AUDIENCE: dive-v3-api-test
+        KEYCLOAK_URL: http://localhost:8081
+        KEYCLOAK_REALM: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+    - name: Upload Backend Coverage
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: backend-coverage
+        path: backend/coverage/
+        retention-days: 7
+  backend-integration-tests:
+    name: Backend - Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Backend Test Setup
+      uses: ./.github/actions/backend-test-setup
+      with:
+        generate-rsa-keys: 'false'
+        start-opa: 'true'
+        install-mongodb-deps: 'false'
+    - name: Run Integration Tests
+      run: cd backend && npm run test:integration
+      env:
+        NODE_ENV: test
+        OPA_URL: https://localhost:8181
+        KAS_URL: http://localhost:8080
+        JWT_SECRET: test-jwt-secret-for-ci
+        JWT_ISSUER: dive-v3-test
+        JWT_AUDIENCE: dive-v3-api-test
+    - name: Run Audit Log Tests
+      run: cd backend && npm run test:audit-logs
+      env:
+        NODE_ENV: test
+        OPA_URL: https://localhost:8181
+  frontend-tests:
+    name: Frontend - Unit & Component Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+      id: setup-node-frontend
+    - name: Report Frontend npm Cache Status
+      run: |
+        echo "## Frontend npm Cache" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.setup-node-frontend.outputs.cache-hit }}" == "true" ]; then
+          echo "Cache HIT - Dependencies restored from cache" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Cache MISS - Dependencies downloaded fresh" >> $GITHUB_STEP_SUMMARY
+        fi
+    - name: Install Dependencies
+      run: cd frontend && npm ci --legacy-peer-deps
+    - name: Run Tests
+      run: |
+        cd frontend
+        START_TIME=$(date +%s)
+        npm test
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - START_TIME))
+        echo "## Frontend Test Duration" >> $GITHUB_STEP_SUMMARY
+        echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
+      env:
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: test-secret-for-ci
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+    - name: Generate Coverage Report
+      run: cd frontend && npm run test:coverage
+      env:
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: test-secret-for-ci
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+    - name: Upload Frontend Coverage
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: frontend-coverage
+        path: frontend/coverage/
+        retention-days: 7
+  opa-tests:
+    name: OPA - Comprehensive Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup OPA
+      uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+      with:
+        version: 1.12.3
+    - name: Run All Policy Tests
+      run: |
+        cd policies
+        opa test . -v
+    - name: OPA Benchmark
+      run: |
+        cd policies
+        echo "## OPA Performance Benchmark" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        opa bench fuel_inventory_abac_policy.rego 2>&1 | tee benchmark.txt
+        cat benchmark.txt >> $GITHUB_STEP_SUMMARY
+    - name: AAL/FAL Comprehensive Tests
+      run: |
+        cd policies
+        echo "Running AAL/FAL comprehensive tests..."
+        opa test . --verbose --explain full | tee /tmp/opa-comprehensive-output.txt
+        grep -E "aal_|fal_" /tmp/opa-comprehensive-output.txt
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    - name: Install Backend Dependencies
+      run: cd backend && npm ci
+    - name: Backend Authorization Latency Tests
+      run: |
+        cd backend
+        npm run test:performance
+      env:
+        NODE_ENV: test
+        MONGODB_AUTH_DISABLED: true
+        OPA_URL: https://localhost:8181
+    - name: Install Frontend Dependencies
+      run: cd frontend && npm ci
+    - name: Install Playwright browsers and system dependencies
+      run: cd frontend && npx playwright install --with-deps chromium
+    - name: E2E Performance Tests
+      run: |
+        cd frontend
+        npm run test:performance
+      env:
+        FRONTEND_URL: http://localhost:3000
+        BACKEND_URL: http://localhost:4000
+    - name: Performance Summary
+      run: |
+        echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Targets:" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: Authorization decisions < 500ms" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: Authentication flow < 15s" >> $GITHUB_STEP_SUMMARY
+        echo "- API: Response time < 1s" >> $GITHUB_STEP_SUMMARY
+  docker-build:
+    name: Docker - Build Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+    - name: Install Trivy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget apt-transport-https
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+    - name: Build Backend Image
+      run: |
+        docker build -t dive-v3-backend:test ./backend
+        docker images | grep dive-v3-backend
+    - name: Build Frontend Image
+      run: |
+        docker build -t dive-v3-frontend:test ./frontend
+        docker images | grep dive-v3-frontend
+    - name: Build KAS Image
+      run: |
+        docker build -t dive-v3-kas:test ./kas
+        docker images | grep dive-v3-kas
+    - name: Security Scan - Backend
+      run: |
+        echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        trivy image --format table --output - dive-v3-backend:test | head -20 >> $GITHUB_STEP_SUMMARY
+    - name: Security Scan - Frontend
+      run: |
+        trivy image --format table --output - dive-v3-frontend:test | head -20 >> $GITHUB_STEP_SUMMARY
+    - name: Security Scan - KAS
+      run: |
+        trivy image --format table --output - dive-v3-kas:test | head -20 >> $GITHUB_STEP_SUMMARY
+    - name: Verify Image Sizes
+      run: |
+        echo "## Docker Image Sizes" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        docker images | grep "dive-v3" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+    - name: Backend NPM Audit
+      run: |
+        cd backend
+        npm audit --production --audit-level=high
+    - name: Frontend NPM Audit
+      run: |
+        cd frontend
+        npm audit --production --audit-level=high
+    - name: Check Hardcoded Secrets
+      run: |
+        echo "Scanning for hardcoded secrets..."
+        if grep -r -E "(API_KEY|SECRET_KEY|PRIVATE_KEY|ACCESS_TOKEN)\s*=\s*['\"][a-zA-Z0-9_-]{20,}" \
+          --exclude-dir="__tests__" \
+          --exclude-dir="e2e" \
+          --include="*.ts" \
+          --include="*.js" \
+          backend/src frontend/src 2>/dev/null | \
+          grep -v "process.env" | \
+          grep -v "//"; then
+          echo "Potential hardcoded secrets found"
+          exit 1
+        else
+          echo "No hardcoded secrets detected"
+        fi
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [backend-unit-tests, frontend-tests]
+    if: always()
+    steps:
+    - name: Download Backend Coverage
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: backend-coverage
+        path: backend-coverage/
+    - name: Download Frontend Coverage
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: frontend-coverage
+        path: frontend-coverage/
+    - name: Generate Summary
+      run: |
+        echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Extract backend coverage dynamically
+        if [ -f "backend-coverage/coverage-summary.json" ]; then
+          BE_LINES=$(cat backend-coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          BE_BRANCHES=$(cat backend-coverage/coverage-summary.json | jq -r '.total.branches.pct')
+          BE_FUNCTIONS=$(cat backend-coverage/coverage-summary.json | jq -r '.total.functions.pct')
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Lines: ${BE_LINES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Branches: ${BE_BRANCHES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Functions: ${BE_FUNCTIONS}%" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Extract frontend coverage dynamically
+        if [ -f "frontend-coverage/coverage-summary.json" ]; then
+          FE_LINES=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.lines.pct')
+          FE_BRANCHES=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.branches.pct')
+          FE_FUNCTIONS=$(cat frontend-coverage/coverage-summary.json | jq -r '.total.functions.pct')
+          echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Lines: ${FE_LINES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Branches: ${FE_BRANCHES}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Functions: ${FE_FUNCTIONS}%" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
+  performance-dashboard:
+    name: Performance Dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [frontend-tests, backend-unit-tests, backend-integration-tests, opa-tests, performance-tests, security-audit, docker-build]
+    if: always()
+    steps:
+    - name: Generate Performance Dashboard
+      run: |
+        echo "# CI/CD Performance Dashboard" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Run Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "## Critical Path Status" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend Tests | ${{ needs.frontend-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend Unit + Coverage | ${{ needs.backend-unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend Integration | ${{ needs.backend-integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| OPA Policies | ${{ needs.opa-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security Audit | ${{ needs.security-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Performance Tests | ${{ needs.performance-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Builds | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "## Quick Actions" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        FAILURES=""
+        if [[ "${{ needs.frontend-tests.result }}" != "success" ]]; then
+          FAILURES="${FAILURES}- Frontend tests: ${{ needs.frontend-tests.result }}\n"
+        fi
+        if [[ "${{ needs.backend-unit-tests.result }}" != "success" ]]; then
+          FAILURES="${FAILURES}- Backend unit tests: ${{ needs.backend-unit-tests.result }}\n"
+        fi
+        if [[ "${{ needs.opa-tests.result }}" != "success" ]]; then
+          FAILURES="${FAILURES}- OPA tests: ${{ needs.opa-tests.result }}\n"
+        fi
+        if [[ "${{ needs.security-audit.result }}" != "success" ]]; then
+          FAILURES="${FAILURES}- Security audit: ${{ needs.security-audit.result }}\n"
+        fi
+        if [ -z "$FAILURES" ]; then
+          echo "All critical workflows passing - Ready to merge" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Failures detected:" >> $GITHUB_STEP_SUMMARY
+          echo -e "$FAILURES" >> $GITHUB_STEP_SUMMARY
+        fi
+permissions:
+  contents: read

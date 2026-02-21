@@ -1,0 +1,36 @@
+{
+  "identity": {
+    "spokeId": "spoke-nzl-test",
+    "instanceCode": "NZL",
+    "name": "New Zealand Test Spoke",
+    "description": "Test fixture for New Zealand spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://nzl-app.dive25.com",
+    "apiUrl": "https://nzl-api.dive25.com",
+    "idpUrl": "https://nzl-idp.dive25.com",
+    "kasUrl": "https://nzl-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:nzl"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "partner",
+    "maxClassification": "SECRET"
+  },
+  "contact": {
+    "email": "nzl-admin@dive25.com",
+    "organization": "New Zealand Test Organization"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}

@@ -1,0 +1,29 @@
+# =============================================================================
+# DIVE V3 Backend - GBR Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: dive-v3-gbr
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/instance: gbr
+    spec:
+      serviceAccountName: backend
+      containers:
+        - name: backend
+          env:
+            - name: INSTANCE_CODE
+              value: "GBR"
+            - name: INSTANCE_NAME
+              value: "United Kingdom"
+            - name: MONGODB_DATABASE
+              value: "dive-v3-gbr"

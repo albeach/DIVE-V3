@@ -1,0 +1,191 @@
+{
+  "title": "Bronnen",
+  "subtitle": "Coalitie-informatiebronnen beheren en openen",
+  "list": {
+    "title": "Bronnenbrowser",
+    "searchPlaceholder": "Zoek bronnen op titel, classificatie of tags...",
+    "noResults": "Geen bronnen gevonden",
+    "totalResources": "{{count}} bronnen",
+    "showing": "{{start}}-{{end}} van {{total}} weergegeven",
+    "loadMore": "Meer laden",
+    "refresh": "Vernieuwen"
+  },
+  "filters": {
+    "title": "Filters",
+    "clearAll": "Alles wissen",
+    "classification": "Classificatie",
+    "releasability": "Vrijgave",
+    "coi": "Gemeenschap van belang",
+    "dateRange": "Datumbereik",
+    "encrypted": "Alleen versleutelde bronnen",
+    "apply": "Filters toepassen",
+    "reset": "Resetten"
+  },
+  "table": {
+    "title": "Titel",
+    "classification": "Classificatie",
+    "releasability": "Vrijgave",
+    "created": "Gemaakt",
+    "modified": "Gewijzigd",
+    "actions": "Acties",
+    "view": "Bekijken",
+    "edit": "Bewerken",
+    "delete": "Verwijderen",
+    "download": "Downloaden",
+    "requestAccess": "Toegang aanvragen"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "Geen resultaten gevonden",
+      "description": "We konden geen documenten vinden die overeenkomen met \"{{query}}\". Probeer uw zoektermen of filters aan te passen.",
+      "clearSearch": "Zoeken wissen"
+    },
+    "noMatchingDocuments": {
+      "title": "Geen overeenkomende documenten",
+      "description": "Uw huidige filters komen niet overeen met documenten. Probeer uw filtercriteria te versoepelen.",
+      "clearFilters": "Filters wissen"
+    },
+    "error": {
+      "title": "Er is een fout opgetreden",
+      "description": "We hebben een fout aangetroffen tijdens het laden van de documenten. Probeer het opnieuw.",
+      "tryAgain": "Probeer opnieuw"
+    }
+  },
+  "detail": {
+    "title": "Bron details",
+    "metadata": "Metadata",
+    "resourceId": "Bron-ID",
+    "createdBy": "Gemaakt door",
+    "createdDate": "Aanmaakdatum",
+    "lastModified": "Laatst gewijzigd",
+    "fileSize": "Bestandsgrootte",
+    "contentType": "Inhoudstype",
+    "accessLog": "Toegangslog",
+    "noAccessHistory": "Geen toegangs geschiedenis beschikbaar"
+  },
+  "upload": {
+    "title": "Bron uploaden",
+    "dragDrop": "Sleep bestanden hierheen en laat ze vallen, of klik om te bladeren",
+    "selectFile": "Bestand selecteren",
+    "maxSize": "Maximale bestandsgrootte: {{size}}MB",
+    "allowedTypes": "Toegestane typen: {{types}}",
+    "metadata": {
+      "title": "Bron metadata",
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Voer brontitel in",
+      "description": "Beschrijving",
+      "descriptionPlaceholder": "Voer bronbeschrijving in",
+      "classification": "Classificatieniveau",
+      "releasability": "Vrij te geven aan",
+      "coi": "Gemeenschappen van belang",
+      "tags": "Tags",
+      "encryption": "Versleuteling"
+    },
+    "uploading": "Uploaden...",
+    "uploadProgress": "{{percent}}% geüpload",
+    "uploadSuccess": "Bron succesvol geüpload",
+    "uploadError": "Fout bij uploaden van bron",
+    "cancel": "Upload annuleren"
+  },
+  "access": {
+    "requesting": "Toegang aanvragen...",
+    "granted": "Toegang verleend",
+    "denied": "Toegang geweigerd",
+    "pending": "Toegang in behandeling",
+    "reasonDenied": "Reden: {{reason}}",
+    "requestKey": "Ontsleutelingsleutel aanvragen",
+    "keyReceived": "Ontsleutelingsleutel ontvangen",
+    "decrypting": "Ontsleutelen...",
+    "decrypted": "Succesvol ontsleuteld"
+  },
+  "errors": {
+    "notFound": "Bron niet gevonden",
+    "accessDenied": "U heeft geen toestemming om toegang te krijgen tot deze bron",
+    "loadFailed": "Fout bij laden van bron",
+    "uploadFailed": "Fout bij uploaden van bron",
+    "deleteFailed": "Fout bij verwijderen van bron",
+    "insufficientClearance": "Onvoldoende autorisatieniveau",
+    "countryNotReleased": "Bron niet vrijgegeven aan uw land",
+    "coiNotMember": "U bent geen lid van de vereiste COI"
+  },
+  "breadcrumbs": {
+    "resources": "Bronnen",
+    "upload": "Uploaden",
+    "detail": "Details"
+  },
+  "federation": {
+    "local": "Lokaal",
+    "federated": "Gefedereerd"
+  },
+  "classifications": {
+    "unclassified": "NIET GECLASSIFICEERD",
+    "restricted": "BEPERKT",
+    "confidential": "VERTROUWELIJK",
+    "secret": "GEHEIM",
+    "topSecret": "TOP GEHEIM"
+  },
+  "auth": {
+    "signInToView": "Meld u aan om bronnen te bekijken",
+    "needAuthentication": "U moet geauthenticeerd zijn om toegang te krijgen tot coalitiebronnen."
+  },
+  "sorting": {
+    "titleAZ": "Titel A-Z",
+    "titleZA": "Titel Z-A",
+    "newest": "Nieuwste",
+    "oldest": "Oudste"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Totaal aantal documenten",
+    "ztdfEncrypted": "ZTDF versleuteld",
+    "local": "Lokaal",
+    "federated": "Gefedereerd",
+    "classification": "Classificatie",
+    "instances": "instanties",
+    "accessRate": "Toegangspercentage",
+    "avgAge": "Gemiddelde leeftijd",
+    "topCOIs": "Top COI",
+    "coalition": "Coalitie"
+  },
+  "viewModes": {
+    "grid": "Raster",
+    "list": "Lijst",
+    "compact": "Compact"
+  },
+  "bulkActions": {
+    "selected": "geselecteerd",
+    "deselectAll": "Alles deselecteren",
+    "selectAll": "Alles selecteren",
+    "export": "Exporteren",
+    "compare": "Vergelijken",
+    "compareTooltip": {
+      "selectMin": "Selecteer minimaal 2 items om te vergelijken",
+      "maxItems": "Kan maximaal 4 items vergelijken",
+      "compareSelected": "Geselecteerde items vergelijken"
+    }
+  },
+  "comparison": {
+    "title": "Bronnen vergelijken",
+    "closeTooltip": "Sluiten (Escape)",
+    "metadata": "Metadata"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Nog geen bladwijzers",
+      "description": "Bladwijzer documenten en beleid voor snelle toegang. Klik op het bladwijzer icoon bij elke bron om deze hier op te slaan."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Aanmaakdatum",
+    "quickSelect": "Snelle selectie",
+    "today": "Vandaag",
+    "last7Days": "Laatste 7 dagen",
+    "last30Days": "Laatste 30 dagen",
+    "last90Days": "Laatste 90 dagen",
+    "thisMonth": "Deze maand",
+    "lastMonth": "Vorige maand",
+    "customRange": "Aangepast bereik",
+    "placeholder": "Filter op datumbereik",
+    "clickToStart": "Klik op een datum om de selectie te starten",
+    "clickToComplete": "Klik op een andere datum om het bereik te voltooien"
+  }
+}

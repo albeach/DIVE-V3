@@ -1,6 +1,6 @@
 /**
  * Admin Authentication Middleware
- * 
+ *
  * Enforces super_admin role requirement for admin endpoints
  * Pattern:
  * 1. Verify JWT (reuse authenticateJWT)
@@ -8,14 +8,14 @@
  * 3. Check for super_admin role
  * 4. Log admin action
  * 5. Fail-closed if role missing
- * 
+ *
  * Security: All admin actions are logged for audit compliance
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { authenticateJWT } from './authz.middleware';
 import { logger } from '../utils/logger';
-import { SUPER_ADMIN_ROLE } from '../types/admin.types';
+import { ADMIN_ROLES, hasAdminRole } from '../types/admin.types';
 
 /**
  * Extended Request with user info (from authenticateJWT)
@@ -51,7 +51,7 @@ export const adminAuthMiddleware = async (
 
         // First run JWT authentication
         await new Promise<void>((resolve, reject) => {
-            authenticateJWT(req, res, (err?: any) => {
+            authenticateJWT(req, res, (err?: unknown) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -125,15 +125,15 @@ export const adminAuthMiddleware = async (
         }
 
         // ============================================
-        // Step 3: Check for super_admin role
+        // Step 3: Check for admin role (any of: super_admin, admin, dive-admin)
         // ============================================
 
-        if (!roles.includes(SUPER_ADMIN_ROLE)) {
-            logger.warn('Admin access denied: Missing super_admin role', {
+        if (!hasAdminRole(roles)) {
+            logger.warn('Admin access denied: Missing admin role', {
                 requestId,
                 uniqueID: authReq.user.uniqueID,
                 roles,
-                required: SUPER_ADMIN_ROLE
+                required: ADMIN_ROLES
             });
 
             // Log security violation
@@ -142,7 +142,7 @@ export const adminAuthMiddleware = async (
                 requestId,
                 subject: authReq.user.uniqueID,
                 resourceId: 'admin-api',
-                reason: `Missing required role: ${SUPER_ADMIN_ROLE}`,
+                reason: `Missing required role: one of ${ADMIN_ROLES.join(', ')}`,
                 subjectAttributes: {
                     clearance: authReq.user.clearance,
                     countryOfAffiliation: authReq.user.countryOfAffiliation,
@@ -150,9 +150,9 @@ export const adminAuthMiddleware = async (
                 },
                 policyEvaluation: {
                     allow: false,
-                    reason: `User does not have ${SUPER_ADMIN_ROLE} role`,
+                    reason: `User does not have any admin role (${ADMIN_ROLES.join(', ')})`,
                     evaluation_details: {
-                        requiredRole: SUPER_ADMIN_ROLE,
+                        requiredRoles: ADMIN_ROLES,
                         userRoles: roles
                     }
                 }
@@ -160,9 +160,9 @@ export const adminAuthMiddleware = async (
 
             res.status(403).json({
                 error: 'Forbidden',
-                message: 'Super administrator privileges required',
+                message: 'Administrator privileges required',
                 details: {
-                    requiredRole: SUPER_ADMIN_ROLE,
+                    requiredRoles: ADMIN_ROLES,
                     yourRoles: roles
                 },
                 requestId
@@ -232,4 +232,3 @@ export const logAdminAction = (params: {
         reason: params.reason
     });
 };
-

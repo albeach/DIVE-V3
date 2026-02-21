@@ -2,10 +2,83 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
     async headers() {
+        // Dynamic CSP - include all DIVE V3 domains for multi-instance support
+        // This ensures CSP works regardless of which domain the app is accessed from
+        const allowExternalAnalytics = process.env.NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS === 'true';
+        const externalDomains = process.env.NEXT_PUBLIC_EXTERNAL_DOMAINS || '';
+
+        // Include all DIVE V3 domains for multi-instance federation
+        const diveDomains = [
+            'https://usa-app.dive25.com',
+            'https://usa-api.dive25.com',
+            'https://usa-idp.dive25.com',
+            'https://fra-app.dive25.com',
+            'https://fra-api.dive25.com',
+            'https://fra-idp.dive25.com',
+            'https://gbr-app.dive25.com',
+            'https://gbr-api.dive25.com',
+            'https://gbr-idp.dive25.com',
+            'https://localhost:3000',
+            'https://localhost:3010',
+            'https://localhost:3031',
+            'https://localhost:4000',
+            'https://localhost:4010',
+            'https://localhost:4031',
+            'https://localhost:8443',
+            'https://localhost:8453',
+            'https://localhost:8474',
+            'http://localhost:3000',
+            'http://localhost:3010',
+            'http://localhost:3031',
+            'http://localhost:4000',
+            'http://localhost:4010',
+            'http://localhost:4031',
+            'http://localhost:8443',
+            'http://localhost:8453',
+            'http://localhost:8474',
+        ];
+
+        // Build CSP directives dynamically
+        const scriptSrc = [
+            "'self'",
+            "'unsafe-inline'",
+            "'unsafe-eval'", // Required for Next.js dev mode and some dynamic features
+        ];
+
+        if (allowExternalAnalytics) {
+            scriptSrc.push('https://static.cloudflareinsights.com');
+        }
+
+        const connectSrc = ["'self'", ...diveDomains];
+
+        // Add optional external domains if configured
+        if (externalDomains) {
+            connectSrc.push(...externalDomains.split(',').map(d => d.trim()).filter(Boolean));
+        }
+
+        const csp = [
+            "default-src 'self'",
+            `script-src ${scriptSrc.join(' ')}`,
+            `style-src 'self' 'unsafe-inline'`, // Required for Tailwind and styled components
+            "img-src 'self' data: blob: https://authjs.dev", // Allow inline images, data URIs, and AuthJS provider icons
+            "media-src 'self' data: blob:", // Allow audio/video from blob and data URIs
+            `font-src 'self' data:`, // Self-hosted fonts only
+            `connect-src ${connectSrc.join(' ')}`,
+            `frame-src 'self' data: ${diveDomains.filter(d => d.includes('idp')).join(' ')}`, // Allow Keycloak iframes for all instances
+            "object-src 'none'", // Block Flash, Java, etc.
+            "base-uri 'self'", // Prevent base tag injection
+            `form-action 'self' ${diveDomains.filter(d => d.includes('idp')).join(' ')} https://*.dive25.com https://*.prosecurity.biz`, // Allow form submission to all IdPs and federation partners
+            "frame-ancestors 'none'", // Prevent clickjacking (use X-Frame-Options for broader support)
+        ].join("; ");
+
         return [
             {
                 source: "/:path*",
                 headers: [
+                    {
+                        key: "Content-Security-Policy",
+                        value: csp,
+                    },
                     {
                         key: "X-Frame-Options",
                         value: "DENY",
@@ -28,9 +101,44 @@ const nextConfig: NextConfig = {
                     },
                     {
                         key: "Strict-Transport-Security",
-                        value: "max-age=63072000; includeSubDomains",
+                        value: process.env.NODE_ENV === 'production'
+                            ? "max-age=31536000; includeSubDomains; preload"
+                            : "max-age=300",
                     },
                 ],
+            },
+        ];
+    },
+    async rewrites() {
+        // Proxy Keycloak endpoints for autodiscovery and OIDC flows
+        // This allows external clients to discover IdP metadata
+        const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
+
+        return [
+            {
+                // OIDC discovery endpoints
+                source: '/realms/:realm/.well-known/:path*',
+                destination: `${keycloakUrl}/realms/:realm/.well-known/:path*`,
+            },
+            {
+                // Keycloak auth endpoints
+                source: '/realms/:realm/protocol/:protocol/:path*',
+                destination: `${keycloakUrl}/realms/:realm/protocol/:protocol/:path*`,
+            },
+            {
+                // Keycloak broker endpoints
+                source: '/realms/:realm/broker/:path*',
+                destination: `${keycloakUrl}/realms/:realm/broker/:path*`,
+            },
+            {
+                // Keycloak token endpoints
+                source: '/realms/:realm/tokens/:path*',
+                destination: `${keycloakUrl}/realms/:realm/tokens/:path*`,
+            },
+            {
+                // Keycloak account console (if needed)
+                source: '/realms/:realm/account/:path*',
+                destination: `${keycloakUrl}/realms/:realm/account/:path*`,
             },
         ];
     },
@@ -38,8 +146,33 @@ const nextConfig: NextConfig = {
         serverActions: {
             bodySizeLimit: "2mb",
         },
+        optimizePackageImports: [
+            'lucide-react',
+            'framer-motion',
+            'recharts',
+            '@tanstack/react-virtual',
+        ],
+    },
+    // Externalize native Node deps used by postgres driver to avoid client/edge bundling errors
+    serverExternalPackages: ["postgres"],
+    // NOTE: Removed webpack config to avoid requiring webpack at runtime with custom server
+    // The serverExternalPackages above should handle postgres externalization
+    // Linting is handled in CI; skip during image build to unblock deployments
+    // Hide the Next.js dev indicator (the "N" circle in bottom-left)
+    devIndicators: {
+        position: 'bottom-right',
+    },
+    // Docker deployment: Use standalone output for production (Caddy handles TLS termination)
+    output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+
+    // FIX: Next.js 15 AbortError - Reduce aggressive fetch caching
+    // This prevents "Fetch is aborted" errors from NextAuth session refetches
+    // See: https://github.com/nextauthjs/next-auth/issues/10128
+    logging: {
+        fetches: {
+            fullUrl: false, // Reduce console noise
+        },
     },
 };
 
 export default nextConfig;
-

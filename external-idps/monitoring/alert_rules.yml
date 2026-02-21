@@ -1,0 +1,149 @@
+# DIVE V3 - External IdP Alert Rules
+# Prometheus alert rules for external IdP monitoring
+
+groups:
+  - name: external_idp_alerts
+    interval: 30s
+    rules:
+      # Spain SAML IdP Alerts
+      - alert: SpainSAMLDown
+        expr: up{job="spain-saml"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: spain-saml
+        annotations:
+          summary: "Spain SAML IdP is down"
+          description: "Spain SAML IdP has been down for more than 2 minutes"
+
+      - alert: SpainSAMLHighLatency
+        expr: http_request_duration_seconds{job="spain-saml",quantile="0.95"} > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: spain-saml
+        annotations:
+          summary: "Spain SAML IdP high latency"
+          description: "P95 latency is {{ $value }}s (threshold: 2s)"
+
+      - alert: SpainSAMLCertificateExpiringSoon
+        expr: ssl_certificate_expiry_seconds{instance="spain-saml-idp"} < (30 * 24 * 60 * 60)
+        labels:
+          severity: warning
+          component: spain-saml
+        annotations:
+          summary: "Spain SAML certificate expiring soon"
+          description: "Certificate expires in {{ $value | humanizeDuration }} days"
+
+      - alert: SpainSAMLCertificateExpired
+        expr: ssl_certificate_expiry_seconds{instance="spain-saml-idp"} < 0
+        labels:
+          severity: critical
+          component: spain-saml
+        annotations:
+          summary: "Spain SAML certificate EXPIRED"
+          description: "Certificate has expired! Immediate action required"
+
+      # USA OIDC IdP Alerts
+      - alert: USAOIDCDown
+        expr: up{job="usa-oidc"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: usa-oidc
+        annotations:
+          summary: "USA OIDC IdP is down"
+          description: "USA OIDC IdP has been down for more than 2 minutes"
+
+      - alert: USAOIDCHighLatency
+        expr: http_server_requests_seconds{job="usa-oidc",quantile="0.95"} > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: usa-oidc
+        annotations:
+          summary: "USA OIDC IdP high latency"
+          description: "P95 latency is {{ $value }}s (threshold: 2s)"
+
+      - alert: USAOIDCHighErrorRate
+        expr: rate(http_server_requests_seconds_count{job="usa-oidc",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: usa-oidc
+        annotations:
+          summary: "USA OIDC IdP high error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+      # Database Alerts
+      - alert: USAPostgreSQLDown
+        expr: up{job="usa-postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "USA PostgreSQL database is down"
+          description: "PostgreSQL has been down for more than 1 minute"
+
+      - alert: USAPostgreSQLHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "PostgreSQL connection pool near limit"
+          description: "Using {{ $value | humanizePercentage }} of max connections"
+
+      # Federation Health Alerts
+      - alert: ExternalIdPEndpointDown
+        expr: probe_success{job="blackbox"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: endpoint
+        annotations:
+          summary: "External IdP endpoint unreachable"
+          description: "{{ $labels.instance }} has been unreachable for 3 minutes"
+
+      - alert: ExternalIdPSlowResponse
+        expr: probe_duration_seconds{job="blackbox"} > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: endpoint
+        annotations:
+          summary: "External IdP slow response time"
+          description: "{{ $labels.instance }} response time is {{ $value }}s"
+
+      # Resource Alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is at {{ $value | humanizePercentage }}"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"

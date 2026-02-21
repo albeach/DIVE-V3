@@ -1,0 +1,4 @@
+# JSON patch to remove base namespace
+- op: remove
+  path: /resources/0
+

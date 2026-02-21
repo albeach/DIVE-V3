@@ -1,0 +1,70 @@
+{
+  "name": "DIVE V3 - Coalition ICAM Platform",
+  "short_name": "DIVE V3",
+  "description": "Secure Coalition Identity & Access Management for USA/NATO partners",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/DIVE-Logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/DIVE-Logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "security",
+    "defense",
+    "authentication",
+    "government"
+  ],
+  "screenshots": [
+    {
+      "src": "/DIVE-Logo.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "label": "DIVE V3 Coalition ICAM Platform"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Login",
+      "short_name": "Login",
+      "description": "Access the DIVE V3 login page",
+      "url": "/login",
+      "icons": [
+        {
+          "src": "/DIVE-Logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Resources",
+      "short_name": "Resources",
+      "description": "Browse classified resources",
+      "url": "/resources",
+      "icons": [
+        {
+          "src": "/DIVE-Logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "iarc_rating_id": "",
+  "dir": "ltr",
+  "lang": "en-US"
+}

@@ -131,19 +131,13 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
             console.warn('Failed to load cached KAS flow:', e);
         }
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) {
-                setError('Authentication required');
-                setLoading(false);
-                return;
-            }
-
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/resources/${resourceId}/kas-flow`, {
+            // Call frontend API route - handles auth and federation server-side
+            // No need to pass token - session validation done server-side
+            const response = await fetch(`/api/resources/${resourceId}/kas-flow`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                cache: 'no-store',
             });
 
             if (!response.ok) {
@@ -404,7 +398,7 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
                             <div>
                                 <p className="text-green-800 font-semibold">Showing Completed Key Request</p>
                                 <p className="text-green-700 text-sm">
-                                    This shows your most recent successful key request for this resource. 
+                                    This shows your most recent successful key request for this resource.
                                     The flow completed and content was decrypted.
                                 </p>
                             </div>
@@ -437,4 +431,3 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
         </div>
     );
 }
-

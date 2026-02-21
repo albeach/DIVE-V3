@@ -1,0 +1,1260 @@
+{
+    "info": {
+        "name": "DIVE V3 - Federation & ZTDF APIs",
+        "description": "Complete API collection for testing DIVE V3 encryption, KAS, and federation capabilities.\n\n## Quick Start\n1. Set environment variables (see Variables tab)\n2. Run 'Auth: Get Access Token' to authenticate\n3. Try 'Resources: Search Local' to see available documents\n4. Test KAS with 'KAS: Request Decryption Key'\n5. Explore federation endpoints\n\n## Authentication\nAll requests use Bearer token authentication. The access token is automatically stored in the `{{accessToken}}` variable after successful authentication.\n\n## Environment Variables\nRequired:\n- `baseUrl`: https://api.dive-v3.mil (or your instance)\n- `keycloakUrl`: https://keycloak.dive-v3.mil\n- `kasUrl`: https://kas.dive-v3.mil:8080\n- `realm`: dive-v3-broker\n- `clientId`: dive-v3-client\n- `username`: testuser-us\n- `password`: (your password)\n\nOptional:\n- `externalSpUrl`: https://api.partner.mil (for federation testing)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "2.0.0"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{accessToken}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "https://localhost:4000",
+            "type": "string"
+        },
+        {
+            "key": "keycloakUrl",
+            "value": "https://localhost:8443",
+            "type": "string"
+        },
+        {
+            "key": "kasUrl",
+            "value": "http://localhost:8080",
+            "type": "string"
+        },
+        {
+            "key": "realm",
+            "value": "dive-v3-broker",
+            "type": "string"
+        },
+        {
+            "key": "clientId",
+            "value": "dive-v3-client",
+            "type": "string"
+        },
+        {
+            "key": "username",
+            "value": "testuser-us",
+            "type": "string"
+        },
+        {
+            "key": "password",
+            "value": "password",
+            "type": "string"
+        },
+        {
+            "key": "accessToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "refreshToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "resourceId",
+            "value": "doc-fuel-001",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "1. Authentication",
+            "item": [
+                {
+                    "name": "Get Access Token (Direct Grant)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "// Extract and save tokens",
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('accessToken', jsonData.access_token);",
+                                    "    pm.collectionVariables.set('refreshToken', jsonData.refresh_token);",
+                                    "    ",
+                                    "    // Decode and display token claims",
+                                    "    const tokenParts = jsonData.access_token.split('.');",
+                                    "    const payload = JSON.parse(atob(tokenParts[1]));",
+                                    "    console.log('Token Claims:', payload);",
+                                    "    console.log('Clearance:', payload.clearance);",
+                                    "    console.log('Country:', payload.countryOfAffiliation);",
+                                    "    console.log('COI:', payload.acpCOI);",
+                                    "    ",
+                                    "    pm.test('Access token received', function () {",
+                                    "        pm.expect(jsonData.access_token).to.be.a('string');",
+                                    "    });",
+                                    "} else {",
+                                    "    console.error('Authentication failed:', pm.response.text());",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "grant_type",
+                                    "value": "password",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "username",
+                                    "value": "{{username}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "password",
+                                    "value": "{{password}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "scope",
+                                    "value": "openid profile email",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "token"
+                            ]
+                        },
+                        "description": "Authenticates with Keycloak using Resource Owner Password Credentials grant.\n\nNote: This is for testing only. Production should use authorization code flow with PKCE."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Refresh Access Token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('accessToken', jsonData.access_token);",
+                                    "    pm.collectionVariables.set('refreshToken', jsonData.refresh_token);",
+                                    "    pm.test('Token refreshed successfully', function () {",
+                                    "        pm.expect(jsonData.access_token).to.be.a('string');",
+                                    "    });",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "grant_type",
+                                    "value": "refresh_token",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "refresh_token",
+                                    "value": "{{refreshToken}}",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "token"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get User Info",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/userinfo",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "userinfo"
+                            ]
+                        },
+                        "description": "Retrieves user information using the access token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "refresh_token",
+                                    "value": "{{refreshToken}}",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/logout",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "logout"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Authentication endpoints using Keycloak OIDC"
+        },
+        {
+            "name": "2. Resources (ZTDF)",
+            "item": [
+                {
+                    "name": "Search Local Resources",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Status code is 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    console.log('Total resources:', jsonData.total);",
+                                    "    ",
+                                    "    if (jsonData.resources && jsonData.resources.length > 0) {",
+                                    "        const firstResource = jsonData.resources[0];",
+                                    "        pm.collectionVariables.set('resourceId', firstResource.resourceId);",
+                                    "        console.log('First resource:', firstResource.title);",
+                                    "        console.log('Classification:', firstResource.classification);",
+                                    "        console.log('Encrypted:', firstResource.encrypted);",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/resources?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "resources"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "classification",
+                                    "value": "SECRET",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "country",
+                                    "value": "USA",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Lists available resources. Results are filtered based on user's clearance and releasability."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Resource by ID",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    console.log('Resource:', jsonData.title);",
+                                    "    console.log('Classification:', jsonData.classification);",
+                                    "    console.log('Releasable to:', jsonData.releasabilityTo);",
+                                    "    console.log('COI:', jsonData.COI);",
+                                    "    console.log('Encrypted:', jsonData.encrypted);",
+                                    "    ",
+                                    "    if (jsonData.kasObligation) {",
+                                    "        console.log('KAS URL:', jsonData.kasObligation.kasUrl);",
+                                    "        console.log('Wrapped Key:', jsonData.kasObligation.wrappedKey.substring(0, 50) + '...');",
+                                    "    }",
+                                    "    ",
+                                    "    if (jsonData.content) {",
+                                    "        console.log('Content preview:', jsonData.content.substring(0, 100));",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/resources/{{resourceId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "resources",
+                                "{{resourceId}}"
+                            ]
+                        },
+                        "description": "Retrieves a specific resource. If encrypted, returns KAS obligation instead of content."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Upload Encrypted Resource",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('resourceId', jsonData.resourceId);",
+                                    "    console.log('Resource uploaded:', jsonData.resourceId);",
+                                    "    console.log('ZTDF version:', jsonData.ztdfVersion);",
+                                    "    console.log('KAS URL:', jsonData.kasUrl);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "multipart/form-data",
+                                "disabled": true
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                },
+                                {
+                                    "key": "title",
+                                    "value": "Test Encrypted Document",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "classification",
+                                    "value": "SECRET",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "releasabilityTo",
+                                    "value": "[\"USA\", \"GBR\", \"CAN\"]",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "COI",
+                                    "value": "[\"FVEY\"]",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "encrypted",
+                                    "value": "true",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/resources/upload",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "resources",
+                                "upload"
+                            ]
+                        },
+                        "description": "Uploads a file and encrypts it with ZTDF format.\n\nThe backend will:\n1. Generate random DEK (Data Encryption Key)\n2. Encrypt file with AES-256-GCM\n3. Wrap DEK with KEK\n4. Create ZTDF object with policy\n5. Store in MongoDB\n6. Register with KAS"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Resource",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/resources/{{resourceId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "resources",
+                                "{{resourceId}}"
+                            ]
+                        },
+                        "description": "Deletes a resource. Only the owner or admin can delete."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Resource management with ZTDF encryption"
+        },
+        {
+            "name": "3. KAS (Key Access Service)",
+            "item": [
+                {
+                    "name": "KAS Health Check",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{kasUrl}}/health",
+                            "host": [
+                                "{{kasUrl}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        },
+                        "description": "Checks if KAS service is healthy and operational."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Request Decryption Key",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "exec": [
+                                    "// This would typically be done by backend, but we can test KAS directly",
+                                    "// Note: You need a valid resourceId and wrappedKey from an encrypted resource"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    console.log('Decision:', jsonData.kasDecision.allow ? 'ALLOW' : 'DENY');",
+                                    "    console.log('Reason:', jsonData.kasDecision.reason);",
+                                    "    ",
+                                    "    if (jsonData.success) {",
+                                    "        console.log('DEK received (length):', jsonData.dek.length);",
+                                    "        console.log('Evaluation:', jsonData.kasDecision.evaluationDetails);",
+                                    "        pm.test('Key released successfully', function () {",
+                                    "            pm.expect(jsonData.dek).to.be.a('string');",
+                                    "        });",
+                                    "    }",
+                                    "} else if (pm.response.code === 403) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    console.log('Denied:', jsonData.denialReason);",
+                                    "    console.log('Details:', jsonData.details);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"resourceId\": \"{{resourceId}}\",\n  \"kaoId\": \"kao-{{resourceId}}\",\n  \"bearerToken\": \"{{accessToken}}\",\n  \"wrappedKey\": \"<base64_wrapped_key_from_resource>\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{kasUrl}}/request-key",
+                            "host": [
+                                "{{kasUrl}}"
+                            ],
+                            "path": [
+                                "request-key"
+                            ]
+                        },
+                        "description": "Requests decryption key from KAS.\n\nKAS will:\n1. Validate JWT signature\n2. Extract user attributes (clearance, country, COI)\n3. Fetch resource policy\n4. Re-evaluate authorization with OPA\n5. Return DEK if authorized\n6. Log decision\n\nNote: wrappedKey should come from the resource's ZTDF object."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Request Key (Should Deny - Insufficient Clearance)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Status code is 403', function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});",
+                                    "",
+                                    "const jsonData = pm.response.json();",
+                                    "console.log('Denial reason:', jsonData.denialReason);",
+                                    "console.log('Clearance check:', jsonData.kasDecision.evaluationDetails.clearanceCheck);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"resourceId\": \"doc-topsecret-001\",\n  \"kaoId\": \"kao-doc-topsecret-001\",\n  \"bearerToken\": \"{{accessToken}}\",\n  \"wrappedKey\": \"dummy_key_for_testing\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{kasUrl}}/request-key",
+                            "host": [
+                                "{{kasUrl}}"
+                            ],
+                            "path": [
+                                "request-key"
+                            ]
+                        },
+                        "description": "Test denial scenario: User with SECRET tries to access TOP_SECRET document."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Key Access Service endpoints for policy-bound decryption"
+        },
+        {
+            "name": "4. Federation",
+            "item": [
+                {
+                    "name": "Get Federation Metadata",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/.well-known/federation-metadata",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                ".well-known",
+                                "federation-metadata"
+                            ]
+                        },
+                        "description": "Retrieves DIVE V3 federation metadata for external partners.\n\nIncludes:\n- Entity ID\n- Federation endpoints (discovery, access)\n- Supported classifications, countries, COIs\n- Trust certificates"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Search Federated Resources",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    console.log('Total results:', jsonData.total);",
+                                    "    console.log('Local results:', jsonData.localCount);",
+                                    "    console.log('Federated results:', jsonData.federatedCount);",
+                                    "    ",
+                                    "    jsonData.results.forEach(resource => {",
+                                    "        console.log(`- ${resource.title} (${resource.source})`);",
+                                    "    });",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"fuel inventory\",\n  \"filters\": {\n    \"classification\": \"SECRET\",\n    \"country\": \"USA\"\n  },\n  \"includeFederated\": true,\n  \"limit\": 10\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/federation/resources/search",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "federation",
+                                "resources",
+                                "search"
+                            ]
+                        },
+                        "description": "Searches across local AND federated resources.\n\nDIVE V3 will:\n1. Search local MongoDB\n2. Query registered federation partners (in parallel)\n3. Aggregate results\n4. Filter by user's clearance/releasability\n5. Return combined results"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Request Federated Resource Access",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"resourceId\": \"remote-doc-456\",\n  \"federationDomain\": \"partner-system.mil\",\n  \"requestingUser\": {\n    \"uniqueID\": \"{{username}}\",\n    \"clearance\": \"SECRET\",\n    \"country\": \"USA\",\n    \"coi\": [\"FVEY\"]\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/federation/resources/request-access",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "federation",
+                                "resources",
+                                "request-access"
+                            ]
+                        },
+                        "description": "Requests access to a resource hosted on a federated partner system.\n\nFlow:\n1. DIVE V3 validates user's token\n2. DIVE V3 forwards request to partner's federation endpoint\n3. Partner checks authorization\n4. Partner returns access grant or denial\n5. DIVE V3 returns result to user"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List Federation Partners",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/federation/partners",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "federation",
+                                "partners"
+                            ]
+                        },
+                        "description": "Lists all registered federation partners with their status and capabilities."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Federation endpoints for cross-domain resource sharing"
+        },
+        {
+            "name": "5. OAuth 2.0 (External SP Integration)",
+            "item": [
+                {
+                    "name": "OIDC Discovery",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/.well-known/openid-configuration",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                ".well-known",
+                                "openid-configuration"
+                            ]
+                        },
+                        "description": "OpenID Connect Discovery endpoint.\n\nExternal SPs should use this to discover:\n- Authorization endpoint\n- Token endpoint\n- JWKS URI (for token verification)\n- Supported grant types\n- Supported scopes"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get JWKS (JSON Web Key Set)",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/certs",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "certs"
+                            ]
+                        },
+                        "description": "Retrieves public keys for JWT verification.\n\nExternal SPs MUST:\n1. Fetch this periodically (cache for 24h)\n2. Use keys to verify JWT signatures\n3. Reject tokens with invalid signatures"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "OAuth: Authorization Code Flow (Step 1 - Authorize)",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/auth?client_id={{clientId}}&redirect_uri=https://external-sp.mil/callback&response_type=code&scope=openid profile email&state=random_state_123&code_challenge=<PKCE_CHALLENGE>&code_challenge_method=S256",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "auth"
+                            ],
+                            "query": [
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}"
+                                },
+                                {
+                                    "key": "redirect_uri",
+                                    "value": "https://external-sp.mil/callback"
+                                },
+                                {
+                                    "key": "response_type",
+                                    "value": "code"
+                                },
+                                {
+                                    "key": "scope",
+                                    "value": "openid profile email"
+                                },
+                                {
+                                    "key": "state",
+                                    "value": "random_state_123"
+                                },
+                                {
+                                    "key": "code_challenge",
+                                    "value": "<PKCE_CHALLENGE>"
+                                },
+                                {
+                                    "key": "code_challenge_method",
+                                    "value": "S256"
+                                }
+                            ]
+                        },
+                        "description": "Step 1 of OAuth Authorization Code Flow.\n\nNote: This opens a browser. User logs in, then redirected to redirect_uri with authorization code.\n\nPKCE is MANDATORY:\n1. Generate code_verifier (64 random chars)\n2. SHA256 hash it → code_challenge\n3. Send code_challenge here\n4. Send code_verifier in token exchange (step 2)"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "OAuth: Token Exchange (Step 2)",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "grant_type",
+                                    "value": "authorization_code",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "code",
+                                    "value": "<AUTHORIZATION_CODE_FROM_STEP_1>",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "redirect_uri",
+                                    "value": "https://external-sp.mil/callback",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "code_verifier",
+                                    "value": "<PKCE_CODE_VERIFIER>",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "token"
+                            ]
+                        },
+                        "description": "Step 2: Exchange authorization code for access token.\n\nReceives:\n- access_token (JWT)\n- id_token (JWT with user claims)\n- refresh_token\n- token_type: Bearer\n- expires_in: 900 (seconds)"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Token Introspection",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/x-www-form-urlencoded"
+                            }
+                        ],
+                        "body": {
+                            "mode": "urlencoded",
+                            "urlencoded": [
+                                {
+                                    "key": "token",
+                                    "value": "{{accessToken}}",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "client_id",
+                                    "value": "{{clientId}}",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token/introspect",
+                            "host": [
+                                "{{keycloakUrl}}"
+                            ],
+                            "path": [
+                                "realms",
+                                "{{realm}}",
+                                "protocol",
+                                "openid-connect",
+                                "token",
+                                "introspect"
+                            ]
+                        },
+                        "description": "Validates a token and returns its metadata.\n\nExternal SPs can use this to:\n1. Verify token is still valid (not expired/revoked)\n2. Get user attributes without decoding JWT\n3. Check scopes"
+                    },
+                    "response": []
+                }
+            ],
+            "description": "OAuth 2.0 / OIDC endpoints for external Service Provider integration"
+        },
+        {
+            "name": "6. SCIM User Provisioning",
+            "item": [
+                {
+                    "name": "SCIM: Get Service Provider Config",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scim/v2/ServiceProviderConfig",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scim",
+                                "v2",
+                                "ServiceProviderConfig"
+                            ]
+                        },
+                        "description": "Returns SCIM server capabilities (what operations are supported)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "SCIM: List Users",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scim/v2/Users?startIndex=1&count=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scim",
+                                "v2",
+                                "Users"
+                            ],
+                            "query": [
+                                {
+                                    "key": "startIndex",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "count",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "filter",
+                                    "value": "userName eq \"testuser-us\"",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Lists users in DIVE V3.\n\nSupports filtering:\n- filter=userName eq \"john.doe\"\n- filter=country eq \"USA\"\n- filter=clearance eq \"SECRET\""
+                    },
+                    "response": []
+                },
+                {
+                    "name": "SCIM: Create User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/scim+json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"schemas\": [\n    \"urn:ietf:params:scim:schemas:core:2.0:User\",\n    \"urn:dive:params:scim:schemas:extension:2.0:User\"\n  ],\n  \"userName\": \"john.doe@external.mil\",\n  \"name\": {\n    \"familyName\": \"Doe\",\n    \"givenName\": \"John\"\n  },\n  \"emails\": [\n    {\n      \"value\": \"john.doe@external.mil\",\n      \"primary\": true\n    }\n  ],\n  \"active\": true,\n  \"urn:dive:params:scim:schemas:extension:2.0:User\": {\n    \"clearance\": \"SECRET\",\n    \"countryOfAffiliation\": \"USA\",\n    \"acpCOI\": [\"FVEY\"],\n    \"dutyOrg\": \"U.S. Air Force\",\n    \"orgUnit\": \"82nd Airborne\"\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scim/v2/Users",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scim",
+                                "v2",
+                                "Users"
+                            ]
+                        },
+                        "description": "Provisions a new user in DIVE V3.\n\nExternal IdPs can use SCIM to:\n1. Automatically create users\n2. Update attributes (clearance changes)\n3. Deactivate users\n\nNote: Uses DIVE V3 SCIM extension for clearance/country/COI."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "SCIM: Update User",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/scim+json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"schemas\": [\n    \"urn:ietf:params:scim:schemas:core:2.0:User\",\n    \"urn:dive:params:scim:schemas:extension:2.0:User\"\n  ],\n  \"userName\": \"john.doe@external.mil\",\n  \"active\": true,\n  \"urn:dive:params:scim:schemas:extension:2.0:User\": {\n    \"clearance\": \"TOP_SECRET\",\n    \"acpCOI\": [\"FVEY\", \"NATO-COSMIC\"]\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scim/v2/Users/:userId",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scim",
+                                "v2",
+                                "Users",
+                                ":userId"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "userId",
+                                    "value": "12345"
+                                }
+                            ]
+                        },
+                        "description": "Updates user attributes.\n\nCommon use case: User gets clearance upgrade → IdP updates SCIM → DIVE V3 grants access to higher classification documents."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "SCIM: Delete User",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scim/v2/Users/:userId",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scim",
+                                "v2",
+                                "Users",
+                                ":userId"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "userId",
+                                    "value": "12345"
+                                }
+                            ]
+                        },
+                        "description": "Deactivates a user."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "SCIM 2.0 API for automated user provisioning from external IdPs"
+        },
+        {
+            "name": "7. Admin & Monitoring",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Audit Logs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/admin/audit-logs?startDate=2025-11-01&endDate=2025-11-30&limit=100",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "admin",
+                                "audit-logs"
+                            ],
+                            "query": [
+                                {
+                                    "key": "startDate",
+                                    "value": "2025-11-01"
+                                },
+                                {
+                                    "key": "endDate",
+                                    "value": "2025-11-30"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "100"
+                                },
+                                {
+                                    "key": "resourceId",
+                                    "value": "doc-fuel-001",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "userId",
+                                    "value": "testuser-us",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Retrieves audit logs for compliance.\n\nRequires admin role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get OPA Policy Decision",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"input\": {\n    \"subject\": {\n      \"authenticated\": true,\n      \"uniqueID\": \"testuser-us\",\n      \"clearance\": \"SECRET\",\n      \"countryOfAffiliation\": \"USA\",\n      \"acpCOI\": [\"FVEY\"]\n    },\n    \"action\": {\n      \"operation\": \"read\"\n    },\n    \"resource\": {\n      \"resourceId\": \"doc-fuel-001\",\n      \"classification\": \"SECRET\",\n      \"releasabilityTo\": [\"USA\", \"GBR\", \"CAN\"],\n      \"COI\": [\"FVEY\"]\n    },\n    \"context\": {\n      \"currentTime\": \"2025-11-04T10:00:00Z\",\n      \"sourceIP\": \"192.168.1.1\"\n    }\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8181/v1/data/dive/authorization",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8181",
+                            "path": [
+                                "v1",
+                                "data",
+                                "dive",
+                                "authorization"
+                            ]
+                        },
+                        "description": "Directly queries OPA for an authorization decision.\n\nUseful for:\n1. Testing policy changes\n2. Debugging authorization issues\n3. Understanding policy logic"
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Administrative and monitoring endpoints"
+        }
+    ]
+}

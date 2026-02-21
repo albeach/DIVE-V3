@@ -1,0 +1,18 @@
+# =============================================================================
+# DIVE V3 OPA - GBR Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-gbr
+  namespace: dive-v3-gbr
+spec:
+  selector:
+    matchLabels:
+      app: opa-gbr
+  template:
+    metadata:
+      labels:
+        app: opa-gbr
+        app.kubernetes.io/instance: gbr

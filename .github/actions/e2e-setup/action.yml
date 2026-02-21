@@ -1,0 +1,648 @@
+name: 'E2E Test Setup'
+description: 'Shared setup for DIVE V3 E2E test jobs: Node.js, deps, SSL, Keycloak, PostgreSQL, backend HTTPS, Playwright, Next.js HTTPS, optional OPA'
+
+inputs:
+  nextauth-secret:
+    description: 'NEXTAUTH_SECRET for the Next.js server'
+    required: true
+  keycloak-users:
+    description: 'JSON array of Keycloak user configs. Each: {"username":"...","password":"...","clearance":"...","coi":[...]}'
+    required: false
+    default: '[{"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]},{"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}]'
+  start-opa:
+    description: 'Whether to start OPA server (true/false)'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: |
+          frontend/package-lock.json
+          backend/package-lock.json
+
+    - name: Install Frontend Dependencies
+      shell: bash
+      run: cd frontend && npm ci --legacy-peer-deps
+
+    - name: Install Backend Dependencies
+      shell: bash
+      run: cd backend && npm ci --legacy-peer-deps
+
+    - name: Generate SSL Certificates
+      shell: bash
+      run: |
+        mkdir -p ${{ github.workspace }}/frontend/certs \
+                 ${{ github.workspace }}/keycloak-certs \
+                 ${{ github.workspace }}/certs
+
+        # Frontend certificates
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+          -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+
+        # Keycloak certificates
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/keycloak-certs/key.pem \
+          -out ${{ github.workspace }}/keycloak-certs/cert.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
+        chmod 644 ${{ github.workspace }}/keycloak-certs/cert.pem \
+                  ${{ github.workspace }}/keycloak-certs/key.pem
+
+        # OPA certificates (always generated for simplicity)
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/certs/key.pem \
+          -out ${{ github.workspace }}/certs/certificate.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
+
+        # Build a CA bundle for Node-based services that must trust multiple
+        # self-signed certs in CI (frontend/backend HTTPS + Keycloak HTTPS).
+        cat ${{ github.workspace }}/frontend/certs/certificate.pem \
+            ${{ github.workspace }}/keycloak-certs/cert.pem \
+            > ${{ github.workspace }}/certs/ca-bundle.pem
+
+        echo "::notice::SSL certificates generated"
+
+    - name: Start Keycloak
+      shell: bash
+      run: |
+        docker run -d --name keycloak \
+          -p 8443:8443 \
+          -p 9000:9000 \
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+          -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+          -e KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/certs/cert.pem \
+          -e KC_HTTPS_CERTIFICATE_KEY_FILE=/opt/keycloak/certs/key.pem \
+          -e KC_HEALTH_ENABLED=true \
+          -e KC_HOSTNAME_STRICT=false \
+          -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
+          quay.io/keycloak/keycloak:26.4.2 start-dev
+
+        max_attempts=300
+        for i in $(seq 1 "$max_attempts"); do
+          # Keycloak health endpoints are served on management port 9000.
+          if curl -kfsS https://localhost:9000/health/ready >/dev/null 2>&1; then
+            echo "::notice::Keycloak management health ready"
+            break
+          fi
+
+          # Fallback: confirm the public OIDC endpoint is reachable.
+          if curl -kfsS https://localhost:8443/realms/master/.well-known/openid-configuration >/dev/null 2>&1; then
+            echo "::notice::Keycloak OIDC endpoint ready"
+            break
+          fi
+
+          if ! docker ps --filter "name=^/keycloak$" --filter "status=running" --format '{{.Names}}' | grep -q '^keycloak$'; then
+            echo "::error::Keycloak container exited before becoming ready"
+            if docker ps -a --format '{{.Names}}' | grep -q '^keycloak$'; then
+              docker logs --tail 300 keycloak
+            fi
+            exit 1
+          fi
+
+          if [ "$i" -eq "$max_attempts" ]; then
+            echo "::error::Keycloak failed to become ready after 10 minutes"
+            docker logs --tail 300 keycloak
+            exit 1
+          fi
+          sleep 2
+        done
+
+    - name: Configure Keycloak Realm and Users
+      shell: bash
+      run: |
+        TOKEN=""
+        for i in {1..30}; do
+          TOKEN=$(curl -sk -X POST https://localhost:8443/realms/master/protocol/openid-connect/token \
+            -d "client_id=admin-cli&username=admin&password=admin&grant_type=password" | jq -r '.access_token // empty')
+          if [ -n "$TOKEN" ]; then
+            break
+          fi
+          sleep 2
+        done
+
+        if [ -z "$TOKEN" ]; then
+          echo "::error::Failed to obtain Keycloak admin token"
+          docker logs --tail 300 keycloak
+          exit 1
+        fi
+
+        REALM="dive-v3-broker-usa"
+
+        # Create realm
+        REALM_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST https://localhost:8443/admin/realms \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d "{\"realm\":\"$REALM\",\"enabled\":true}")
+        if [ "$REALM_CREATE_HTTP" != "201" ] && [ "$REALM_CREATE_HTTP" != "409" ]; then
+          echo "::error::Failed to create realm '$REALM' (HTTP $REALM_CREATE_HTTP)"
+          exit 1
+        fi
+
+        # Extend token lifetimes for CI stability (PUT works even if realm already existed).
+        # Default access token lifetime is 300s (5 min) which causes token refresh
+        # during test runs. Extend to 900s (15 min) to cover entire test execution.
+        curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM" \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d "{\"realm\":\"$REALM\",\"accessTokenLifespan\":900,\"ssoSessionIdleTimeout\":3600,\"ssoSessionMaxLifespan\":7200}"
+
+        REALM_ATL=$(curl -sk "https://localhost:8443/admin/realms/$REALM" \
+          -H "Authorization: Bearer $TOKEN" | jq '.accessTokenLifespan')
+        echo "::notice::Realm $REALM accessTokenLifespan=${REALM_ATL}s"
+
+        # Create OIDC client for NextAuth
+        CLIENT_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/clients" \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d '{
+            "clientId": "dive-v3-broker-usa",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "secret": "test-client-secret",
+            "redirectUris": ["https://localhost:3000/*"],
+            "webOrigins": ["https://localhost:3000"],
+            "directAccessGrantsEnabled": true,
+            "standardFlowEnabled": true
+          }')
+        if [ "$CLIENT_CREATE_HTTP" != "201" ] && [ "$CLIENT_CREATE_HTTP" != "409" ]; then
+          echo "::error::Failed to create OIDC client in realm '$REALM' (HTTP $CLIENT_CREATE_HTTP)"
+          exit 1
+        fi
+        echo "::notice::OIDC client created in $REALM"
+
+        CLIENT_UUID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/clients?clientId=dive-v3-broker-usa" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+        if [ -z "$CLIENT_UUID" ]; then
+          echo "::error::Failed to resolve Keycloak client UUID for dive-v3-broker-usa"
+          exit 1
+        fi
+
+        # Ensure all scopes requested by NextAuth are available for the client.
+        # Missing scopes cause Keycloak invalid_scope and immediate auth callback failure.
+        for scope in openid profile email roles uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr; do
+          SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+            -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
+
+          if [ -z "$SCOPE_ID" ]; then
+            SCOPE_CREATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"name\":\"$scope\",\"protocol\":\"openid-connect\",\"attributes\":{\"include.in.token.scope\":\"true\",\"display.on.consent.screen\":\"false\"}}")
+            if [ "$SCOPE_CREATE_HTTP" != "201" ] && [ "$SCOPE_CREATE_HTTP" != "409" ]; then
+              echo "::error::Failed to create client scope '$scope' (HTTP $SCOPE_CREATE_HTTP)"
+              exit 1
+            fi
+            SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+              -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
+          fi
+
+          if [ -n "$SCOPE_ID" ]; then
+            SCOPE_ASSIGN_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/clients/$CLIENT_UUID/default-client-scopes/$SCOPE_ID" \
+              -H "Authorization: Bearer $TOKEN")
+            if [ "$SCOPE_ASSIGN_HTTP" != "201" ] && [ "$SCOPE_ASSIGN_HTTP" != "204" ] && [ "$SCOPE_ASSIGN_HTTP" != "409" ]; then
+              echo "::error::Failed to assign default client scope '$scope' (HTTP $SCOPE_ASSIGN_HTTP)"
+              exit 1
+            fi
+            echo "::notice::Ensured client scope on dive-v3-broker-usa: $scope"
+          else
+            echo "::error::Unable to resolve/create client scope: $scope"
+            exit 1
+          fi
+        done
+
+        # CRITICAL: Ensure realm_access.roles appears in the ID token.
+        # By default, Keycloak's built-in "realm roles" mapper only adds realm_access
+        # to the ACCESS token (id.token.claim=false). NextAuth's session callback
+        # (auth.ts) extracts roles from the decoded ID token, so they must be present.
+        ROLES_SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "roles") | .id' | head -n1)
+
+        if [ -n "$ROLES_SCOPE_ID" ]; then
+          echo "::notice::Found 'roles' client scope: $ROLES_SCOPE_ID"
+
+          # List ALL mappers in the roles scope for debugging
+          ALL_MAPPERS=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "::notice::Mappers in roles scope: $(echo "$ALL_MAPPERS" | jq -r '[.[].name] | join(", ")')"
+
+          # Find the existing "realm roles" mapper and enable id.token.claim
+          MAPPER_JSON=$(echo "$ALL_MAPPERS" | jq -c '[.[] | select(.name == "realm roles")] | .[0] // empty')
+
+          if [ -n "$MAPPER_JSON" ] && [ "$MAPPER_JSON" != "null" ]; then
+            MAPPER_ID=$(echo "$MAPPER_JSON" | jq -r '.id')
+            MAPPER_TYPE=$(echo "$MAPPER_JSON" | jq -r '.protocolMapper')
+            CURRENT_ID_CLAIM=$(echo "$MAPPER_JSON" | jq -r '.config["id.token.claim"] // "unset"')
+            echo "::notice::Found mapper id=$MAPPER_ID type=$MAPPER_TYPE id.token.claim=$CURRENT_ID_CLAIM"
+
+            UPDATED_MAPPER=$(echo "$MAPPER_JSON" | jq '.config["id.token.claim"] = "true" | .config["userinfo.token.claim"] = "true"')
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT \
+              "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$UPDATED_MAPPER")
+            if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "::notice::Updated 'realm roles' mapper: id.token.claim=true (HTTP $HTTP_CODE)"
+            else
+              echo "::error::Failed to update realm roles mapper (HTTP $HTTP_CODE)"
+              echo "::error::Payload was: $(echo "$UPDATED_MAPPER" | jq -c .)"
+            fi
+
+            # Verify the update actually took effect
+            VERIFY=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.config["id.token.claim"] // "unset"')
+            if [ "$VERIFY" = "true" ]; then
+              echo "::notice::Verified: realm roles mapper id.token.claim=$VERIFY"
+            else
+              echo "::error::Verification failed: id.token.claim=$VERIFY (expected true)"
+            fi
+          else
+            # No existing mapper — create one that includes realm_access in the ID token
+            echo "::warning::No 'realm roles' mapper found — creating one"
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" -X POST \
+              "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d '{
+                "name": "realm roles",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                "config": {
+                  "multivalued": "true",
+                  "claim.name": "realm_access.roles",
+                  "jsonType.label": "String",
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "userinfo.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              }')
+            echo "::notice::Created 'realm roles' mapper (HTTP $HTTP_CODE)"
+          fi
+        else
+          echo "::error::Could not find 'roles' client scope — realm_access WILL be missing from ID token"
+        fi
+
+        # Disable first-login required actions that break unattended Playwright login.
+        for alias in UPDATE_PROFILE VERIFY_EMAIL; do
+          ACTION_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/authentication/required-actions" \
+            -H "Authorization: Bearer $TOKEN" | jq -c ".[] | select(.alias == \"$alias\")" | head -n1)
+          if [ -n "$ACTION_JSON" ]; then
+            ACTION_UPDATE_HTTP=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/authentication/required-actions/$alias" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$(echo "$ACTION_JSON" | jq '.defaultAction=false')")
+            if [ "$ACTION_UPDATE_HTTP" != "200" ] && [ "$ACTION_UPDATE_HTTP" != "204" ]; then
+              echo "::error::Failed to disable required action '$alias' (HTTP $ACTION_UPDATE_HTTP)"
+              exit 1
+            fi
+            echo "::notice::Disabled default required action: $alias"
+          fi
+        done
+
+        upsert_user() {
+          local username="$1"
+          local password="$2"
+          local clearance="$3"
+          local coi_json="$4"
+          local first_name="$5"
+          local last_name="$6"
+          local email="$7"
+          local country="$8"
+
+          local user_payload
+          user_payload=$(jq -cn \
+            --arg username "$username" \
+            --arg first_name "$first_name" \
+            --arg last_name "$last_name" \
+            --arg email "$email" \
+            --arg clearance "$clearance" \
+            --arg country "$country" \
+            --argjson coi "$coi_json" \
+            '{
+              "username": $username,
+              "enabled": true,
+              "firstName": $first_name,
+              "lastName": $last_name,
+              "email": $email,
+              "emailVerified": true,
+              "requiredActions": [],
+              "attributes": {
+                "clearance": [$clearance],
+                "countryOfAffiliation": [$country],
+                "acpCOI": $coi
+              }
+            }')
+
+          local user_id
+          user_id=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+
+          if [ -z "$user_id" ]; then
+            local user_create_http
+            user_create_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/users" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$user_payload")
+            if [ "$user_create_http" != "201" ] && [ "$user_create_http" != "409" ]; then
+              echo "::error::Failed to create Keycloak user '$username' (HTTP $user_create_http)"
+              return 1
+            fi
+            user_id=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+          fi
+
+          if [ -z "$user_id" ]; then
+            echo "::error::Failed to resolve Keycloak user id for $username"
+            return 1
+          fi
+
+          local update_payload
+          update_payload=$(echo "$user_payload" | jq -c --arg id "$user_id" '. + {"id": $id}')
+          local user_update_http
+          user_update_http=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "$update_payload")
+          if [ "$user_update_http" != "200" ] && [ "$user_update_http" != "204" ]; then
+            echo "::error::Failed to update Keycloak user '$username' (HTTP $user_update_http)"
+            return 1
+          fi
+
+          local reset_password_http
+          reset_password_http=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id/reset-password" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}")
+          if [ "$reset_password_http" != "200" ] && [ "$reset_password_http" != "204" ]; then
+            echo "::error::Failed to reset password for '$username' (HTTP $reset_password_http)"
+            return 1
+          fi
+
+          local required_actions
+          required_actions=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.requiredActions | join(",")')
+          if [ -n "$required_actions" ]; then
+            echo "::warning::User $username still has required actions: $required_actions"
+          fi
+
+          echo "::notice::Ensured user: $username ($clearance, $country)"
+        }
+
+        # Assign a Keycloak realm role to a user (creates the role if it doesn't exist)
+        assign_realm_role() {
+          local user_id="$1"
+          local username="$2"
+          local role_name="$3"
+
+          local role_exists_http
+          role_exists_http=$(curl -sk -o /dev/null -w "%{http_code}" "https://localhost:8443/admin/realms/$REALM/roles/$role_name" \
+            -H "Authorization: Bearer $TOKEN")
+          if [ "$role_exists_http" = "404" ]; then
+            local role_create_http
+            role_create_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/roles" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"name\":\"$role_name\"}")
+            if [ "$role_create_http" != "201" ] && [ "$role_create_http" != "409" ]; then
+              echo "::error::Failed to create role '$role_name' (HTTP $role_create_http)"
+              return 1
+            fi
+          fi
+
+          # Get role representation
+          local role_json
+          role_json=$(curl -sk "https://localhost:8443/admin/realms/$REALM/roles/$role_name" \
+            -H "Authorization: Bearer $TOKEN" 2>/dev/null)
+
+          local role_id
+          role_id=$(echo "$role_json" | jq -r '.id // empty')
+
+          if [ -z "$role_id" ]; then
+            echo "::warning::Could not resolve role '$role_name' for user $username"
+            return 1
+          fi
+
+          # Assign role to user
+          local role_assign_http
+          role_assign_http=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "https://localhost:8443/admin/realms/$REALM/users/$user_id/role-mappings/realm" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "[{\"id\":\"$role_id\",\"name\":\"$role_name\"}]")
+          if [ "$role_assign_http" != "200" ] && [ "$role_assign_http" != "204" ] && [ "$role_assign_http" != "409" ]; then
+            echo "::error::Failed to assign role '$role_name' to '$username' (HTTP $role_assign_http)"
+            return 1
+          fi
+
+          echo "::notice::Assigned role '$role_name' to user $username"
+        }
+
+        # Create users from JSON input (upsert + password reset for deterministic CI behavior)
+        if ! echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
+          username=$(echo "$user" | jq -r '.username')
+          password=$(echo "$user" | jq -r '.password')
+          clearance=$(echo "$user" | jq -r '.clearance')
+          coi=$(echo "$user" | jq -c '.coi // []')
+          country=$(echo "$user" | jq -r '.countryOfAffiliation // "USA"')
+          first_name=$(echo "$user" | jq -r '.firstName // "Test"')
+          last_name=$(echo "$user" | jq -r '.lastName // "User"')
+          email=$(echo "$user" | jq -r '.email // empty')
+          roles=$(echo "$user" | jq -c '.roles // []')
+          if [ -z "$email" ]; then
+            email="${username}@dive-ci.test"
+          fi
+
+          upsert_user "$username" "$password" "$clearance" "$coi" "$first_name" "$last_name" "$email" "$country" || exit 1
+
+          # Assign roles if specified in the user JSON
+          if [ "$roles" != "[]" ] && [ "$roles" != "null" ]; then
+            uid=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+            if [ -n "$uid" ]; then
+              echo "$roles" | jq -r '.[]' | while read -r role; do
+                assign_realm_role "$uid" "$username" "$role"
+              done
+            fi
+          fi
+        done; then
+          echo "::error::Failed to provision one or more Keycloak test users"
+          exit 1
+        fi
+
+        # Ensure baseline AAL1 test user exists for Playwright auth state generation.
+        upsert_user "testuser-usa-1" "TestUser2025!Pilot" "UNCLASSIFIED" "[]" "Test" "User" "testuser-usa-1@dive-ci.test" "USA"
+        echo "::notice::Ensured baseline user: testuser-usa-1"
+
+    - name: Setup PostgreSQL Schema
+      shell: bash
+      run: cd frontend && npx drizzle-kit push --force
+      env:
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+
+    - name: Cache Playwright Browsers
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+    - name: Install Playwright Browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cd frontend && npx playwright install chromium --with-deps
+
+    - name: Install Playwright System Dependencies
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: cd frontend && npx playwright install-deps chromium
+
+    - name: Start Backend HTTPS Server
+      shell: bash
+      run: |
+        cd backend
+        nohup npx tsx src/https-server.ts > backend.log 2>&1 &
+        BACKEND_PID=$!
+        echo "Backend PID: $BACKEND_PID"
+
+        for i in {1..90}; do
+          if curl -kfsS https://localhost:4000/api/health/live >/dev/null 2>&1; then
+            echo "::notice::Backend HTTPS server ready"
+            break
+          fi
+
+          if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "::error::Backend process exited before becoming ready"
+            if [ -f backend.log ]; then
+              tail -n 300 backend.log
+            fi
+            exit 1
+          fi
+
+          if [ $i -eq 90 ]; then
+            echo "::error::Backend failed to become ready on https://localhost:4000"
+            if [ -f backend.log ]; then
+              tail -n 300 backend.log
+            fi
+            exit 1
+          fi
+          sleep 2
+        done
+      env:
+        NODE_ENV: test
+        PORT: "4000"
+        SSL_CERT_PATH: ${{ github.workspace }}/frontend/certs
+        MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+        MONGODB_DATABASE: dive-v3-test
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+        KEYCLOAK_URL: https://localhost:8443
+        KEYCLOAK_REALM: dive-v3-broker-usa
+        NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
+        NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_SECRET: test-client-secret
+        KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+        KEYCLOAK_ADMIN_USER: admin
+        KEYCLOAK_ADMIN_PASSWORD: admin
+        KC_ADMIN_PASSWORD: admin
+        ALLOW_INSECURE_LOCAL_DEVELOPMENT: "true"
+
+    - name: Start Next.js HTTPS Server
+      shell: bash
+      run: |
+        cd frontend
+        # Verify Node can reach Keycloak OIDC metadata before booting NextAuth.
+        node -e "
+          fetch('https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration')
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error('OIDC metadata request failed with status ' + response.status);
+              }
+              const metadata = await response.json();
+              console.log('Keycloak OIDC metadata reachable:', metadata.issuer);
+            })
+            .catch((error) => {
+              console.error('Failed to reach Keycloak OIDC metadata:', error);
+              process.exit(1);
+            });
+        "
+
+        npm run build
+        nohup node server.js > nextjs.log 2>&1 &
+
+        for i in {1..60}; do
+          if curl -k -f https://localhost:3000 2>/dev/null; then
+            echo "::notice::Next.js HTTPS server ready"
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "::error::Next.js failed to start"
+            cat nextjs.log
+            exit 1
+          fi
+          sleep 2
+        done
+      env:
+        NODE_ENV: production
+        NEXTAUTH_URL: https://localhost:3000
+        NEXTAUTH_SECRET: ${{ inputs.nextauth-secret }}
+        AUTH_URL: https://localhost:3000
+        AUTH_SECRET: ${{ inputs.nextauth-secret }}
+        AUTH_TRUST_HOST: "true"
+        PORT: "3000"
+        SSL_CERT_PATH: ${{ github.workspace }}/frontend/certs
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+        KEYCLOAK_URL: https://localhost:8443
+        KEYCLOAK_REALM: dive-v3-broker-usa
+        NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
+        NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_SECRET: test-client-secret
+        KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+        BACKEND_URL: https://localhost:4000
+        NEXT_PUBLIC_API_URL: https://localhost:4000
+        NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/certs/ca-bundle.pem
+        # Allow self-signed certs for Keycloak token refresh in CI
+        NODE_TLS_REJECT_UNAUTHORIZED: "0"
+        MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+
+    - name: Generate Playwright Auth State Files
+      shell: bash
+      run: |
+        cd frontend
+        if ! npx tsx -e "import setup from './src/__tests__/e2e/fixtures/auth-setup.ts'; (async () => { await setup({ projects: [{ use: { baseURL: process.env.BASE_URL || 'https://localhost:3000' } }] } as any); })().catch((error) => { console.error(error); process.exit(1); });"; then
+          echo "::group::Next.js log tail"
+          if [ -f nextjs.log ]; then
+            tail -n 300 nextjs.log
+          fi
+          echo "::endgroup::"
+          echo "::group::Backend log tail"
+          if [ -f ../backend/backend.log ]; then
+            tail -n 300 ../backend/backend.log
+          fi
+          echo "::endgroup::"
+          exit 1
+        fi
+
+        if [ ! -f .auth/aal1.json ]; then
+          echo "::error::Missing required Playwright auth state: .auth/aal1.json"
+          exit 1
+        fi
+
+        if [ ! -f .auth/admin.json ]; then
+          echo "::warning::Admin auth state was not generated (.auth/admin.json)"
+        fi
+      env:
+        BASE_URL: https://localhost:3000
+        CI: "true"
+        ENABLE_MFA_TESTS: "false"
+
+    - name: Start OPA Server
+      if: inputs.start-opa == 'true'
+      shell: bash
+      run: |
+        curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
+        chmod +x opa
+        nohup ./opa run --server --addr=:8181 --log-level=error \
+          --tls-cert-file=${{ github.workspace }}/certs/certificate.pem \
+          --tls-private-key-file=${{ github.workspace }}/certs/key.pem \
+          > opa.log 2>&1 &
+        sleep 5
+        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
+        echo "::notice::OPA server ready"

@@ -1,0 +1,20 @@
+# =============================================================================
+# DIVE V3 PostgreSQL - Persistent Volume Claim
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard-rwo
+

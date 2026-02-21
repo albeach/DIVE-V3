@@ -9,7 +9,6 @@ logs
 .git
 .gitignore
 README.md
-tsconfig.json
 jest.config.js
 .eslintrc.js
 

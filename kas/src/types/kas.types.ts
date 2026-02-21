@@ -1,6 +1,6 @@
 /**
  * KAS (Key Access Service) Type Definitions
- * 
+ *
  * Implements NATO ACP-240 Key Access Service requirements
  * Reference: ACP240-llms.txt section 5.2 (Hybrid Encryption & Key Management)
  */
@@ -8,6 +8,7 @@
 // Classification level type (duplicated to avoid cross-project imports)
 export type ClassificationLevel =
     | 'UNCLASSIFIED'
+    | 'RESTRICTED'
     | 'CONFIDENTIAL'
     | 'SECRET'
     | 'TOP_SECRET';
@@ -27,14 +28,35 @@ export interface IKASKeyRequest {
     /** KAO ID to unwrap */
     kaoId: string;
 
+    /** Wrapped DEK (plaintext in pilot mode) - CRITICAL for decryption */
+    wrappedKey?: string;
+
     /** JWT bearer token (for identity/attributes) */
     bearerToken: string;
+
+    /** Original user identity when using service account token (Issue B fix) */
+    userIdentity?: {
+        uniqueID: string;
+        clearance: string;
+        countryOfAffiliation: string;
+        acpCOI?: string[];
+        dutyOrg?: string;
+        orgUnit?: string;
+    };
 
     /** Request timestamp */
     requestTimestamp: string;
 
     /** Request ID (for audit trail) */
     requestId: string;
+
+    /** Resource metadata for authorization (passed from backend) */
+    resourceMetadata?: {
+        classification: ClassificationLevel;
+        releasabilityTo: string[];
+        COI: string[];
+        creationDate?: string;
+    };
 }
 
 /**
@@ -108,7 +130,15 @@ export type KASAuditEventType =
     | 'KEY_DENIED'         // Key release denied (ACCESS_DENIED event)
     | 'KEY_WRAPPED'        // New key wrapped (ENCRYPT event)
     | 'INTEGRITY_FAILURE'  // ZTDF integrity check failed
-    | 'POLICY_MISMATCH';   // KAS denied but PDP allowed (security event)
+    | 'POLICY_MISMATCH'    // KAS denied but PDP allowed (security event)
+    | 'FEDERATION_ALLOWED' // Federation request allowed (Phase 3.4)
+    | 'FEDERATION_DENIED'  // Federation request denied (Phase 3.4)
+    | 'FEDERATION_SUCCESS' // Federation request successful (Phase 3.4)
+    | 'FEDERATION_FAILURE' // Federation request failed (Phase 3.4)
+    | 'ANYOF_ROUTING_SUCCESS' // Any-Of routing succeeded (Phase 4.1.3)
+    | 'ANYOF_ROUTING_FAILURE' // Any-Of routing failed (Phase 4.1.3)
+    | 'ANYOF_ROUTING_SUCCESS_PARALLEL' // Parallel Any-Of routing succeeded (Phase 4.2.2)
+    | 'ANYOF_ROUTING_FAILURE_PARALLEL'; // Parallel Any-Of routing failed (Phase 4.2.2)
 
 /**
  * KAS Audit Event
@@ -191,4 +221,3 @@ export interface IDEKCacheEntry {
     /** Expiration timestamp (for cache eviction) */
     expiresAt: string;
 }
-

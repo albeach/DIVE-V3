@@ -1,0 +1,280 @@
+name: Policy Bundle Build & Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'policies/**'
+  push:
+    branches: [main]
+    paths:
+      - 'policies/**'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force bundle build'
+        required: false
+        default: false
+        type: boolean
+      run_benchmark:
+        description: 'Run benchmark stage'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-bundle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  OPA_VERSION: '1.12.3'
+  REGAL_VERSION: '0.38.1'
+
+jobs:
+  validate:
+    name: Validate Rego Syntax & Style
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Validate Rego syntax (strict)
+        run: opa check policies/ --strict
+
+      - name: Setup Regal
+        run: |
+          set -euo pipefail
+          curl -fsSL -o regal_Linux_x86_64 "https://github.com/StyraInc/regal/releases/download/v${{ env.REGAL_VERSION }}/regal_Linux_x86_64"
+          curl -fsSL -o checksums.txt "https://github.com/StyraInc/regal/releases/download/v${{ env.REGAL_VERSION }}/checksums.txt"
+          grep ' regal_Linux_x86_64$' checksums.txt | sha256sum -c -
+          chmod +x regal_Linux_x86_64
+          sudo mv regal_Linux_x86_64 /usr/local/bin/regal
+          regal version
+
+      - name: Run Regal linter
+        run: regal lint policies/ --format=github
+
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -R -nE '(password|secret|key)\s*:=\s*"[^"$]+' policies/*.rego 2>/dev/null; then
+            echo 'Potential hardcoded secret detected in policy files.'
+            exit 1
+          fi
+
+      - name: Verify package naming convention
+        run: |
+          INVALID=$(awk '/^package / && $2 !~ /^dive\./ && $2 != "dive" && $2 !~ /^data\./ {print FILENAME ":" $0}' policies/*.rego 2>/dev/null)
+          if [ -n "$INVALID" ]; then
+            echo "$INVALID"
+            echo "All packages must start with dive. (or be dive/data.*)."
+            exit 1
+          fi
+
+  test:
+    name: Run Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Run policy tests with coverage
+        run: opa test policies/ -v --bundle --coverage --format=json > test-results.json
+
+      - name: Enforce coverage threshold
+        run: |
+          COVERAGE=$(jq '.coverage // 0' test-results.json)
+          THRESHOLD=70
+          awk -v c="$COVERAGE" -v t="$THRESHOLD" 'BEGIN { exit(c < t) }'
+
+      - name: Upload policy test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: policy-test-results
+          path: test-results.json
+          retention-days: 30
+
+  diff:
+    name: Policy Change Diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Generate policy diff report
+        run: |
+          CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- 'policies/*.rego')
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No policy files changed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "## Policy Changes" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Modified Files" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$CHANGED_FILES" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Allow Rule Deltas" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          ALLOW_CHANGES=$(git diff "origin/${{ github.base_ref }}...HEAD" -- 'policies/*.rego' | awk '/^[+-].*allow/')
+          if [ -n "$ALLOW_CHANGES" ]; then
+            echo "$ALLOW_CHANGES"
+            echo "$ALLOW_CHANGES" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No allow-rule changes detected."
+            echo "No allow-rule changes detected." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  baseline-check:
+    name: Baseline Regression Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'pull_request'
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Start OPA server
+        run: |
+          nohup opa run --server --addr=0.0.0.0:8181 --log-level=error > opa.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sf http://localhost:8181/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat opa.log
+          exit 1
+
+      - name: Load policies into OPA
+        run: |
+          for file in policies/*.rego; do
+            [ -f "$file" ] || continue
+            POLICY_NAME=$(basename "$file" .rego)
+            curl -sSf -X PUT "http://localhost:8181/v1/policies/${POLICY_NAME}" \
+              -H 'Content-Type: text/plain' \
+              --data-binary @"$file" >/dev/null
+          done
+
+      - name: Run baseline comparison when baseline exists
+        run: |
+          if [ ! -f 'policies/baselines/decision-baseline.json' ]; then
+            echo "No baseline file present; skipping baseline comparison." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          npm install --no-save ts-node typescript axios
+          cd scripts/policy
+          npx ts-node capture-baseline.ts compare
+        env:
+          OPA_URL: http://localhost:8181
+
+  build:
+    name: Build Policy Bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.force_build == true)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Build bundles
+        run: |
+          VERSION="${GITHUB_SHA:0:8}-$(date -u +"%Y%m%d%H%M%S")"
+          mkdir -p "bundles/${VERSION}"
+
+          opa build -b policies/ -o "bundles/${VERSION}/dive-base.tar.gz" --revision "${VERSION}"
+          for tenant in usa fra gbr deu; do
+            cp "bundles/${VERSION}/dive-base.tar.gz" "bundles/${VERSION}/dive-${tenant}.tar.gz"
+          done
+
+          cat > "bundles/${VERSION}/manifest.json" <<MANIFEST
+          {
+            "version": "${VERSION}",
+            "commit": "${GITHUB_SHA}",
+            "built_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "opa_version": "${{ env.OPA_VERSION }}"
+          }
+          MANIFEST
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: policy-bundles-${{ github.run_number }}
+          path: bundles/
+          retention-days: 90
+
+  benchmark:
+    name: Policy Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    if: github.event_name == 'workflow_dispatch' && inputs.run_benchmark == true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: ${{ env.OPA_VERSION }}
+
+      - name: Run benchmark
+        run: |
+          opa bench policies/fuel_inventory_abac_policy.rego --count 1000 | tee benchmark-main.txt
+
+      - name: Publish benchmark summary
+        run: |
+          echo "## Policy Benchmark" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat benchmark-main.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,39 @@
+{
+  "identity": {
+    "spokeId": "spoke-gbr-test",
+    "instanceCode": "GBR",
+    "name": "United Kingdom Test Spoke",
+    "description": "Test fixture for United Kingdom spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://gbr-app.dive25.com",
+    "apiUrl": "https://gbr-api.dive25.com",
+    "idpUrl": "https://gbr-idp.dive25.com",
+    "kasUrl": "https://gbr-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:gbr",
+      "policy:coalition",
+      "policy:fvey"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "bilateral",
+    "maxClassification": "SECRET"
+  },
+  "contact": {
+    "email": "gbr-admin@dive25.com",
+    "organization": "United Kingdom Ministry of Defence"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}
+

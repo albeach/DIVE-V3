@@ -1,0 +1,340 @@
+{
+  "$schema": "./schemas/coi_members.schema.json",
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-01-24T12:00:00.000Z",
+    "description": "OPAL-managed Community of Interest (COI) membership registry for DIVE V3",
+    "compliance": [
+      "ACP-240",
+      "STANAG 4774"
+    ],
+    "managedBy": "opal-data-publisher",
+    "generatedFrom": "MongoDB (SSOT) via initialize-coi-keys.ts"
+  },
+  "coi_members": {
+    "US-ONLY": [
+      "USA"
+    ],
+    "CAN-US": [
+      "CAN",
+      "USA"
+    ],
+    "GBR-US": [
+      "GBR",
+      "USA"
+    ],
+    "FRA-US": [
+      "FRA",
+      "USA"
+    ],
+    "DEU-US": [
+      "DEU",
+      "USA"
+    ],
+    "FVEY": [
+      "USA",
+      "GBR",
+      "CAN",
+      "AUS",
+      "NZL"
+    ],
+    "NATO": [
+      "ALB",
+      "BEL",
+      "BGR",
+      "CAN",
+      "HRV",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GBR",
+      "GRC",
+      "HUN",
+      "ISL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MNE",
+      "NLD",
+      "MKD",
+      "NOR",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE",
+      "TUR",
+      "USA"
+    ],
+    "NATO-COSMIC": [
+      "ALB",
+      "BEL",
+      "BGR",
+      "CAN",
+      "HRV",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GBR",
+      "GRC",
+      "HUN",
+      "ISL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MNE",
+      "NLD",
+      "MKD",
+      "NOR",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE",
+      "TUR",
+      "USA"
+    ],
+    "EU-RESTRICTED": [
+      "AUT",
+      "BEL",
+      "BGR",
+      "HRV",
+      "CYP",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GRC",
+      "HUN",
+      "IRL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MLT",
+      "NLD",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE"
+    ],
+    "AUKUS": [
+      "AUS",
+      "GBR",
+      "USA"
+    ],
+    "QUAD": [
+      "USA",
+      "AUS",
+      "IND",
+      "JPN"
+    ],
+    "NORTHCOM": [
+      "USA",
+      "CAN",
+      "MEX"
+    ],
+    "EUCOM": [
+      "USA",
+      "DEU",
+      "GBR",
+      "FRA",
+      "ITA",
+      "ESP",
+      "POL"
+    ],
+    "PACOM": [
+      "USA",
+      "JPN",
+      "KOR",
+      "AUS",
+      "NZL",
+      "PHL"
+    ],
+    "CENTCOM": [
+      "USA",
+      "SAU",
+      "ARE",
+      "QAT",
+      "KWT",
+      "BHR",
+      "JOR",
+      "EGY"
+    ],
+    "SOCOM": [
+      "USA",
+      "GBR",
+      "CAN",
+      "AUS",
+      "NZL"
+    ],
+    "Alpha": [],
+    "Beta": [],
+    "Gamma": [],
+    "TEST-COI": [
+      "USA",
+      "GBR",
+      "CAN"
+    ],
+    "NEW-COI": [
+      "USA"
+    ],
+    "PACIFIC-ALLIANCE": [
+      "USA",
+      "JPN",
+      "AUS",
+      "KOR"
+    ]
+  },
+  "coi_details": {
+    "US-ONLY": {
+      "name": "US Only",
+      "description": "Exclusively USA - no foreign sharing",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "CAN-US": {
+      "name": "Canada-US Bilateral",
+      "description": "Bilateral agreement between Canada and USA",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "GBR-US": {
+      "name": "UK-US Bilateral",
+      "description": "Bilateral agreement between UK and USA",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "FRA-US": {
+      "name": "France-US Bilateral",
+      "description": "Bilateral agreement between France and USA",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "DEU-US": {
+      "name": "Germany-US Bilateral",
+      "description": "Bilateral agreement between Germany and USA",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "FVEY": {
+      "name": "Five Eyes",
+      "description": "Five Eyes intelligence alliance",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "NATO": {
+      "name": "NATO Alliance",
+      "description": "NATO member nations (32 members as of 2024)",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "NATO-COSMIC": {
+      "name": "NATO COSMIC",
+      "description": "NATO highest classification community",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "EU-RESTRICTED": {
+      "name": "EU Restricted",
+      "description": "EU member nations restricted information sharing",
+      "classification_ceiling": "CONFIDENTIAL",
+      "membership_type": "country"
+    },
+    "AUKUS": {
+      "name": "AUKUS",
+      "description": "Australia-UK-US trilateral security pact",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "QUAD": {
+      "name": "QUAD",
+      "description": "Quadrilateral Security Dialogue",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "NORTHCOM": {
+      "name": "NORTHCOM",
+      "description": "US Northern Command regional coalition",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "EUCOM": {
+      "name": "EUCOM",
+      "description": "US European Command regional coalition",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "PACOM": {
+      "name": "PACOM",
+      "description": "US Pacific Command regional coalition",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "CENTCOM": {
+      "name": "CENTCOM",
+      "description": "US Central Command regional coalition",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "SOCOM": {
+      "name": "SOCOM",
+      "description": "Special Operations Command coalition",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "country"
+    },
+    "Alpha": {
+      "name": "Program Alpha",
+      "description": "Program-specific COI (membership-based)",
+      "classification_ceiling": "SECRET",
+      "membership_type": "program"
+    },
+    "Beta": {
+      "name": "Program Beta",
+      "description": "Program-specific COI (membership-based)",
+      "classification_ceiling": "SECRET",
+      "membership_type": "program"
+    },
+    "Gamma": {
+      "name": "Program Gamma",
+      "description": "Program-specific COI (membership-based)",
+      "classification_ceiling": "TOP_SECRET",
+      "membership_type": "program"
+    },
+    "TEST-COI": {
+      "name": "Test COI",
+      "description": "Test community of interest for development and testing",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "NEW-COI": {
+      "name": "New COI",
+      "description": "Newly established community of interest",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "PACIFIC-ALLIANCE": {
+      "name": "Pacific Alliance",
+      "description": "Pacific regional security partnership",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    }
+  }
+}

@@ -1,8 +1,8 @@
 /**
  * Keycloak Frontchannel Logout Callback
- * 
+ *
  * Based on: https://koyukan.medium.com/mastering-keycloak-front-channel-logout-with-next-js-nextauth-js-a-post-mortem-turned-how-to-631d06118d7b
- * 
+ *
  * Frontchannel logout flow:
  * 1. Keycloak loads this endpoint in a hidden iframe
  * 2. This route deletes HttpOnly cookies (can't be done with JavaScript)
@@ -14,6 +14,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     try {
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
 <body>
     <script>
         console.log('[DIVE Iframe] Frontchannel logout executing...');
-        
+
         // Clear browser storage (this runs in iframe context)
         try {
             localStorage.clear();
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
         } catch (e) {
             console.error('[DIVE Iframe] Storage clear error:', e);
         }
-        
+
         // Notify parent window that logout is complete
         if (window.parent !== window) {
             console.log('[DIVE Iframe] Sending logout-complete message to parent');
@@ -73,14 +75,31 @@ export async function GET(request: NextRequest) {
 </html>
         `;
 
+        // Build CSP frame-ancestors dynamically to include all Keycloak instances
+        // This fixes the logout redirect issue when Keycloak loads this in an iframe
+        const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
+        const keycloakHost = new URL(keycloakUrl).host;
+
+        // Include common Keycloak URLs (localhost ports, internal container names, Cloudflare domains)
+        const frameAncestors = [
+            "'self'",
+            "https://localhost:8443",
+            "https://localhost:8444",
+            "https://localhost:8445",
+            `https://${keycloakHost}`,
+            "https://keycloak:8443",
+            "http://keycloak:8080",
+            "https://*.dive25.com",
+        ].join(' ');
+
         return new NextResponse(html, {
             status: 200,
             headers: {
                 'Content-Type': 'text/html',
                 'Cache-Control': 'no-store',
-                // CRITICAL: Allow iframe embedding from Keycloak
+                // CRITICAL: Allow iframe embedding from Keycloak (all instances)
                 'X-Frame-Options': 'ALLOWALL',
-                'Content-Security-Policy': "frame-ancestors 'self' http://localhost:8081 http://keycloak:8080",
+                'Content-Security-Policy': `frame-ancestors ${frameAncestors}`,
             },
         });
 
@@ -102,4 +121,3 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     return GET(request);
 }
-

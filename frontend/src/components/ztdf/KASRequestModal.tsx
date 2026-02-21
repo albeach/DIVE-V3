@@ -124,10 +124,7 @@ export default function KASRequestModal({
         // Start the KAS request flow
         const executeKASRequest = async () => {
             try {
-                const token = (session as any)?.accessToken;
-                if (!token) {
-                    throw new Error('Authentication required');
-                }
+                // No token needed - server route handles authentication
 
                 // Step 1: Resource Access Request
                 setCurrentStep(1);
@@ -145,12 +142,10 @@ export default function KASRequestModal({
                 setCurrentStep(3);
                 updateStep(2, 'IN_PROGRESS', 'Contacting KAS at localhost:8080...');
 
-                // Make actual KAS request
-                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-                const response = await fetch(`${backendUrl}/api/resources/request-key`, {
+                // Make actual KAS request via server API route (secure!)
+                const response = await fetch(`/api/kas/request-key`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ resourceId, kaoId })
@@ -216,7 +211,7 @@ export default function KASRequestModal({
 
                 // Success - auto-close after 2 seconds
                 setIsDismissible(true);
-                
+
                 // Save completed flow state to sessionStorage for KAS Flow tab
                 const completedFlow = {
                     resourceId,
@@ -228,10 +223,24 @@ export default function KASRequestModal({
                     kasDecision: data.kasDecision
                 };
                 sessionStorage.setItem(`kas-flow-${resourceId}`, JSON.stringify(completedFlow));
-                
-                // Save decrypted content to sessionStorage (expires on browser close)
-                sessionStorage.setItem(`decrypted-${resourceId}`, data.content);
-                
+
+                // Save decrypted content to sessionStorage ONLY if it's not too large
+                // sessionStorage has ~5-10MB limit, videos/large files will exceed this
+                const contentSize = new Blob([data.content]).size;
+                const MAX_SESSIONSTORAGE_SIZE = 5 * 1024 * 1024; // 5MB limit
+
+                if (contentSize < MAX_SESSIONSTORAGE_SIZE) {
+                    console.log(`[KASRequestModal] Caching decrypted content (${Math.round(contentSize / 1024)} KB) in sessionStorage`);
+                    try {
+                        sessionStorage.setItem(`decrypted-${resourceId}`, data.content);
+                    } catch (err) {
+                        console.warn('[KASRequestModal] Failed to cache in sessionStorage (quota exceeded):', err);
+                        // Continue anyway - not caching is fine
+                    }
+                } else {
+                    console.log(`[KASRequestModal] Content too large (${Math.round(contentSize / 1024 / 1024)} MB) for sessionStorage, skipping cache`);
+                }
+
                 setTimeout(() => {
                     onSuccess(data.content);
                     onClose();
@@ -347,7 +356,7 @@ export default function KASRequestModal({
                                         </span>
                                     </div>
                                     <p className="text-xs mt-1 ml-7">
-                                        Required: {policyCheckDetails.policyBinding.required.clearance} | 
+                                        Required: {policyCheckDetails.policyBinding.required.clearance} |
                                         Provided: {policyCheckDetails.policyBinding.provided.clearance}
                                     </p>
                                 </div>
@@ -361,7 +370,7 @@ export default function KASRequestModal({
                                         </span>
                                     </div>
                                     <p className="text-xs mt-1 ml-7">
-                                        Required: {policyCheckDetails.policyBinding.required.countries.join(', ')} | 
+                                        Required: {policyCheckDetails.policyBinding.required.countries.join(', ')} |
                                         Provided: {policyCheckDetails.policyBinding.provided.country}
                                     </p>
                                     {policyCheckDetails.releasabilityCheck === 'FAIL' && (
@@ -380,7 +389,7 @@ export default function KASRequestModal({
                                         </span>
                                     </div>
                                     <p className="text-xs mt-1 ml-7">
-                                        Required: {policyCheckDetails.policyBinding.required.coi.join(', ') || 'None'} | 
+                                        Required: {policyCheckDetails.policyBinding.required.coi.join(', ') || 'None'} |
                                         Provided: {policyCheckDetails.policyBinding.provided.coi.join(', ') || 'None'}
                                     </p>
                                     {policyCheckDetails.coiCheck === 'FAIL' && (
@@ -439,4 +448,3 @@ export default function KASRequestModal({
         </Dialog>
     );
 }
-

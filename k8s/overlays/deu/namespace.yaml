@@ -1,0 +1,16 @@
+# =============================================================================
+# DIVE V3 - FRA Namespace Patch
+# =============================================================================
+# Patches base namespace with FRA-specific configuration
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dive-v3-deu
+  labels:
+    app.kubernetes.io/instance: fra
+    app.kubernetes.io/part-of: dive-v3
+    app.kubernetes.io/managed-by: argocd
+    instance: fra
+    country: FRA

@@ -1,0 +1,234 @@
+#
+# DIVE V3 Vault HA Cluster Alerting Rules
+# Phase 4: Vault Monitoring & Automated Backups
+#
+# Monitors: 4-container Vault HA cluster (seal + 3-node Raft)
+# Metrics source: /v1/sys/metrics?format=prometheus (unauthenticated)
+#
+# Verified metric names against Vault 1.21.0 OSS telemetry output.
+#
+
+groups:
+  - name: vault_cluster_alerts
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # SEAL STATUS — Critical: sealed node cannot serve requests
+      # -----------------------------------------------------------------------
+      - alert: VaultNodeSealed
+        expr: vault_core_unsealed == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: vault
+        annotations:
+          summary: "Vault node is sealed"
+          description: "{{ $labels.instance }} has been sealed for more than 1 minute. Auto-unseal may have failed."
+
+      # -----------------------------------------------------------------------
+      # AUTOPILOT HEALTH — Warning: cluster health degraded
+      # -----------------------------------------------------------------------
+      - alert: VaultAutopilotUnhealthy
+        expr: vault_autopilot_healthy == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault autopilot reports cluster unhealthy"
+          description: "Autopilot has reported the cluster as unhealthy for >2m. Check node status."
+
+      # -----------------------------------------------------------------------
+      # LEADERSHIP — Warning: frequent elections indicate instability
+      # -----------------------------------------------------------------------
+      - alert: VaultLeadershipFlapping
+        expr: changes(vault_core_active[5m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault leadership is flapping"
+          description: "Leader changed {{ $value }} times in 5 minutes. Check network and disk health."
+
+      # -----------------------------------------------------------------------
+      # BARRIER LATENCY — Warning: slow storage operations
+      # -----------------------------------------------------------------------
+      - alert: VaultHighBarrierLatency
+        expr: vault_barrier_get{quantile="0.99"} > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault storage barrier p99 latency is high (>50ms)"
+          description: "p99 barrier get latency is {{ $value }}ms on {{ $labels.instance }}"
+
+      # -----------------------------------------------------------------------
+      # SEAL VAULT — Critical: Transit auto-unseal depends on this
+      # -----------------------------------------------------------------------
+      - alert: VaultSealNodeDown
+        expr: up{job="vault-cluster",service="vault-seal"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: vault-seal
+        annotations:
+          summary: "Vault seal node is down"
+          description: "The Transit seal vault has been unreachable for >2m. Cluster nodes will fail to auto-unseal on restart."
+
+      # -----------------------------------------------------------------------
+      # CLUSTER NODE DOWN — Warning: a Raft node is unreachable
+      # -----------------------------------------------------------------------
+      - alert: VaultClusterNodeDown
+        expr: up{job="vault-cluster",service="vault"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault cluster node is down"
+          description: "{{ $labels.instance }} has been unreachable for >2m. Raft cluster operating with reduced capacity."
+
+      # -----------------------------------------------------------------------
+      # FOLLOWER LAG — Warning: follower falling behind leader
+      # -----------------------------------------------------------------------
+      - alert: VaultFollowerLagging
+        expr: vault_raft_storage_follower_applied_index_delta > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault Raft follower is lagging behind leader"
+          description: "Follower {{ $labels.peer_id }} has index delta of {{ $value }}. Check disk I/O and network."
+
+  - name: vault_lease_alerts
+    interval: 60s
+    rules:
+      # -----------------------------------------------------------------------
+      # LEASE EXPIRY — Warning: high rate of expiring leases
+      # -----------------------------------------------------------------------
+      - alert: VaultHighLeaseExpiryRate
+        expr: rate(vault_expire_num_leases[5m]) < -10
+        for: 5m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "High Vault lease expiry rate"
+          description: "Leases are expiring at {{ $value }}/s. Services may be failing to renew credentials."
+
+      # -----------------------------------------------------------------------
+      # LEASE RENEWAL — Warning: lease count dropping without renewals
+      # -----------------------------------------------------------------------
+      - alert: VaultLeaseRenewalFailed
+        expr: delta(vault_expire_num_leases[10m]) < -5 and rate(vault_expire_lease_renew_count[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault lease renewal may be failing"
+          description: "Lease count dropped by {{ $value }} in 10m with zero renewal requests. Services may not be renewing credentials."
+
+  - name: vault_rotation_alerts
+    interval: 300s
+    rules:
+      # -----------------------------------------------------------------------
+      # CERT EXPIRY — Warning: PKI cert expiring within 7 days
+      # Metric source: textfile collector (monitoring/textfile/vault_rotation.prom)
+      # -----------------------------------------------------------------------
+      - alert: VaultCertExpiringWithin7d
+        expr: vault_pki_cert_expiry_days < 7
+        for: 5m
+        labels:
+          severity: warning
+          service: vault-pki
+        annotations:
+          summary: "Vault PKI certificate expiring soon"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days. Run: ./dive vault rotation-check"
+
+      # -----------------------------------------------------------------------
+      # STATIC ROLE STALE — Warning: PG rotation not happening (>48h)
+      # Metric source: textfile collector (monitoring/textfile/vault_rotation.prom)
+      # -----------------------------------------------------------------------
+      - alert: VaultStaticRoleStale
+        expr: time() - vault_static_role_last_rotation_timestamp > 172800
+        for: 10m
+        labels:
+          severity: warning
+          service: vault-db
+        annotations:
+          summary: "Vault static DB role rotation is stale"
+          description: "Role {{ $labels.role }} has not rotated in >48h. Expected 24h rotation. Run: ./dive vault rotation-check"
+
+      # -----------------------------------------------------------------------
+      # SECRETID EXPIRY — Warning: AppRole SecretID expiring within 12h
+      # Metric source: textfile collector (monitoring/textfile/vault_rotation.prom)
+      # -----------------------------------------------------------------------
+      - alert: VaultSecretIdExpiringSoon
+        expr: dive_vault_secret_id_ttl_remaining_seconds > 0 and dive_vault_secret_id_ttl_remaining_seconds < 43200
+        for: 5m
+        labels:
+          severity: warning
+          service: vault-approle
+        annotations:
+          summary: "Vault AppRole SecretID expiring soon"
+          description: "SecretID for spoke {{ $labels.spoke }} expires in {{ $value | humanizeDuration }}. Run: ./dive vault refresh-credentials {{ $labels.spoke }}"
+
+  - name: certificate_alerts
+    interval: 300s
+    rules:
+      # -----------------------------------------------------------------------
+      # CERT EXPIRY 14d — Warning: service cert expiring within 14 days
+      # Metric source: textfile collector (monitoring/textfile/cert_expiry.prom)
+      # -----------------------------------------------------------------------
+      - alert: DiveCertExpiringWithin14d
+        expr: dive_cert_expiry_seconds > 0 and dive_cert_expiry_seconds < 1209600
+        for: 5m
+        labels:
+          severity: warning
+          service: certificates
+        annotations:
+          summary: "Service certificate expiring within 14 days"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}. Run: ./dive certs status"
+
+      # -----------------------------------------------------------------------
+      # CERT EXPIRY 3d — Critical: service cert expiring within 3 days
+      # -----------------------------------------------------------------------
+      - alert: DiveCertExpiringWithin3d
+        expr: dive_cert_expiry_seconds > 0 and dive_cert_expiry_seconds < 259200
+        for: 5m
+        labels:
+          severity: critical
+          service: certificates
+        annotations:
+          summary: "Service certificate expiring within 3 days"
+          description: "CRITICAL: Certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}. Run: ./dive certs emergency-rotate {{ $labels.instance }}"
+
+      # -----------------------------------------------------------------------
+      # INTERMEDIATE CA EXPIRY — Warning: Intermediate CA expiring within 90 days
+      # -----------------------------------------------------------------------
+      - alert: DiveIntermediateCaExpiringWithin90d
+        expr: dive_pki_intermediate_ca_expiry_seconds > 0 and dive_pki_intermediate_ca_expiry_seconds < 7776000
+        for: 10m
+        labels:
+          severity: warning
+          service: certificates
+        annotations:
+          summary: "Intermediate CA expiring within 90 days"
+          description: "Intermediate CA expires in {{ $value | humanizeDuration }}. Plan rekey: ./dive vault rekey-intermediate"
+
+      # -----------------------------------------------------------------------
+      # CERT PROVIDER MISMATCH — Warning: non-Vault certs in production
+      # -----------------------------------------------------------------------
+      - alert: DiveCertNotVaultPki
+        expr: dive_cert_is_vault_pki == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: certificates
+        annotations:
+          summary: "Service certificate not issued by Vault PKI"
+          description: "{{ $labels.instance }} is using a non-Vault certificate. Consider migrating: ./dive certs status"

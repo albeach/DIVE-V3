@@ -1,0 +1,178 @@
+# DIVE V3 - OPAL with TLS Configuration
+# Phase 7: Production Hardening
+#
+# Provides secure OPAL deployment with:
+# - TLS 1.3 encryption for all connections
+# - JWT authentication for API access
+# - mTLS for client connections
+# - Secure policy distribution
+#
+# Prerequisites:
+#   1. Generate certificates (see certs/opal/README.md)
+#   2. Create JWT signing key in GCP Secret Manager
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker/opal-server-tls.yml up -d
+#
+# @version 1.0.0
+# @date 2025-12-03
+
+version: '3.8'
+
+networks:
+  dive-network:
+    external: true
+    name: dive-v3_dive-network
+
+volumes:
+  opal_data_tls:
+
+services:
+  # =============================================================================
+  # OPAL Server with TLS
+  # =============================================================================
+  opal-server-tls:
+    image: permitio/opal-server:0.7.6
+    container_name: dive-v3-opal-server-tls
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Server Configuration
+      OPAL_BROADCAST_URI: https://opal-server-tls:7002
+      OPAL_DATA_CONFIG_SOURCES: '{"config": {"entries": [{"url": "https://opal-server-tls:7002/policy-data", "topics": ["policy_data"], "dst_path": "/"}]}}'
+
+      # TLS Configuration
+      OPAL_SERVER_SSL_ENABLED: "true"
+      OPAL_SERVER_SSL_CERT_PATH: /certs/server.crt
+      OPAL_SERVER_SSL_KEY_PATH: /certs/server.key
+      OPAL_SERVER_SSL_CA_PATH: /certs/ca.crt
+      OPAL_SERVER_SSL_CLIENT_AUTH: "optional"  # Change to "required" for mTLS
+
+      # JWT Authentication
+      OPAL_AUTH_PRIVATE_KEY_PATH: /certs/jwt-signing-key.pem
+      OPAL_AUTH_PUBLIC_KEY_PATH: /certs/jwt-signing-key.pub.pem
+      OPAL_AUTH_JWT_ALGORITHM: RS256
+      OPAL_AUTH_JWT_AUDIENCE: dive-v3-opal
+      OPAL_AUTH_JWT_ISSUER: dive-v3
+
+      # Policy Source Configuration
+      OPAL_POLICY_REPO_URL: ""
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
+      OPAL_POLICY_REPO_MAIN_BRANCH: main
+
+      # Inline OPA config
+      OPAL_INLINE_OPA_CONFIG: "true"
+
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+
+      # Server ports
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+
+      # Data update channels
+      OPAL_DATA_TOPICS_DEFAULT: "policy_data"
+
+      # Statistics
+      OPAL_STATISTICS_ENABLED: "true"
+
+      # CORS for dashboard
+      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["https://localhost:3000", "https://dive.local:3000"]'
+    ports:
+      - "7002:7002"  # OPAL Server API (TLS)
+    networks:
+      - dive-network
+    volumes:
+      # Mount policies
+      - ../policies:/policies:ro
+      - ../policies/data:/policy-data:ro
+      # Mount certificates
+      - ../certs/opal:/certs:ro
+      # OPAL data persistence
+      - opal_data_tls:/opal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:7002/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # =============================================================================
+  # OPAL Client with TLS (runs OPA)
+  # =============================================================================
+  opal-client-tls:
+    image: permitio/opal-client:0.7.6
+    container_name: dive-v3-opal-client-tls
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Connect to OPAL Server (TLS)
+      OPAL_SERVER_URL: https://opal-server-tls:7002
+
+      # TLS Configuration for client
+      OPAL_CLIENT_SSL_ENABLED: "true"
+      OPAL_CLIENT_SSL_CERT_PATH: /certs/client.crt
+      OPAL_CLIENT_SSL_KEY_PATH: /certs/client.key
+      OPAL_CLIENT_SSL_CA_PATH: /certs/ca.crt
+      OPAL_CLIENT_SSL_VERIFY: "true"
+
+      # JWT Token for authentication
+      OPAL_CLIENT_TOKEN: ${OPAL_CLIENT_JWT_TOKEN:-}
+
+      # OPA Configuration (embedded)
+      OPAL_INLINE_OPA_ENABLED: "true"
+      OPAL_INLINE_OPA_CONFIG: |
+        {
+          "addr": "0.0.0.0:8181",
+          "log_level": "info",
+          "log_format": "json",
+          "decision_logs": {
+            "console": true
+          },
+          "bundles": {
+            "authz": {
+              "signing": {
+                "keyid": "bundle-signer"
+              }
+            }
+          },
+          "keys": {
+            "bundle-signer": {
+              "key": "/certs/bundle-signing.pub.pem",
+              "algorithm": "RS256"
+            }
+          }
+        }
+
+      # Data fetching
+      OPAL_DATA_TOPICS: "policy_data"
+      OPAL_DEFAULT_UPDATE_CALLBACKS: '{"callbacks": []}'
+
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+
+      # Data updater
+      OPAL_DATA_UPDATER_ENABLED: "true"
+    ports:
+      - "8181:8181"  # OPA API (internal TLS optional)
+      - "7000:7000"  # OPAL Client API
+    networks:
+      - dive-network
+    volumes:
+      # Mount policies
+      - ../policies:/policies:ro
+      - ../policies/data:/policy-data:ro
+      # Mount certificates
+      - ../certs/opal:/certs:ro
+    depends_on:
+      opal-server-tls:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+

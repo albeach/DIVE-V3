@@ -1,114 +1,88 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
-import { getSessionSyncManager } from "@/lib/session-sync-manager";
+import { federatedLogout } from "@/lib/federated-logout";
 
-export function SecureLogoutButton() {
+interface SecureLogoutButtonProps {
+  compact?: boolean;
+}
+
+export function SecureLogoutButton({ compact = false }: SecureLogoutButtonProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { data: session } = useSession();
   
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      
-      console.log('[DIVE] User-initiated logout - starting...');
-      
-      // Notify other tabs before logout
-      const syncManager = getSessionSyncManager();
-      syncManager.notifyUserLogout();
-      
-      // Step 1: Get Keycloak logout URL (includes id_token_hint)
-      const keycloakLogoutUrl = await getKeycloakLogoutUrl();
-      
-      if (keycloakLogoutUrl) {
-        console.log('[DIVE] Redirecting to Keycloak logout endpoint');
-        console.log('[DIVE] Keycloak will call frontchannel logout callback');
-        console.log('[DIVE] Callback will send postMessage to parent');
-        console.log('[DIVE] Parent LogoutListener will complete cleanup');
-        
-        // Redirect to Keycloak logout
-        // Keycloak will:
-        // 1. Terminate Keycloak SSO session
-        // 2. Load /api/auth/logout-callback in iframe (frontchannel logout)
-        // 3. Iframe deletes cookies and sends postMessage
-        // 4. LogoutListener receives message and redirects to home
-        window.location.href = keycloakLogoutUrl;
-        
-      } else {
-        console.warn('[DIVE] No Keycloak logout URL, doing local logout only');
-        
-        // Fallback: Local logout without Keycloak
-        localStorage.clear();
-        sessionStorage.clear();
-        await signOut({ redirect: false });
-        window.location.href = "/";
-      }
-      
+      console.log('[DIVE] SecureLogoutButton: Initiating federated logout');
+      await federatedLogout({ reason: 'secure_logout_button' });
     } catch (error) {
-      console.error("[DIVE] Logout error:", error);
-      // Force redirect to home even if error
-      window.location.href = "/";
+      console.error("[DIVE] SecureLogoutButton: Logout error:", error);
+      // federatedLogout handles its own error recovery
     }
   };
-  
-  const getKeycloakLogoutUrl = async (): Promise<string | null> => {
-    try {
-      console.log('[DIVE] Building Keycloak logout URL...');
-      console.log('[DIVE] Session state:', {
-        hasSession: !!session,
-        hasIdToken: !!session?.idToken,
-        idTokenLength: session?.idToken?.length || 0
-      });
-      
-      // Use the session's idToken to construct Keycloak logout URL
-      if (!session?.idToken) {
-        console.error("[DIVE] CRITICAL: No idToken found in session - cannot logout from Keycloak!");
-        console.error("[DIVE] Will do local logout only (Keycloak session will persist)");
-        return null;
-      }
-      
-      const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
-      const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-pilot";
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-      
-      console.log('[DIVE] Keycloak logout config:', {
-        keycloakUrl,
-        realm,
-        baseUrl,
-        idTokenPreview: session.idToken.substring(0, 20) + '...'
-      });
-      
-      // Build the Keycloak end_session_endpoint URL
-      const logoutUrl = new URL(
-        `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout`
-      );
-      
-      // Add required parameters for proper OIDC logout
-      logoutUrl.searchParams.set("id_token_hint", session.idToken);
-      logoutUrl.searchParams.set("post_logout_redirect_uri", baseUrl);
-      
-      const finalUrl = logoutUrl.toString();
-      console.log('[DIVE] Keycloak logout URL constructed:', finalUrl.substring(0, 100) + '...');
-      console.log('[DIVE] This should clear Keycloak cookies: AUTH_SESSION_ID, KEYCLOAK_SESSION, etc.');
-      
-      return finalUrl;
-      
-    } catch (error) {
-      console.error("[DIVE] Error building Keycloak logout URL:", error);
-      return null;
-    }
-  };
+
+  // Compact variant for dropdown menus
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={isLoggingOut}
+        data-testid="logout-button"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+        aria-label="Sign out"
+      >
+        {isLoggingOut ? (
+          <>
+            <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Signing out...</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Sign Out</span>
+          </>
+        )}
+      </button>
+    );
+  }
 
   return (
     <button
       type="button"
       onClick={handleLogout}
       disabled={isLoggingOut}
-      className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      data-testid="logout-button"
+      className="relative group w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-900 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2 overflow-hidden"
+      aria-label="Sign out"
     >
-      {isLoggingOut ? "Signing out..." : "Sign Out"}
+      {/* Animated background shine effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+      
+      {/* Content */}
+      <span className="relative flex items-center gap-2">
+        {isLoggingOut ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Signing out...</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-4 h-4 transition-transform group-hover:translate-x-[-2px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Sign Out</span>
+          </>
+        )}
+      </span>
     </button>
   );
 }
-

@@ -65,7 +65,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             expect(breaker.getStats().failures).toBe(1);
 
@@ -90,7 +92,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             const stats = breaker.getStats();
             expect(stats.failures).toBe(1);
@@ -104,7 +108,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
 
             expect(breaker.getState()).toBe(CircuitState.CLOSED);
@@ -117,7 +123,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
 
             expect(breaker.getState()).toBe(CircuitState.OPEN);
@@ -133,7 +141,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
             expect(breaker.getState()).toBe(CircuitState.OPEN);
         });
@@ -150,7 +160,9 @@ describe('CircuitBreaker', () => {
 
             try {
                 await breaker.execute(async () => 'success');
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             const statsAfter = breaker.getStats();
             expect(statsAfter.rejectCount).toBe(rejectsBefore + 1);
@@ -175,7 +187,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
         });
 
@@ -188,7 +202,9 @@ describe('CircuitBreaker', () => {
             // Next request should transition to HALF_OPEN
             try {
                 await breaker.execute(async () => 'success');
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             expect(breaker.getState()).toBe(CircuitState.HALF_OPEN);
         });
@@ -211,7 +227,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
 
             // Wait and transition to HALF_OPEN
@@ -235,7 +253,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             expect(breaker.getState()).toBe(CircuitState.OPEN);
         });
@@ -249,7 +269,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             await breaker.execute(async () => 'success');
 
@@ -262,13 +284,17 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             try {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             const stats = breaker.getStats();
             expect(stats.failures).toBe(2);
@@ -281,7 +307,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             const after = new Date();
             const stats = breaker.getStats();
@@ -308,7 +336,9 @@ describe('CircuitBreaker', () => {
                     await breaker.execute(async () => {
                         throw new Error('failure');
                     });
-                } catch {}
+                } catch {
+                // Expected to fail
+            }
             }
 
             expect(breaker.getState()).toBe(CircuitState.OPEN);
@@ -327,7 +357,9 @@ describe('CircuitBreaker', () => {
                 await breaker.execute(async () => {
                     throw new Error('failure');
                 });
-            } catch {}
+            } catch {
+                // Expected to fail
+            }
 
             expect(breaker.getStats().totalRequests).toBeGreaterThan(0);
 
@@ -407,4 +439,3 @@ describe('CircuitBreaker', () => {
         });
     });
 });
-

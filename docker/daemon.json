@@ -1,0 +1,38 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2",
+  "registry-mirrors": [],
+  "insecure-registries": [],
+  "experimental": false,
+  "metrics-addr": "127.0.0.1:9323",
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "20GB",
+      "policy": [
+        {
+          "keepStorage": "50GB",
+          "filter": [
+            "type==source.local",
+            "type==exec.cachemount",
+            "type==source.git.checkout"
+          ]
+        },
+        {
+          "keepStorage": "20GB",
+          "all": true
+        }
+      ]
+    }
+  },
+  "features": {
+    "buildkit": true
+  },
+  "live-restore": true,
+  "max-concurrent-downloads": 3,
+  "max-concurrent-uploads": 3
+}

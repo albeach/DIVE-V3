@@ -387,4 +387,3 @@ export default function SecurityLabelViewer({
     </div>
   );
 }
-

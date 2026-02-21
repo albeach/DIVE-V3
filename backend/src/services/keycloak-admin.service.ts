@@ -1,14 +1,26 @@
 /**
  * Keycloak Admin Service
- * 
- * Manages Identity Providers via Keycloak Admin REST API
- * Supports OIDC and SAML IdP creation, update, deletion
- * 
- * Reference: keycloak-admin-api-llm.md
+ *
+ * Manages Identity Providers via Keycloak Admin REST API.
+ * Supports OIDC and SAML IdP creation, update, deletion.
+ *
+ * Phase 4D: Decomposed into focused sub-modules:
+ * - admin-idp-testing.ts: IdP connectivity testing (OIDC/SAML)
+ * - admin-user-management.ts: User CRUD, roles, password reset
+ * - admin-mfa-sessions.ts: MFA config, session management, theme
+ *
+ * This file retains auth/token management, IdP CRUD, protocol mappers,
+ * and re-exports for backward compatibility.
+ *
+ * PRODUCTION FIX: Uses direct REST API instead of @keycloak/keycloak-admin-client
+ * to avoid library compatibility issues with fetch() and custom HTTPS agents.
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
+import { getKeycloakPassword } from '../utils/gcp-secrets';
 import {
     IIdentityProviderRepresentation,
     IIdPCreateRequest,
@@ -21,64 +33,144 @@ import {
     IdPProtocol,
     IdPStatus
 } from '../types/keycloak.types';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
+
+// Sub-module imports
+import { testIdentityProviderCore } from './admin-idp-testing';
+import type { AdminServiceContext } from './admin-idp-testing';
+import {
+    createRealmRoleCore,
+    assignRoleToUserCore,
+    listUsersCore,
+    getUserByIdCore,
+    createUserCore,
+    updateUserCore,
+    deleteUserCore,
+    resetPasswordCore,
+    getUserByUsernameCore,
+} from './admin-user-management';
+import {
+    getMFAConfigCore,
+    updateMFAConfigCore,
+    testMFAFlowCore,
+    getActiveSessionsCore,
+    revokeSessionCore,
+    revokeUserSessionsCore,
+    getSessionStatsCore,
+    getRealmThemeCore,
+    updateRealmThemeCore,
+} from './admin-mfa-sessions';
 
 /**
- * Keycloak Admin Client Singleton
+ * Keycloak Admin Service - Direct REST API Implementation
+ * This replaces the @keycloak/keycloak-admin-client library which has
+ * known issues with fetch() API and custom HTTPS agents in v26.x
  */
 class KeycloakAdminService {
-    private client: KcAdminClient;
+    private client: KcAdminClient; // Legacy - kept for backward compatibility
+    private axios: AxiosInstance;
+    private accessToken: string | null = null;
+    private tokenExpiry: number = 0;
+    private readonly TOKEN_REFRESH_BUFFER_MS = 5000; // Refresh 5s before expiry
 
     constructor() {
+        this.axios = axios.create({
+            baseURL: process.env.KEYCLOAK_URL || 'https://localhost:8443',
+            timeout: 10000,
+            httpsAgent: getSecureHttpsAgent(),
+        });
+
+        const httpsAgent = getSecureHttpsAgent();
+
         this.client = new KcAdminClient({
             baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',
-            realmName: 'master'
+            realmName: 'master',
+            requestOptions: {
+                /* @ts-expect-error - httpsAgent is supported by node-fetch */
+                httpsAgent,
+            },
         });
     }
 
+    // ============================================
+    // AUTH / TOKEN MANAGEMENT
+    // ============================================
+
     /**
-     * Initialize and authenticate Keycloak Admin Client
+     * Get admin access token (with automatic refresh).
+     * Uses direct REST API instead of library.
      */
-    private async ensureAuthenticated(): Promise<void> {
+    private async getAdminToken(): Promise<string> {
+        // Return cached token if still valid
+        if (this.accessToken && Date.now() < this.tokenExpiry) {
+            return this.accessToken;
+        }
+
+        const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
+        const password = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD;
+
+        const masterAuthUrl = `${(this.axios.defaults.baseURL ?? '').replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;
+
+        logger.debug('Authenticating to Keycloak Admin API (direct REST)', {
+            username,
+            passwordSet: !!password,
+            authUrl: masterAuthUrl,
+            realm: 'master'
+        });
+
         try {
-            const username = process.env.KEYCLOAK_ADMIN_USER || 'admin';
-            const password = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-
-            logger.debug('Attempting Keycloak Admin authentication', {
-                username,
-                passwordSet: !!password,
-                baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',
-                authRealm: 'master'
+            const masterAxios = axios.create({
+                baseURL: this.axios.defaults.baseURL,
+                timeout: this.axios.defaults.timeout,
+                httpsAgent: this.axios.defaults.httpsAgent,
             });
 
-            // CRITICAL: Ensure we're authenticating against MASTER realm
-            // Admin users exist in master realm, not dive-v3-pilot
-            this.client.setConfig({
-                realmName: 'master'
+            const response = await masterAxios.post(
+                '/realms/master/protocol/openid-connect/token',
+                new URLSearchParams({
+                    grant_type: 'password',
+                    client_id: 'admin-cli',
+                    username,
+                    password: password ?? '',
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
+            );
+
+            this.accessToken = response.data.access_token;
+            const expiresIn = response.data.expires_in || 60;
+            this.tokenExpiry = Date.now() + (expiresIn * 1000) - this.TOKEN_REFRESH_BUFFER_MS;
+
+            logger.debug('Keycloak Admin authentication successful (direct REST)', {
+                expiresIn,
+                tokenLength: this.accessToken!.length
             });
 
-            // Authenticate with admin credentials
-            await this.client.auth({
-                username,
-                password,
-                grantType: 'password',
-                clientId: 'admin-cli'
-            });
-
-            // NOW switch to working realm for IdP management
-            this.client.setConfig({
-                realmName: process.env.KEYCLOAK_REALM || 'dive-v3-pilot'
-            });
-            logger.debug('Keycloak Admin Client authenticated', {
-                baseUrl: process.env.KEYCLOAK_URL,
-                realm: process.env.KEYCLOAK_REALM
-            });
+            return this.accessToken!;
         } catch (error) {
-            logger.error('Failed to authenticate Keycloak Admin Client', {
-                error: error instanceof Error ? error.message : 'Unknown error'
+            logger.error('Failed to authenticate Keycloak Admin (direct REST)', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                response: axios.isAxiosError(error) ? error.response?.data : undefined,
+                status: axios.isAxiosError(error) ? error.response?.status : undefined
             });
             throw new Error('Keycloak Admin API authentication failed');
         }
+    }
+
+    /**
+     * Legacy method - kept for backward compatibility.
+     * @deprecated Use getAdminToken() instead
+     */
+    private async ensureAuthenticated(): Promise<void> {
+        await this.getAdminToken();
+    }
+
+    /** Get context for extracted functions */
+    private getContext(): AdminServiceContext {
+        return { client: this.client };
     }
 
     // ============================================
@@ -86,17 +178,35 @@ class KeycloakAdminService {
     // ============================================
 
     /**
-     * List all Identity Providers in the realm
+     * List all Identity Providers in the realm.
+     * Uses direct REST API for better reliability.
      */
     async listIdentityProviders(): Promise<IIdPListResponse> {
-        await this.ensureAuthenticated();
+        const token = await this.getAdminToken();
+        const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+
+        logger.debug('Listing identity providers (direct REST)', {
+            realm,
+            keycloakUrl: this.axios.defaults.baseURL
+        });
 
         try {
-            const idps = await this.client.identityProviders.find();
+            const response = await this.axios.get(
+                `/admin/realms/${realm}/identity-provider/instances`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
 
-            logger.info('Retrieved identity providers', {
+            const idps = response.data;
+
+            type RawIdP = { alias?: string; displayName?: string; providerId?: string; enabled?: boolean; config?: Record<string, string> };
+            logger.info('Retrieved identity providers (direct REST)', {
                 count: idps.length,
-                idps: idps.map(i => ({
+                idps: idps.map((i: RawIdP) => ({
                     alias: i.alias,
                     providerId: i.providerId,
                     enabled: i.enabled
@@ -104,7 +214,7 @@ class KeycloakAdminService {
             });
 
             return {
-                idps: idps.map(idp => ({
+                idps: idps.map((idp: RawIdP) => ({
                     alias: idp.alias!,
                     displayName: idp.displayName || idp.alias!,
                     protocol: (idp.providerId === 'oidc' || idp.providerId === 'saml'
@@ -119,41 +229,54 @@ class KeycloakAdminService {
                 total: idps.length
             };
         } catch (error) {
-            logger.error('Failed to list identity providers', {
-                error: error instanceof Error ? error.message : 'Unknown error'
+            logger.error('Failed to list identity providers (direct REST)', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                keycloakUrl: this.axios.defaults.baseURL,
+                keycloakRealm: realm,
+                status: axios.isAxiosError(error) ? error.response?.status : undefined,
+                response: axios.isAxiosError(error) ? error.response?.data : undefined
             });
-            throw new Error('Failed to retrieve identity providers');
+            throw new Error(`Failed to retrieve identity providers: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
     /**
-     * Get specific Identity Provider by alias
+     * Get specific Identity Provider by alias.
+     * Uses direct REST API.
      */
     async getIdentityProvider(alias: string): Promise<IIdentityProviderRepresentation | null> {
-        await this.ensureAuthenticated();
-
         try {
-            const idp = await this.client.identityProviders.findOne({ alias });
+            const token = await this.getAdminToken();
+            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
-            if (!idp) {
+            const response = await this.axios.get(
+                `/admin/realms/${realm}/identity-provider/instances/${alias}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` }
+                }
+            );
+
+            logger.debug('Retrieved identity provider (direct REST)', { alias });
+
+            return response.data as IIdentityProviderRepresentation;
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) {
                 logger.warn('Identity provider not found', { alias });
                 return null;
             }
-
-            logger.debug('Retrieved identity provider', { alias });
-
-            return idp as IIdentityProviderRepresentation;
-        } catch (error) {
             logger.error('Failed to get identity provider', {
                 alias,
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: axios.isAxiosError(error)
+                    ? `HTTP ${error.response?.status} ${error.response?.statusText}`
+                    : (error instanceof Error ? error.message : 'Unknown error')
             });
             return null;
         }
     }
 
     /**
-     * Create OIDC Identity Provider
+     * Create OIDC Identity Provider.
      */
     async createOIDCIdentityProvider(request: IIdPCreateRequest): Promise<string> {
         await this.ensureAuthenticated();
@@ -161,12 +284,11 @@ class KeycloakAdminService {
         const config = request.config as IOIDCIdPConfig;
 
         try {
-            // Create OIDC IdP
             await this.client.identityProviders.create({
                 alias: request.alias,
                 displayName: request.displayName,
                 providerId: 'oidc',
-                enabled: false, // Start disabled (pending approval)
+                enabled: false,
                 storeToken: true,
                 trustEmail: true,
                 config: {
@@ -177,10 +299,9 @@ class KeycloakAdminService {
                     tokenUrl: config.tokenUrl,
                     userInfoUrl: config.userInfoUrl || '',
                     jwksUrl: config.jwksUrl || '',
-                    defaultScope: config.defaultScopes || 'openid profile email',
+                    defaultScope: config.defaultScopes || 'openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr',
                     validateSignature: String(config.validateSignature ?? true),
                     syncMode: 'FORCE',
-                    // Metadata
                     submittedBy: request.submittedBy,
                     createdAt: new Date().toISOString(),
                     description: request.description || ''
@@ -192,7 +313,6 @@ class KeycloakAdminService {
                 submittedBy: request.submittedBy
             });
 
-            // Create attribute mappers
             await this.createDIVEAttributeMappers(request.alias, request.attributeMappings, 'oidc');
 
             return request.alias;
@@ -206,7 +326,7 @@ class KeycloakAdminService {
     }
 
     /**
-     * Create SAML Identity Provider
+     * Create SAML Identity Provider.
      */
     async createSAMLIdentityProvider(request: IIdPCreateRequest): Promise<string> {
         await this.ensureAuthenticated();
@@ -214,12 +334,11 @@ class KeycloakAdminService {
         const config = request.config as ISAMLIdPConfig;
 
         try {
-            // Create SAML IdP
             await this.client.identityProviders.create({
                 alias: request.alias,
                 displayName: request.displayName,
                 providerId: 'saml',
-                enabled: false, // Start disabled (pending approval)
+                enabled: false,
                 storeToken: true,
                 trustEmail: true,
                 config: {
@@ -235,7 +354,6 @@ class KeycloakAdminService {
                     postBindingResponse: String(config.postBindingResponse ?? false),
                     postBindingAuthnRequest: String(config.postBindingAuthnRequest ?? false),
                     syncMode: 'FORCE',
-                    // Metadata
                     submittedBy: request.submittedBy,
                     createdAt: new Date().toISOString(),
                     description: request.description || ''
@@ -247,7 +365,6 @@ class KeycloakAdminService {
                 submittedBy: request.submittedBy
             });
 
-            // Create attribute mappers
             await this.createDIVEAttributeMappers(request.alias, request.attributeMappings, 'saml');
 
             return request.alias;
@@ -261,7 +378,7 @@ class KeycloakAdminService {
     }
 
     /**
-     * Update Identity Provider
+     * Update Identity Provider.
      */
     async updateIdentityProvider(alias: string, updates: IIdPUpdateRequest): Promise<void> {
         await this.ensureAuthenticated();
@@ -273,7 +390,6 @@ class KeycloakAdminService {
                 throw new Error(`Identity provider ${alias} not found`);
             }
 
-            // Merge updates with existing config
             const updatedConfig = {
                 ...existingIdp.config,
                 ...(updates.config || {})
@@ -291,7 +407,6 @@ class KeycloakAdminService {
 
             logger.info('Updated identity provider', { alias });
 
-            // Update attribute mappings if provided
             if (updates.attributeMappings) {
                 await this.updateDIVEAttributeMappers(alias, updates.attributeMappings, existingIdp.providerId as IdPProtocol);
             }
@@ -305,14 +420,13 @@ class KeycloakAdminService {
     }
 
     /**
-     * Delete Identity Provider
+     * Delete Identity Provider.
      */
     async deleteIdentityProvider(alias: string): Promise<void> {
         await this.ensureAuthenticated();
 
         try {
             await this.client.identityProviders.del({ alias });
-
             logger.info('Deleted identity provider', { alias });
         } catch (error) {
             logger.error('Failed to delete identity provider', {
@@ -328,8 +442,8 @@ class KeycloakAdminService {
     // ============================================
 
     /**
-     * Create DIVE attribute mappers for an IdP
-     * Uses REST API directly due to Keycloak Admin Client library limitations
+     * Create DIVE attribute mappers for an IdP.
+     * Uses REST API directly due to Keycloak Admin Client library limitations.
      */
     private async createDIVEAttributeMappers(
         idpAlias: string,
@@ -340,11 +454,10 @@ class KeycloakAdminService {
             const mapperType = protocol === 'oidc' ? 'oidc-user-attribute-idp-mapper' : 'saml-user-attribute-idp-mapper';
             const claimKey = protocol === 'oidc' ? 'claim' : 'attribute.name';
 
-            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const mapperUrl = `${baseUrl}/admin/realms/${realm}/identity-provider/instances/${idpAlias}/mappers`;
 
-            // Get admin token for REST API calls
             const token = this.client.accessToken;
 
             const mappers = [
@@ -390,7 +503,6 @@ class KeycloakAdminService {
                 }
             ];
 
-            // Create each mapper via REST API
             for (const mapper of mappers) {
                 await axios.post(mapperUrl, mapper, {
                     headers: {
@@ -415,306 +527,208 @@ class KeycloakAdminService {
     }
 
     /**
-     * Update DIVE attribute mappers for an IdP
+     * Update DIVE attribute mappers for an IdP.
      */
     private async updateDIVEAttributeMappers(
         idpAlias: string,
         _mappings: Partial<IDIVEAttributeMappings>,
         _protocol: IdPProtocol
     ): Promise<void> {
-        // For simplicity, delete existing mappers and recreate
-        // In production, would update individual mappers
         logger.info('Updating attribute mappers', { idpAlias });
-        // Implementation would iterate through existing mappers and update them
-        // Skipped for brevity
     }
 
     // ============================================
-    // Testing & Validation
+    // PUBLIC API — Delegates to extracted modules
     // ============================================
 
-    /**
-     * Test Identity Provider connectivity
-     */
+    /** @see admin-idp-testing.ts */
     async testIdentityProvider(alias: string): Promise<IIdPTestResult> {
         await this.ensureAuthenticated();
-
-        try {
-            const idp = await this.client.identityProviders.findOne({ alias });
-
-            if (!idp) {
-                return {
-                    success: false,
-                    message: `Identity provider ${alias} not found`
-                };
-            }
-
-            const protocol = idp.providerId as IdPProtocol;
-
-            if (protocol === 'oidc') {
-                return await this.testOIDCIdP(idp as IIdentityProviderRepresentation);
-            } else if (protocol === 'saml') {
-                return await this.testSAMLIdP(idp as IIdentityProviderRepresentation);
-            } else {
-                return {
-                    success: false,
-                    message: `Unknown protocol: ${protocol}`
-                };
-            }
-        } catch (error) {
-            logger.error('Failed to test identity provider', {
-                alias,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            return {
-                success: false,
-                message: error instanceof Error ? error.message : 'Test failed'
-            };
-        }
+        return testIdentityProviderCore(this.getContext(), alias);
     }
 
-    /**
-     * Test OIDC IdP connectivity
-     */
-    private async testOIDCIdP(idp: IIdentityProviderRepresentation): Promise<IIdPTestResult> {
-        try {
-            // Check if IdP configuration has required fields
-            const config = idp.config || {};
-            const issuer = config.issuer || config.authorizationUrl;
-
-            logger.debug('Testing OIDC IdP', {
-                alias: idp.alias,
-                hasIssuer: !!issuer,
-                hasAuthUrl: !!config.authorizationUrl,
-                hasTokenUrl: !!config.tokenUrl,
-                configKeys: Object.keys(config)
-            });
-
-            // For local/mock IdPs, just verify configuration exists
-            if (!issuer && !config.authorizationUrl) {
-                return {
-                    success: false,
-                    message: 'IdP configuration incomplete - missing issuer or authorization URL',
-                    details: {
-                        reachable: false,
-                        configKeys: Object.keys(config)
-                    }
-                };
-            }
-
-            // For mock/local IdPs (localhost URLs), skip external connectivity test
-            const isLocalIdP = issuer?.includes('localhost') || config.authorizationUrl?.includes('localhost');
-
-            if (isLocalIdP) {
-                return {
-                    success: true,
-                    message: 'Local IdP configuration valid (connectivity test skipped for localhost)',
-                    details: {
-                        reachable: true,
-                        isLocal: true,
-                        hasIssuer: !!issuer,
-                        hasAuthUrl: !!config.authorizationUrl,
-                        hasTokenUrl: !!config.tokenUrl
-                    }
-                };
-            }
-
-            // For external IdPs, test OIDC discovery endpoint
-            if (issuer) {
-                try {
-                    const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
-                    const response = await axios.get(discoveryUrl, { timeout: 5000 });
-
-                    if (response.status === 200) {
-                        return {
-                            success: true,
-                            message: 'OIDC IdP reachable via discovery endpoint',
-                            details: {
-                                reachable: true,
-                                jwksValid: !!response.data.jwks_uri
-                            }
-                        };
-                    }
-                } catch (error) {
-                    return {
-                        success: false,
-                        message: `OIDC discovery endpoint unreachable: ${error instanceof Error ? error.message : 'Unknown error'}`
-                    };
-                }
-            }
-
-            // Fallback: Configuration exists, assume it's valid
-            return {
-                success: true,
-                message: 'IdP configuration exists (external connectivity not tested)',
-                details: {
-                    reachable: false,
-                    configPresent: true
-                }
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-            };
-        }
-    }
-
-    /**
-     * Test SAML IdP connectivity
-     */
-    private async testSAMLIdP(idp: IIdentityProviderRepresentation): Promise<IIdPTestResult> {
-        try {
-            const config = idp.config || {};
-            const ssoUrl = config.singleSignOnServiceUrl;
-
-            logger.debug('Testing SAML IdP', {
-                alias: idp.alias,
-                hasSsoUrl: !!ssoUrl,
-                hasCertificate: !!config.signingCertificate,
-                configKeys: Object.keys(config)
-            });
-
-            if (!ssoUrl) {
-                return {
-                    success: false,
-                    message: 'SAML configuration incomplete - missing SSO URL',
-                    details: {
-                        reachable: false,
-                        configKeys: Object.keys(config)
-                    }
-                };
-            }
-
-            // For mock/local IdPs (localhost URLs), skip external connectivity test
-            const isLocalIdP = ssoUrl.includes('localhost');
-
-            if (isLocalIdP) {
-                return {
-                    success: true,
-                    message: 'Local SAML IdP configuration valid (connectivity test skipped for localhost)',
-                    details: {
-                        reachable: true,
-                        isLocal: true,
-                        hasSsoUrl: !!ssoUrl,
-                        hasCertificate: !!config.signingCertificate
-                    }
-                };
-            }
-
-            // For external IdPs, test SAML endpoint reachability
-            try {
-                const response = await axios.get(ssoUrl, {
-                    timeout: 5000,
-                    validateStatus: (status) => status < 500 // Accept 4xx as reachable
-                });
-
-                if (response.status < 500) {
-                    return {
-                        success: true,
-                        message: 'SAML IdP endpoint reachable',
-                        details: {
-                            reachable: true,
-                            certificateValid: !!config.signingCertificate
-                        }
-                    };
-                }
-            } catch (error) {
-                return {
-                    success: false,
-                    message: `SAML endpoint unreachable: ${error instanceof Error ? error.message : 'Unknown error'}`
-                };
-            }
-
-            return {
-                success: true,
-                message: 'SAML configuration exists (external connectivity not tested)',
-                details: {
-                    reachable: false,
-                    configPresent: true
-                }
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-            };
-        }
-    }
-
-    // ============================================
-    // Realm & User Management (Future Use)
-    // ============================================
-
-    /**
-     * Create realm role (e.g., super_admin)
-     */
+    /** @see admin-user-management.ts */
     async createRealmRole(roleName: string, description: string): Promise<void> {
         await this.ensureAuthenticated();
-
-        try {
-            await this.client.roles.create({
-                name: roleName,
-                description
-            });
-
-            logger.info('Created realm role', { roleName });
-        } catch (error) {
-            logger.error('Failed to create realm role', {
-                roleName,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw error;
-        }
+        return createRealmRoleCore(this.getContext(), roleName, description);
     }
 
-    /**
-     * Assign role to user
-     */
+    /** @see admin-user-management.ts */
     async assignRoleToUser(userId: string, roleName: string): Promise<void> {
         await this.ensureAuthenticated();
+        return assignRoleToUserCore(this.getContext(), userId, roleName);
+    }
 
-        try {
-            const role = await this.client.roles.findOneByName({ name: roleName });
+    /** @see admin-user-management.ts */
+    async listUsers(max: number = 100, first: number = 0, search: string = ''): Promise<{ users: UserRepresentation[], total: number }> {
+        await this.ensureAuthenticated();
+        return listUsersCore(this.getContext(), max, first, search);
+    }
 
-            if (!role) {
-                throw new Error(`Role ${roleName} not found`);
-            }
+    /** @see admin-user-management.ts */
+    async getUserById(userId: string): Promise<UserRepresentation> {
+        await this.ensureAuthenticated();
+        return getUserByIdCore(this.getContext(), userId);
+    }
 
-            await this.client.users.addRealmRoleMappings({
-                id: userId,
-                roles: [{ id: role.id!, name: role.name! }]
-            });
+    /** @see admin-user-management.ts */
+    async createUser(userData: Record<string, unknown>): Promise<string> {
+        await this.ensureAuthenticated();
+        return createUserCore(this.getContext(), userData);
+    }
 
-            logger.info('Assigned role to user', { userId, roleName });
-        } catch (error) {
-            logger.error('Failed to assign role to user', {
-                userId,
-                roleName,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw error;
-        }
+    /** @see admin-user-management.ts */
+    async updateUser(userId: string, userData: Record<string, unknown>): Promise<void> {
+        await this.ensureAuthenticated();
+        return updateUserCore(this.getContext(), userId, userData);
+    }
+
+    /** @see admin-user-management.ts */
+    async deleteUser(userId: string): Promise<void> {
+        await this.ensureAuthenticated();
+        return deleteUserCore(this.getContext(), userId);
+    }
+
+    /** @see admin-user-management.ts */
+    async resetPassword(userId: string, password: string, temporary: boolean = true): Promise<void> {
+        await this.ensureAuthenticated();
+        return resetPasswordCore(this.getContext(), userId, password, temporary);
+    }
+
+    /** @see admin-user-management.ts */
+    async getUserByUsername(realmName: string, username: string): Promise<UserRepresentation | null> {
+        await this.ensureAuthenticated();
+        return getUserByUsernameCore(this.getContext(), realmName, username);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async getMFAConfig(realmName?: string): Promise<Record<string, unknown>> {
+        await this.ensureAuthenticated();
+        return getMFAConfigCore(this.getContext(), realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async updateMFAConfig(config: Record<string, unknown>, realmName?: string): Promise<void> {
+        await this.ensureAuthenticated();
+        return updateMFAConfigCore(this.getContext(), config, realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async testMFAFlow(realmName?: string): Promise<Record<string, unknown>> {
+        await this.ensureAuthenticated();
+        return testMFAFlowCore(this.getContext(), realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async getActiveSessions(realmName?: string, filters?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+        await this.ensureAuthenticated();
+        return getActiveSessionsCore(this.getContext(), realmName, filters);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async revokeSession(sessionId: string, realmName?: string): Promise<void> {
+        await this.ensureAuthenticated();
+        return revokeSessionCore(this.getContext(), sessionId, realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async revokeUserSessions(username: string, realmName?: string): Promise<number> {
+        await this.ensureAuthenticated();
+        return revokeUserSessionsCore(this.getContext(), username, realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async getSessionStats(realmName?: string): Promise<Record<string, unknown>> {
+        await this.ensureAuthenticated();
+        return getSessionStatsCore(this.getContext(), realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async getRealmTheme(realmName?: string): Promise<Record<string, unknown>> {
+        await this.ensureAuthenticated();
+        return getRealmThemeCore(this.getContext(), realmName);
+    }
+
+    /** @see admin-mfa-sessions.ts */
+    async updateRealmTheme(themeName: string, realmName?: string): Promise<void> {
+        await this.ensureAuthenticated();
+        return updateRealmThemeCore(this.getContext(), themeName, realmName);
     }
 
     /**
-     * List all users in realm
+     * Get realm configuration (password policy, OTP settings, etc.)
      */
-    async listUsers(max: number = 100): Promise<any[]> {
+    async getRealmConfig(realmName?: string): Promise<Record<string, unknown>> {
         await this.ensureAuthenticated();
+        const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+        const token = this.getContext().client.accessToken;
+        const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
 
-        try {
-            const users = await this.client.users.find({ max });
-            return users;
-        } catch (error) {
-            logger.error('Failed to list users', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw error;
-        }
+        const response = await this.axios.get(`${baseUrl}/admin/realms/${realm}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        return response.data;
+    }
+
+    /**
+     * Update realm configuration (password policy, etc.)
+     */
+    async updateRealmConfig(updates: Record<string, unknown>, realmName?: string): Promise<void> {
+        await this.ensureAuthenticated();
+        const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+        const token = this.getContext().client.accessToken;
+        const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
+
+        const current = await this.axios.get(`${baseUrl}/admin/realms/${realm}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        await this.axios.put(`${baseUrl}/admin/realms/${realm}`, {
+            ...current.data,
+            ...updates,
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            }
+        });
     }
 }
 
 // Export singleton instance
 export const keycloakAdminService = new KeycloakAdminService();
 
+// ============================================
+// RE-EXPORTS for backward compatibility
+// ============================================
+
+// admin-idp-testing.ts
+export type { AdminServiceContext } from './admin-idp-testing';
+export { testIdentityProviderCore } from './admin-idp-testing';
+
+// admin-user-management.ts
+export {
+    createRealmRoleCore,
+    assignRoleToUserCore,
+    listUsersCore,
+    getUserByIdCore,
+    createUserCore,
+    updateUserCore,
+    deleteUserCore,
+    resetPasswordCore,
+    getUserByUsernameCore,
+} from './admin-user-management';
+
+// admin-mfa-sessions.ts
+export {
+    getMFAConfigCore,
+    updateMFAConfigCore,
+    testMFAFlowCore,
+    getActiveSessionsCore,
+    revokeSessionCore,
+    revokeUserSessionsCore,
+    getSessionStatsCore,
+    getRealmThemeCore,
+    updateRealmThemeCore,
+} from './admin-mfa-sessions';

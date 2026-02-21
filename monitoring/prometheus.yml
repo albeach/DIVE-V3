@@ -1,0 +1,235 @@
+#
+# Prometheus Configuration for DIVE V3
+# Multi-Instance Monitoring via Host Gateway
+#
+# Uses host.docker.internal to reach services in other Docker networks
+# Each instance exposes metrics on different ports
+#
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dive-v3-federation'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alerting rules
+rule_files:
+  - "/etc/prometheus/alerts/*.yml"
+
+# =============================================================================
+# SCRAPE CONFIGURATIONS
+# =============================================================================
+
+scrape_configs:
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS SELF-MONITORING
+  # ---------------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ---------------------------------------------------------------------------
+  # VAULT HA CLUSTER (4 nodes: seal + 3-node Raft)
+  # ---------------------------------------------------------------------------
+  # Vault 1.21 built-in Prometheus metrics via /v1/sys/metrics
+  # unauthenticated_metrics_access=true in listener config (localhost-only)
+
+  - job_name: 'vault-cluster'
+    metrics_path: '/v1/sys/metrics'
+    params:
+      format: ['prometheus']
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8200'
+          - 'host.docker.internal:8202'
+          - 'host.docker.internal:8204'
+        labels:
+          service: 'vault'
+          cluster: 'hub'
+      - targets:
+          - 'host.docker.internal:8210'
+        labels:
+          service: 'vault-seal'
+          cluster: 'hub'
+    scrape_interval: 15s
+
+  # ---------------------------------------------------------------------------
+  # USA INSTANCE (Ports: 3000, 4000, 8080, 8181, 8443, 9000)
+  # ---------------------------------------------------------------------------
+
+  - job_name: 'usa-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          instance: 'usa'
+          region: 'americas'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'usa-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8181']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'usa-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'usa-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9126']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # FRA INSTANCE (Backend:4001, OPA:8182, Keycloak:9001, Tunnel:9127)
+  # ---------------------------------------------------------------------------
+
+  - job_name: 'fra-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4001']
+        labels:
+          instance: 'fra'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'fra-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8182']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'fra-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9001']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'fra-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9127']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # GBR INSTANCE (Backend:4002, OPA:8283, Keycloak:9002, Tunnel:9128)
+  # ---------------------------------------------------------------------------
+
+  - job_name: 'gbr-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4002']
+        labels:
+          instance: 'gbr'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'gbr-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8283']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'gbr-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9002']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'gbr-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9128']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # DEU INSTANCE (Backend:4020, OPA:8384, Keycloak:9003)
+  # ---------------------------------------------------------------------------
+
+  - job_name: 'deu-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4020']
+        labels:
+          instance: 'deu'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'deu-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8384']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'deu-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9003']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'deu-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9129']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 30s

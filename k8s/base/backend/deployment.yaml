@@ -1,0 +1,96 @@
+# =============================================================================
+# DIVE V3 Backend - Kubernetes Deployment
+# =============================================================================
+# Express.js API server deployment
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/name: backend
+    spec:
+      serviceAccountName: backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: backend
+          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-backend:8f211100582554216c4fa7c0d4be2300622c02c1
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "4000"
+            - name: MONGODB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: mongodb_url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: redis_url
+            - name: KEYCLOAK_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: keycloak_url
+            - name: KEYCLOAK_REALM
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: keycloak_realm
+            - name: OPA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: opa_url
+            - name: USE_GCP_SECRETS
+              value: "true"
+            - name: GCP_PROJECT_ID
+              value: "dive25"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

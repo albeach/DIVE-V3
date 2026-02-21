@@ -1,0 +1,222 @@
+# =============================================================================
+# DIVE V3 Prometheus Configuration
+# =============================================================================
+# Phase 4: Fixed target scraping using host.docker.internal
+# Uses host gateway to reach services on localhost ports
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dive-v3-federation'
+    environment: 'local'
+
+rule_files:
+  - prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - scheme: https
+      tls_config:
+        insecure_skip_verify: true
+      static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # ===========================================================================
+  # SELF-MONITORING
+  # ===========================================================================
+  - job_name: 'prometheus'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ===========================================================================
+  # HUB SERVICES (via host.docker.internal - localhost ports)
+  # ===========================================================================
+
+  - job_name: 'hub-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          instance: 'hub'
+          realm: 'USA'
+          service: 'backend'
+
+  - job_name: 'hub-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8181']
+        labels:
+          instance: 'hub'
+          realm: 'USA'
+          service: 'opa'
+
+  - job_name: 'hub-keycloak'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          instance: 'hub'
+          realm: 'USA'
+          service: 'keycloak'
+
+  # NOTE: OPAL Server does not expose /metrics endpoint
+  # Use /healthcheck for basic availability monitoring instead
+  # - job_name: 'hub-opal-server'
+  #   scheme: https
+  #   tls_config:
+  #     insecure_skip_verify: true
+  #   metrics_path: /healthcheck
+  #   static_configs:
+  #     - targets: ['host.docker.internal:7002']
+  #       labels:
+  #         instance: 'hub'
+  #         service: 'opal-server'
+
+  - job_name: 'hub-kas'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8085']
+        labels:
+          instance: 'hub'
+          realm: 'USA'
+          service: 'kas'
+
+  # ===========================================================================
+  # REDIS EXPORTERS (within shared-network)
+  # ===========================================================================
+
+  - job_name: 'redis-hub-cache'
+    static_configs:
+      - targets: ['exporter-hub-cache:9121']
+        labels:
+          instance: 'hub'
+          redis_type: 'cache'
+
+  - job_name: 'redis-token-store'
+    static_configs:
+      - targets: ['exporter-token-store:9121']
+        labels:
+          instance: 'shared'
+          redis_type: 'token-store'
+
+  # ===========================================================================
+  # SPOKE INSTANCES (if running on standard spoke ports)
+  # Estonia (EST) - Ports: 3008/4008/8448/8188
+  # ===========================================================================
+
+  - job_name: 'est-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4008']
+        labels:
+          instance: 'est'
+          realm: 'EST'
+          service: 'backend'
+
+  - job_name: 'est-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8188']
+        labels:
+          instance: 'est'
+          realm: 'EST'
+          service: 'opa'
+
+  # GBR - Ports: 3002/4002/8445/8283
+  - job_name: 'gbr-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4002']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+          service: 'backend'
+
+  - job_name: 'gbr-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8283']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+          service: 'opa'
+
+  # FRA - Ports: 3001/4001/8444/8182
+  - job_name: 'fra-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4001']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+          service: 'backend'
+
+  - job_name: 'fra-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8182']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+          service: 'opa'
+
+  # DEU - Ports: 3003/4003/8446/8284
+  - job_name: 'deu-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4003']
+        labels:
+          instance: 'deu'
+          realm: 'DEU'
+          service: 'backend'
+
+  - job_name: 'deu-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8284']
+        labels:
+          instance: 'deu'
+          realm: 'DEU'
+          service: 'opa'

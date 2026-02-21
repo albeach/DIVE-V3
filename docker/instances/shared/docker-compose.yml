@@ -1,0 +1,227 @@
+# =============================================================================
+# DIVE V3 - Shared Services
+# =============================================================================
+# Cross-instance shared services: monitoring, metrics, shared cache.
+# These services are accessible from all instance networks.
+#
+# Usage:
+#   cd docker/instances/shared
+#   docker compose up -d
+# =============================================================================
+
+name: shared
+
+services:
+  # ---------------------------------------------------------------------------
+  # Hub Cache Metrics Exporter - Exports metrics from Hub's Redis cache
+  # ---------------------------------------------------------------------------
+  # Monitors: dive-hub-redis (sessions, rate limits, OTP, auth codes)
+  # Exposes metrics at: http://localhost:9121/metrics
+  # ---------------------------------------------------------------------------
+  exporter-hub-cache:
+    image: oliver006/redis_exporter:latest
+    container_name: shared-exporter-hub-cache
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: rediss://dive-hub-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD_USA:?REDIS_PASSWORD_USA is required}
+      REDIS_EXPORTER_LOG_FORMAT: json
+      REDIS_EXPORTER_TLS_CA_CERT_FILE: /certs/ca/rootCA.pem
+      REDIS_EXPORTER_SKIP_TLS_VERIFICATION: "false"
+    volumes:
+      - ../../../instances/hub/certs:/certs:ro
+    ports:
+      - "9121:9121"
+    networks:
+      - dive-shared  # Shared network for all cross-instance communication
+    # Health check removed - minimal exporter image lacks curl/wget
+    # Metrics endpoint verified working at http://localhost:9121/metrics
+
+  # ---------------------------------------------------------------------------
+  # Token Store - Shared token revocation storage (cross-instance)
+  # ---------------------------------------------------------------------------
+  # Stores: Revoked JWT tokens, suspended user tokens
+  # Purpose: Cross-instance security (USA/FRA/GBR/DEU logout synchronization)
+  # Pub/Sub: Real-time revocation propagation to all instances
+  # ---------------------------------------------------------------------------
+  token-store:
+    image: redis:7.2-alpine
+    container_name: shared-token-store
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_BLACKLIST}
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /certs/fullchain.pem
+      --tls-key-file /certs/key.pem
+      --tls-ca-cert-file /certs/ca/rootCA.pem
+      --tls-auth-clients no
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - token_store_data:/data
+      - ../../../instances/hub/certs:/certs:ro
+    networks:
+      - dive-shared
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca/rootCA.pem", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Token Store Metrics Exporter - Exports metrics from token revocation store
+  # ---------------------------------------------------------------------------
+  # Monitors: token-store (revoked tokens, user suspensions)
+  # Exposes metrics at: http://localhost:9122/metrics
+  # ---------------------------------------------------------------------------
+  exporter-token-store:
+    image: oliver006/redis_exporter:latest
+    container_name: shared-exporter-token-store
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: rediss://token-store:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD_BLACKLIST:?REDIS_PASSWORD_BLACKLIST is required}
+      REDIS_EXPORTER_LOG_FORMAT: json
+      REDIS_EXPORTER_TLS_CA_CERT_FILE: /certs/ca/rootCA.pem
+      REDIS_EXPORTER_SKIP_TLS_VERIFICATION: "false"
+    volumes:
+      - ../../../instances/hub/certs:/certs:ro
+    ports:
+      - "9122:9121"
+    networks:
+      - dive-shared
+    depends_on:
+      token-store:
+        condition: service_healthy
+    # Health check removed - minimal exporter image lacks curl/wget
+    # Metrics endpoint verified working at http://localhost:9122/metrics
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection
+  # ---------------------------------------------------------------------------
+  # Phase 4: Added extra_hosts to allow scraping via host.docker.internal
+  # Phase 5: Enabled HTTPS with TLS web config
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: shared-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.config.file=/etc/prometheus/web-config.yml'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/web-config.yml:/etc/prometheus/web-config.yml:ro
+      - ./config/rules:/etc/prometheus/rules:ro
+      - ./certs:/certs:ro
+      - prometheus_data:/prometheus
+    networks:
+      - dive-shared
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Metrics Visualization
+  # ---------------------------------------------------------------------------
+  # Phase 5: Enabled HTTPS with TLS certificates
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shared-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/hub-overview.json
+      # HTTPS Configuration
+      GF_SERVER_PROTOCOL: https
+      GF_SERVER_CERT_FILE: /certs/certificate.pem
+      GF_SERVER_CERT_KEY: /certs/key.pem
+    ports:
+      - "3333:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./certs:/certs:ro
+    networks:
+      - dive-shared
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager - Alert Routing
+  # ---------------------------------------------------------------------------
+  # Phase 5: Enabled HTTPS with TLS certificates
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: shared-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--cluster.listen-address=0.0.0.0:0'
+      - '--web.config.file=/etc/alertmanager/web-config.yml'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./config/web-config.yml:/etc/alertmanager/web-config.yml:ro
+      - ./certs:/certs:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - dive-shared
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  # Single shared network for all cross-instance communication
+  # Used by: Hub/Spokes (federation), Monitoring, Shared services
+  dive-shared:
+    external: true
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  prometheus_data:
+    name: shared-prometheus-data
+  grafana_data:
+    name: shared-grafana-data
+  alertmanager_data:
+    name: shared-alertmanager-data
+  token_store_data:
+    name: shared-token-store-data

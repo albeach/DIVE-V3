@@ -1,0 +1,98 @@
+name: Animation E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/src/components/admin/shared/AnimatedButton.tsx'
+      - 'frontend/src/components/admin/shared/AdminPageTransition.tsx'
+      - 'frontend/src/components/admin/shared/PresenceIndicator.tsx'
+      - 'frontend/src/__tests__/e2e/animations/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/components/admin/shared/**'
+      - 'frontend/src/app/admin/**'
+      - 'frontend/src/__tests__/e2e/animations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-animations-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  animation-tests:
+    name: Animation Component Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-animation-tests
+          keycloak-users: >-
+            [
+              {"username":"testuser","password":"password","clearance":"SECRET","coi":[],"countryOfAffiliation":"USA"}
+            ]
+
+      - name: Run animation tests
+        id: animation-tests
+        run: cd frontend && npm run test:e2e:animations
+        env:
+          NODE_ENV: test
+          NEXTAUTH_URL: https://localhost:3000
+          NEXTAUTH_SECRET: test-secret-for-animation-tests
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+          KEYCLOAK_URL: https://localhost:8443
+          KEYCLOAK_REALM: dive-v3-broker-usa
+          KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+          KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          BASE_URL: https://localhost:3000
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: animation-test-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo '## Animation Test Results' >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.animation-tests.outcome }}" = 'success' ]; then
+            echo 'Animation E2E tests passed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Animation E2E tests failed.' >> "$GITHUB_STEP_SUMMARY"
+          fi

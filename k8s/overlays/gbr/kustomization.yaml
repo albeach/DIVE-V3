@@ -1,0 +1,133 @@
+# =============================================================================
+# DIVE V3 - GBR Instance Overlay
+# =============================================================================
+# Kustomize overlay for United Kingdom instance deployment
+# Patches base manifests with GBR-specific configuration
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dive-v3-gbr
+
+# Reference base configuration
+resources:
+  - ../../base
+
+# Patch base namespace with GBR-specific labels
+patches:
+  - path: namespace.yaml
+    target:
+      kind: Namespace
+      name: dive-v3
+
+# Labels for GBR instance
+labels:
+  - pairs:
+      app.kubernetes.io/instance: gbr
+      app.kubernetes.io/part-of: dive-v3-gbr
+
+# Patches for instance-specific configuration
+patches:
+  # Frontend patches
+  - path: frontend/serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: frontend
+  - path: frontend/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: frontend
+  - path: frontend/configmap-patch.yaml
+    target:
+      kind: ConfigMap
+      name: frontend-config
+  - path: frontend/service-patch.yaml
+    target:
+      kind: Service
+      name: frontend
+
+  # Backend patches
+  - path: backend/serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: backend
+  - path: backend/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: backend
+  - path: backend/configmap-patch.yaml
+    target:
+      kind: ConfigMap
+      name: backend-config
+  - path: backend/service-patch.yaml
+    target:
+      kind: Service
+      name: backend
+
+  # Keycloak patches
+  - path: keycloak/serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: keycloak
+  - path: keycloak/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: keycloak
+  - path: keycloak/service-patch.yaml
+    target:
+      kind: Service
+      name: keycloak
+
+  # Database patches (MongoDB, PostgreSQL, Redis)
+  - path: mongo/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: mongo
+  - path: mongo/service-patch.yaml
+    target:
+      kind: Service
+      name: mongo
+  - path: mongo/pvc-patch.yaml
+    target:
+      kind: PersistentVolumeClaim
+      name: mongo-data
+
+  - path: postgres/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: postgres
+  - path: postgres/service-patch.yaml
+    target:
+      kind: Service
+      name: postgres
+  - path: postgres/pvc-patch.yaml
+    target:
+      kind: PersistentVolumeClaim
+      name: postgres-data
+
+  - path: redis/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: redis
+  - path: redis/service-patch.yaml
+    target:
+      kind: Service
+      name: redis
+  - path: redis/pvc-patch.yaml
+    target:
+      kind: PersistentVolumeClaim
+      name: redis-data
+
+  # OPA patches
+  - path: opa/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: opa
+  - path: opa/service-patch.yaml
+    target:
+      kind: Service
+      name: opa
+
+# Images (if different from base)
+images: []

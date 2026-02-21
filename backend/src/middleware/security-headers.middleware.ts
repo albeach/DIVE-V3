@@ -32,7 +32,7 @@ export const securityHeaders = helmet({
             // 'unsafe-inline' needed for inline scripts (consider removing in production with nonce)
             scriptSrc: [
                 "'self'",
-                "'unsafe-inline'", // TODO: Replace with nonce-based CSP in production
+                "'unsafe-inline'", // SECURITY: Replace with nonce-based CSP before production deployment
                 "https://cdn.jsdelivr.net", // For CDN resources if used
             ],
             
@@ -40,7 +40,7 @@ export const securityHeaders = helmet({
             // 'unsafe-inline' needed for inline styles (consider removing in production with nonce)
             styleSrc: [
                 "'self'",
-                "'unsafe-inline'", // TODO: Replace with nonce-based CSP in production
+                "'unsafe-inline'", // SECURITY: Replace with nonce-based CSP before production deployment
                 "https://fonts.googleapis.com",
             ],
             
@@ -63,7 +63,7 @@ export const securityHeaders = helmet({
                 "'self'",
                 process.env.KEYCLOAK_URL || "http://localhost:8081",
                 process.env.OPA_URL || "http://localhost:8181",
-                process.env.KAS_URL || "http://localhost:8080",
+                process.env.KAS_URL || "https://localhost:8080",
             ],
             
             // Frame sources (for iframes)
@@ -87,11 +87,12 @@ export const securityHeaders = helmet({
     },
 
     // HTTP Strict Transport Security (HSTS)
-    // Forces browsers to use HTTPS for all future requests
+    // Production: 1 year, includeSubDomains, preload
+    // Development: 5 minutes, no sub-domains (avoids browser lockout with self-signed certs)
     hsts: {
-        maxAge: 31536000, // 1 year in seconds
-        includeSubDomains: true, // Apply to all subdomains
-        preload: true, // Enable HSTS preloading
+        maxAge: process.env.NODE_ENV === 'production' ? 31536000 : 300,
+        includeSubDomains: process.env.NODE_ENV === 'production',
+        preload: process.env.NODE_ENV === 'production',
     },
 
     // X-Frame-Options: DENY
@@ -189,19 +190,32 @@ export const getCorsConfig = () => {
         'http://localhost:4000', // Backend development
     ];
 
+    // Federation mode: Allow any origin for federated deployments
+    // Security is enforced via JWT authentication, not CORS
+    const federationMode = process.env.ENABLE_FEDERATION_CORS === 'true';
+
     return {
         origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-            // Allow requests with no origin (e.g., mobile apps, Postman)
+            // Allow requests with no origin (e.g., mobile apps, Postman, server-to-server)
             if (!origin) {
                 return callback(null, true);
             }
 
+            // Federation mode: Allow all origins (security via JWT)
+            // IMPORTANT: Return the actual origin (not '*') to support credentials: true
+            if (federationMode) {
+                logger.debug('CORS: Federation mode enabled - allowing origin', { origin });
+                return callback(null, true);
+            }
+
+            // Standard mode: Check allowlist
             if (allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
                 logger.warn('CORS: Blocked request from unauthorized origin', {
                     origin,
                     allowedOrigins,
+                    hint: 'Set ENABLE_FEDERATION_CORS=true to allow all origins (federation mode)'
                 });
                 callback(new Error('Not allowed by CORS'));
             }
@@ -221,6 +235,10 @@ export const getCorsConfig = () => {
             'RateLimit-Reset',
         ],
         maxAge: 86400, // Cache preflight requests for 24 hours
+        // Allow credentials in cross-origin requests (required for credentials: true)
+        // The origin function above returns true, which makes cors middleware
+        // set Access-Control-Allow-Origin to the requesting origin (not *)
+        optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
     };
 };
 
@@ -253,4 +271,3 @@ export const getSecurityHeadersConfig = (): {
         ],
     };
 };
-

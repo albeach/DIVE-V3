@@ -223,4 +223,3 @@ class MetricsService {
 
 // Export singleton instance
 export const metricsService = new MetricsService();
-

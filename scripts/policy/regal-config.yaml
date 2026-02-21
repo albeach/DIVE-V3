@@ -1,0 +1,259 @@
+# DIVE V3 Regal Configuration
+# Phase 6: Continuous Compliance Automation
+#
+# Custom linting rules for DIVE V3 policy standards
+# Based on ACP-240, STANAG 4774/5636, and internal conventions
+#
+# Usage:
+#   regal lint policies/ --config scripts/policy/regal-config.yaml
+#
+# @version 1.0.0
+# @date 2025-12-03
+
+# Configuration for Regal linter
+rules:
+  # ============================================
+  # STYLE RULES
+  # ============================================
+
+  style:
+    # Require consistent line length
+    line-length:
+      level: warning
+      max-line-length: 120
+
+    # Require consistent indentation (tabs)
+    opa-fmt:
+      level: error
+
+    # Require comments on complex rules
+    todo-comment:
+      level: warning
+
+    # Prefer snake_case for rule names
+    prefer-snake-case:
+      level: warning
+
+    # Avoid unnecessary else blocks
+    avoid-get-and-list-prefix:
+      level: ignore
+
+    # Consistent use of some/every keywords
+    prefer-some-in-iteration:
+      level: warning
+
+    # Use sets for membership checks
+    use-in-operator:
+      level: warning
+
+  # ============================================
+  # BUGS RULES
+  # ============================================
+
+  bugs:
+    # Detect constant conditions
+    constant-condition:
+      level: error
+
+    # Detect duplicate imports
+    duplicate-rule:
+      level: error
+
+    # Detect inconsistent args
+    inconsistent-args:
+      level: error
+
+    # Detect invalid metadata annotations
+    invalid-metadata-attribute:
+      level: error
+
+    # Detect unreachable rules
+    rule-shadows-builtin:
+      level: error
+
+    # Detect unused return values
+    not-equals-in-loop:
+      level: error
+
+    # Detect deprecated built-in functions
+    deprecated-builtin:
+      level: error
+
+    # Top-level iteration should use some
+    top-level-iteration:
+      level: warning
+
+  # ============================================
+  # IDIOMATIC RULES
+  # ============================================
+
+  idiomatic:
+    # Use assignment over comparison
+    use-assignment-operator:
+      level: warning
+
+    # Prefer := for assignment
+    no-defined-entrypoint:
+      level: ignore
+
+    # Custom function naming
+    custom-has-key-construct:
+      level: ignore
+
+    # Prefer object access over indexing
+    prefer-object-rule:
+      level: ignore
+
+    # Use boolean operators appropriately
+    boolean-assignment:
+      level: warning
+
+  # ============================================
+  # IMPORTS RULES
+  # ============================================
+
+  imports:
+    # Avoid importing input
+    avoid-importing-input:
+      level: error
+
+    # Redundant data imports
+    redundant-data-import:
+      level: warning
+
+    # Prefer package imports
+    prefer-package-imports:
+      level: warning
+
+    # Import shadows
+    import-shadows-import:
+      level: error
+
+    # Unresolved imports (might be okay for data)
+    unresolved-import:
+      level: ignore
+
+  # ============================================
+  # TESTING RULES
+  # ============================================
+
+  testing:
+    # Test file naming
+    file-missing-test-suffix:
+      level: ignore  # We use convention of _test.rego
+
+    # Test without assertion
+    identically-named-tests:
+      level: error
+
+    # Metasyntactic variable
+    metasyntactic-variable:
+      level: warning
+
+    # Print in test
+    print-or-trace-call:
+      level: warning
+
+  # ============================================
+  # CUSTOM RULES (DIVE V3 Specific)
+  # ============================================
+
+  custom:
+    # These are checked by our custom scripts
+    naming-convention:
+      level: ignore
+
+    # Checked by policy-bundle.yml workflow
+    hardcoded-credentials:
+      level: ignore
+
+# ============================================
+# CAPABILITIES (OPA features allowed)
+# ============================================
+
+capabilities:
+  # Allow OPA 0.68.0 features
+  from:
+    file: capabilities.json
+  # Or specify inline
+  builtins:
+    - name: http.send
+      decl:
+        result:
+          type: object
+    - name: time.now_ns
+      decl:
+        result:
+          type: number
+
+# ============================================
+# IGNORE PATTERNS
+# ============================================
+
+ignore:
+  # Ignore test files for certain rules
+  files:
+    - "**/test_*.rego"
+    - "**/*_test.rego"
+    - "**/testdata/**"
+    - "**/examples/**"
+    - "**/baselines/**"
+
+# ============================================
+# PROJECT METADATA
+# ============================================
+
+project:
+  # Roots for policy resolution
+  roots:
+    - policies/
+
+# ============================================
+# DIVE V3 CUSTOM CHECKS (via policy-bundle.yml)
+# ============================================
+#
+# The following checks are enforced by the CI workflow,
+# not directly by Regal:
+#
+# 1. Package Naming Convention
+#    - All packages must start with 'dive.' namespace
+#    - Enforced by: policy-bundle.yml "Verify Package Naming Convention"
+#
+# 2. No Hardcoded Secrets
+#    - No password, secret, or key literals in policies
+#    - Enforced by: policy-bundle.yml "Check for Hardcoded Values"
+#
+# 3. ACP-240 Compliance Patterns
+#    - Default deny pattern: `default allow := false`
+#    - Fail-secure violations: `is_not_*` prefix for violation checks
+#    - Enforced by: Policy review process
+#
+# 4. Test Coverage Requirements
+#    - Minimum 75% coverage for policy files
+#    - All rules must have corresponding test cases
+#    - Enforced by: policy-bundle.yml "Check Coverage Threshold"
+#
+# 5. Attribute Naming
+#    - Use exact names from spec: uniqueID, clearance, countryOfAffiliation, acpCOI
+#    - Resource attributes: classification, releasabilityTo, COI, creationDate
+#    - Context: currentTime, sourceIP, deviceCompliant, requestId
+#    - Enforced by: Policy review process
+#
+# 6. Country Code Format
+#    - Must use ISO 3166-1 alpha-3 codes: USA, FRA, GBR, DEU, CAN
+#    - NOT: US, FR, GB, DE, CA
+#    - Enforced by: Policy tests
+#
+# 7. Classification Levels
+#    - Valid: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+#    - NATO: NATO_UNCLASSIFIED, NATO_RESTRICTED, NATO_CONFIDENTIAL, NATO_SECRET, COSMIC_TOP_SECRET
+#    - Enforced by: policies/base/clearance/clearance.rego
+
+# ============================================
+# OUTPUT CONFIGURATION
+# ============================================
+
+# Output format for CI integration
+output:
+  format: github  # or: json, sarif, pretty
+

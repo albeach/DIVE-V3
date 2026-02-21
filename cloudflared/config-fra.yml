@@ -1,0 +1,107 @@
+# ============================================================================
+# Cloudflare Tunnel Configuration - FRA Instance (France)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:43Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh fra
+#   3. Restart tunnel: docker compose -p fra up -d --force-recreate cloudflared
+#
+# ============================================================================
+
+tunnel: e07574bd-6f32-478b-8f71-42fc3d4073f7
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
+# Metrics endpoint for monitoring (accessible at localhost:9127)
+metrics: 0.0.0.0:9127
+
+ingress:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: dive-spoke-fra-frontend
+  # Host Port: 3010
+  # Hostname:       fra-app.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-app.dive25.com
+    service: https://localhost:3010
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: fra-app.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: dive-spoke-fra-backend
+  # Host Port: 4010
+  # Hostname:       fra-api.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-api.dive25.com
+    service: https://localhost:4010
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: fra-api.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: dive-spoke-fra-keycloak
+  # Host Port: 8453 (HTTPS)
+  # Hostname:       fra-idp.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-idp.dive25.com
+    service: https://localhost:8453
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: fra-idp.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: dive-spoke-fra-kas
+  # Host Port: 9010
+  # Hostname:       fra-kas.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-kas.dive25.com
+    service: https://localhost:9010
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: fra-kas.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-spoke-fra-opa
+  # Host Port: 8281
+  # Hostname:       fra-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-opa.dive25.com
+    service: http://localhost:8281
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: fra-opa.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Client (Policy Sync from Hub)
+  # Docker Service: dive-spoke-fra-opal-client
+  # Host Port: 9191 (OPAL client exposes inline OPA on 8181, mapped to 9191)
+  # Hostname:       fra-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-opal.dive25.com
+    service: http://localhost:9191
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: fra-opal.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
+  - service: http_status:404

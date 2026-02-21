@@ -1,0 +1,11 @@
+# =============================================================================
+# DIVE V3 PostgreSQL - DEU PVC Patch
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-deu
+  namespace: dive-v3-deu
+  labels:
+    app.kubernetes.io/instance: deu

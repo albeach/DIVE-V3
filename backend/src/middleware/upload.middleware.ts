@@ -1,7 +1,7 @@
 /**
  * Upload Middleware
  * Week 3.2: File Upload Validation and Configuration
- * 
+ *
  * Handles file upload with Multer, validates file type and size
  * ACP-240 compliant with fail-closed security
  */
@@ -57,7 +57,19 @@ const fileFilter = (
         'text/csv': ['csv'],
         'image/png': ['png'],
         'image/jpeg': ['jpg', 'jpeg'],
-        'image/gif': ['gif']
+        'image/gif': ['gif'],
+        // Audio (STANAG 4774/4778)
+        'audio/mpeg': ['mp3'],
+        'audio/mp4': ['m4a'],
+        'audio/x-m4a': ['m4a'],
+        'audio/wav': ['wav'],
+        'audio/x-wav': ['wav'],
+        'audio/webm': ['webm'],
+        'audio/ogg': ['ogg'],
+        // Video (STANAG 4774/4778)
+        'video/mp4': ['mp4'],
+        'video/webm': ['webm'],
+        'video/ogg': ['ogv', 'ogg']
     };
 
     const expectedExtensions = validExtensions[file.mimetype];
@@ -91,7 +103,7 @@ export const upload = multer({
  * Middleware to handle Multer errors
  */
 export const handleUploadErrors = (
-    err: any,
+    err: Error & { code?: string; field?: string },
     req: Request,
     res: Response,
     next: NextFunction
@@ -153,7 +165,7 @@ export const validateUploadMetadata = (
         const { classification, releasabilityTo, title } = req.body;
 
         // Validate classification
-        const validClassifications = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+        const validClassifications = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
         if (!classification || !validClassifications.includes(classification)) {
             throw new ValidationError(`Invalid classification. Must be one of: ${validClassifications.join(', ')}`);
         }
@@ -246,4 +258,3 @@ export const validateUploadMetadata = (
         next(error);
     }
 };
-

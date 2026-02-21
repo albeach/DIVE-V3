@@ -1,0 +1,18 @@
+{
+  "id": "587328d6-224f-4769-9de3-383ef74fc07c",
+  "alias": "Post-Broker Classified MFA - DIVE V3 Broker",
+  "description": "Post-broker MFA enforcement for classified clearances (AAL2)",
+  "providerId": "basic-flow",
+  "topLevel": true,
+  "builtIn": false,
+  "authenticationExecutions": [
+    {
+      "authenticatorFlow": true,
+      "requirement": "ALTERNATIVE",
+      "priority": 0,
+      "autheticatorFlow": true,
+      "flowAlias": "Post-Broker MFA Conditional - DIVE V3 Broker",
+      "userSetupAllowed": false
+    }
+  ]
+}

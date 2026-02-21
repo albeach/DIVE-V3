@@ -1,0 +1,331 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/actions/e2e-setup/**'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/actions/e2e-setup/**'
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: 'Test scope to run'
+        required: true
+        type: choice
+        default: core
+        options:
+          - core
+          - full
+      reason:
+        description: 'Execution reason'
+        required: false
+        type: string
+        default: 'Manual E2E validation'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXTAUTH_URL: https://localhost:3000
+  DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+  KEYCLOAK_URL: https://localhost:8443
+  KEYCLOAK_REALM: dive-v3-broker-usa
+  KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+  KEYCLOAK_CLIENT_SECRET: test-client-secret
+  KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
+  MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+  BASE_URL: https://localhost:3000
+
+jobs:
+  e2e-core-smoke:
+    name: E2E - Core Smoke (Required Slice)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-core-smoke-2026
+          start-opa: 'true'
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
+            ]
+      - name: Run core smoke tests
+        run: |
+          cd frontend
+          npx playwright test \
+            src/__tests__/e2e/dynamic/hub/basic.spec.ts \
+            --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured"
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-core-smoke-2026
+          OPA_URL: https://localhost:8181
+          CI: true
+      - name: Upload core smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-core-smoke-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-federation-smoke:
+    name: E2E - Federation Attribute Sync (Nightly/Manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-federation-2026
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-gbr-1","password":"TestUser2025!Pilot","clearance":"SECRET","coi":["NATO"],"countryOfAffiliation":"GBR"}
+            ]
+      - name: Run federation attribute sync tests
+        run: |
+          cd frontend
+          npx playwright test src/__tests__/e2e/federated-attribute-sync.spec.ts
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-federation-2026
+          CI: true
+      - name: Upload federation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-federation-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-full-regression:
+    name: E2E - Full Regression Shard ${{ matrix.shard }} (Nightly/Manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-full-2026
+          start-opa: 'true'
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-secret","password":"Secret123!","clearance":"SECRET","coi":["FVEY"]},
+              {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
+              {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
+            ]
+      - name: Run full E2E regression shard ${{ matrix.shard }}/3
+        run: |
+          cd frontend
+          npx playwright test \
+            --grep-invert '@quarantine' \
+            --shard=${{ matrix.shard }}/3 \
+            src/__tests__/e2e/mfa-complete-flow.spec.ts \
+            src/__tests__/e2e/mfa-conditional.spec.ts \
+            src/__tests__/e2e/external-idp-federation-flow.spec.ts \
+            src/__tests__/e2e/identity-drawer.spec.ts \
+            src/__tests__/e2e/federated-attribute-sync.spec.ts \
+            src/__tests__/e2e/session-lifecycle.spec.ts \
+            src/__tests__/e2e/webauthn-aal3-flow.spec.ts \
+            src/__tests__/e2e/classification-equivalency.spec.ts \
+            src/__tests__/e2e/integration-federation-vs-object.spec.ts \
+            src/__tests__/e2e/admin/ \
+            src/__tests__/e2e/journeys/ \
+            src/__tests__/e2e/cross-cutting/ \
+            src/__tests__/e2e/policies-lab.spec.ts \
+            src/__tests__/e2e/nato-expansion.spec.ts \
+            src/__tests__/e2e/idp-management-revamp.spec.ts \
+            src/__tests__/e2e/kas-integration-flow.spec.ts \
+            src/__tests__/e2e/upload-flow-modern.spec.ts
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-full-2026
+          OPA_URL: https://localhost:8181
+          CI: true
+      - name: Upload shard ${{ matrix.shard }} artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-full-results-shard-${{ matrix.shard }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-quarantine:
+    name: E2E - Quarantined Tests (Non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.test_scope == 'full')
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-quarantine-2026
+          start-opa: 'true'
+          keycloak-users: >-
+            [
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
+              {"username":"testuser-secret","password":"Secret123!","clearance":"SECRET","coi":["FVEY"]}
+            ]
+      - name: Run quarantined tests
+        run: |
+          cd frontend
+          npx playwright test --grep '@quarantine' \
+            src/__tests__/e2e/mfa-complete-flow.spec.ts \
+            src/__tests__/e2e/webauthn-aal3-flow.spec.ts
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-quarantine-2026
+          OPA_URL: https://localhost:8181
+          CI: true
+      - name: Upload quarantine artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-quarantine-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+  e2e-summary:
+    name: E2E Test Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [e2e-core-smoke, e2e-federation-smoke, e2e-full-regression, e2e-quarantine]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## E2E Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Core Smoke | ${{ needs.e2e-core-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Federation Sync | ${{ needs.e2e-federation-smoke.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Full Regression (3 shards) | ${{ needs.e2e-full-regression.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Quarantined Tests | ${{ needs.e2e-quarantine.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ needs.e2e-core-smoke.result }}" != "success" ]]; then
+            echo "Required E2E slice failed (core smoke)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ needs.e2e-federation-smoke.result }}" != "success" ]]; then
+              echo "Federation smoke failed in scheduled/manual run." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
+
+          # Quarantine failures are informational only (non-blocking)
+          if [[ "${{ needs.e2e-quarantine.result }}" == "failure" ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Note:** Quarantined tests failed. These are known-flaky and do not block merges." >> "$GITHUB_STEP_SUMMARY"
+            echo "> See [QUARANTINE.md](../../frontend/src/__tests__/e2e/QUARANTINE.md) for details." >> "$GITHUB_STEP_SUMMARY"
+          fi

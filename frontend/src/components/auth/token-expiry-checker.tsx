@@ -1,35 +1,40 @@
 /**
  * Token Expiry Checker Component
- * 
- * Enhanced session management with:
+ *
+ * Modern 2025 session management with security best practices:
+ * - Server-side validation ONLY (no client-side JWT parsing)
+ * - Database session strategy with NextAuth v5
  * - Warning modal 2 minutes before expiry
- * - Option to extend session
- * - Graceful handling of expired sessions
- * - Error handling for database/network issues
+ * - Automatic session refresh when page is visible
  * - Cross-tab synchronization via Broadcast Channel
  * - Page visibility detection and pause/resume
- * - Server-side validation via heartbeat
- * 
+ * - Clock skew compensation
+ *
+ * Security: All session validation happens server-side. Client receives only
+ * validated expiry times from the heartbeat API, never parses JWTs directly.
+ *
  * Week 3.4+: Advanced Session Management
  */
 
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 import { useRouter } from 'next/navigation';
 import { SessionExpiryModal, type SessionExpiryReason } from './session-expiry-modal';
 import { getSessionSyncManager } from '@/lib/session-sync-manager';
 import { useSessionHeartbeat } from '@/hooks/use-session-heartbeat';
 
-const WARNING_THRESHOLD = 120; // 2 minutes in seconds
-const REFRESH_THRESHOLD = 300; // 5 minutes - attempt refresh when less than this remains
+const WARNING_THRESHOLD = 180; // 3 minutes in seconds (increased for clearer warnings)
+const REFRESH_THRESHOLD = 420; // 7 minutes - attempt refresh when less than this remains (aligned with 8-min server threshold)
+const AUTO_REFRESH_COOLDOWN = 60000; // 1 minute cooldown between auto-refreshes
 
 export function TokenExpiryChecker() {
     const { data: session, status, update } = useSession();
     const router = useRouter();
-    const { sessionHealth, isPageVisible, triggerHeartbeat } = useSessionHeartbeat();
-    
+    const { sessionHealth, isPageVisible, triggerHeartbeat, isLoading, error: heartbeatError } = useSessionHeartbeat();
+
     const [modalOpen, setModalOpen] = useState(false);
     const [modalReason, setModalReason] = useState<SessionExpiryReason>('expired');
     const [timeRemaining, setTimeRemaining] = useState(0);
@@ -38,33 +43,45 @@ export function TokenExpiryChecker() {
     const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const syncManagerRef = useRef(getSessionSyncManager());
 
+    // CRITICAL: Track last auto-refresh time to prevent infinite loop
+    const lastAutoRefreshRef = useRef<number>(0);
+
     // Function to refresh session
     const refreshSession = useCallback(async () => {
         try {
             console.log('[TokenExpiry] Attempting to refresh session...');
-            
+
             // Call the session refresh API
             const response = await fetch('/api/session/refresh', { method: 'POST' });
             const data = await response.json();
-            
+
             if (!response.ok || !data.success) {
+                // If session is already expired (401), don't throw error - just show expired modal
+                if (response.status === 401) {
+                    console.warn('[TokenExpiry] Session already expired, cannot refresh');
+                    setModalReason('expired');
+                    setTimeRemaining(0);
+                    setModalOpen(true);
+                    syncManagerRef.current.notifySessionExpired();
+                    return;
+                }
                 throw new Error(data.message || 'Refresh failed');
             }
-            
+
             // Trigger NextAuth session update
             await update();
-            
+
             // Notify other tabs via broadcast channel
             const expiresAtTimestamp = new Date(data.expiresAt).getTime();
             syncManagerRef.current.notifyTokenRefreshed(expiresAtTimestamp);
-            
+
             // Trigger heartbeat to update session health
             await triggerHeartbeat();
-            
+
             setHasShownWarning(false);
             setModalOpen(false);
             console.log('[TokenExpiry] Session refreshed successfully, notified other tabs');
-            
+
         } catch (error) {
             console.error('[TokenExpiry] Failed to refresh session:', error);
             setModalReason('error');
@@ -76,10 +93,10 @@ export function TokenExpiryChecker() {
     // Subscribe to cross-tab session sync events
     useEffect(() => {
         const syncManager = syncManagerRef.current;
-        
+
         const unsubscribe = syncManager.subscribe((event) => {
             console.log('[TokenExpiry] Received sync event:', event.type);
-            
+
             switch (event.type) {
                 case 'TOKEN_REFRESHED':
                 case 'SESSION_EXTENDED':
@@ -89,26 +106,27 @@ export function TokenExpiryChecker() {
                     setHasShownWarning(false);
                     setModalOpen(false);
                     break;
-                    
+
                 case 'SESSION_EXPIRED':
                     // Another tab detected expiry
                     console.warn('[TokenExpiry] Session expired in another tab');
                     setModalReason('expired');
                     setModalOpen(true);
                     break;
-                    
+
                 case 'USER_LOGOUT':
                     // User logged out in another tab
                     console.log('[TokenExpiry] User logged out in another tab');
-                    signOut({ callbackUrl: '/' });
+                    // Skip Keycloak redirect since SSO already terminated in other tab
+                    federatedLogout({ skipKeycloakRedirect: true, reason: 'cross_tab_logout' });
                     break;
-                    
+
                 case 'WARNING_SHOWN':
                     // Another tab showed warning - coordinate state
                     console.log('[TokenExpiry] Warning shown in another tab');
                     setHasShownWarning(true);
                     break;
-                    
+
                 case 'WARNING_DISMISSED':
                     // Another tab dismissed warning
                     console.log('[TokenExpiry] Warning dismissed in another tab');
@@ -116,13 +134,13 @@ export function TokenExpiryChecker() {
                     break;
             }
         });
-        
+
         return () => {
             unsubscribe();
         };
     }, [update]);
 
-    // Main expiry checking logic - use server-validated session health when available
+    // Main expiry checking logic - SECURITY: Server-side validation ONLY
     useEffect(() => {
         if (status !== 'authenticated' || !session) {
             // Clear any existing timer
@@ -133,66 +151,43 @@ export function TokenExpiryChecker() {
             return;
         }
 
-        const accessToken = (session as any).accessToken;
-        
-        if (!accessToken) {
-            console.warn('[TokenExpiry] No access token in session');
+        // Handle heartbeat errors
+        if (heartbeatError) {
+            console.error('[TokenExpiry] Heartbeat error:', heartbeatError);
             setModalReason('error');
-            setErrorMessage('Your session is invalid. Please login again.');
+            setErrorMessage('Unable to validate your session. Please try again.');
             setModalOpen(true);
             return;
         }
 
-        // Prefer server-validated session health over client-side JWT parsing
-        let expiresAt: number;
-        let secondsRemaining: number;
+        // Wait for initial heartbeat to complete before checking expiry
+        // This ensures we only use server-validated session data
+        if (isLoading || !sessionHealth) {
+            console.log('[TokenExpiry] Waiting for server validation...');
+            return;
+        }
 
-        if (sessionHealth && sessionHealth.isValid) {
-            // Use server-provided expiry (compensated for clock skew)
-            expiresAt = sessionHealth.expiresAt;
-            const now = Date.now() - sessionHealth.serverTimeOffset; // Adjust for clock skew
-            secondsRemaining = Math.floor((expiresAt - now) / 1000);
-            
-            console.log('[TokenExpiry] Using server-validated session health:', {
+        // Validate that server confirmed session is valid
+        if (!sessionHealth.isValid) {
+            console.warn('[TokenExpiry] Server reports session invalid');
+            setModalReason('expired');
+            setTimeRemaining(0);
+            setModalOpen(true);
+            syncManagerRef.current.notifySessionExpired();
+            return;
+        }
+
+        // Use ONLY server-provided expiry (with clock skew compensation)
+        const expiresAt = sessionHealth.expiresAt;
+        const now = Date.now() - sessionHealth.serverTimeOffset; // Adjust for clock skew
+        const secondsRemaining = Math.floor((expiresAt - now) / 1000);
+
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[TokenExpiry] Server-validated session:', {
                 expiresAt: new Date(expiresAt).toISOString(),
                 secondsRemaining,
-                clockSkew: Math.floor(sessionHealth.serverTimeOffset / 1000) + 's',
+                clockSkewMs: sessionHealth.serverTimeOffset,
             });
-        } else {
-            // Fallback to client-side JWT parsing
-            try {
-                const parts = accessToken.split('.');
-                if (parts.length !== 3) {
-                    console.warn('[TokenExpiry] Invalid token format');
-                    setModalReason('error');
-                    setErrorMessage('Your session is invalid. Please login again.');
-                    setModalOpen(true);
-                    return;
-                }
-
-                const payload = JSON.parse(atob(parts[1]));
-                const exp = payload.exp;
-                
-                if (!exp) {
-                    console.warn('[TokenExpiry] No expiration in token');
-                    return;
-                }
-
-                expiresAt = exp * 1000;
-                const now = Date.now();
-                secondsRemaining = Math.floor((expiresAt - now) / 1000);
-                
-                console.log('[TokenExpiry] Using client-side JWT parsing (fallback):', {
-                    expiresAt: new Date(expiresAt).toISOString(),
-                    secondsRemaining,
-                });
-            } catch (error) {
-                console.error('[TokenExpiry] Error parsing token:', error);
-                setModalReason('error');
-                setErrorMessage('An error occurred while checking your session.');
-                setModalOpen(true);
-                return;
-            }
         }
 
         // If already expired, show expired modal
@@ -206,8 +201,13 @@ export function TokenExpiryChecker() {
         }
 
         // Auto-refresh if getting close to expiry (under 5 minutes) and page is visible
-        if (secondsRemaining < REFRESH_THRESHOLD && secondsRemaining > WARNING_THRESHOLD && !hasShownWarning && isPageVisible) {
-            console.log('[TokenExpiry] Auto-refreshing session (under 5 minutes, page visible)');
+        // CRITICAL: Use cooldown to prevent infinite refresh loop
+        const timeSinceLastRefresh = Date.now() - lastAutoRefreshRef.current;
+        const canAutoRefresh = timeSinceLastRefresh > AUTO_REFRESH_COOLDOWN;
+
+        if (secondsRemaining < REFRESH_THRESHOLD && secondsRemaining > WARNING_THRESHOLD && !hasShownWarning && isPageVisible && canAutoRefresh) {
+            console.log('[TokenExpiry] Auto-refreshing session (under 5 minutes, page visible, cooldown ok)');
+            lastAutoRefreshRef.current = Date.now();
             refreshSession();
         }
 
@@ -226,9 +226,9 @@ export function TokenExpiryChecker() {
             timerIntervalRef.current = setInterval(() => {
                 const now = sessionHealth ? Date.now() - sessionHealth.serverTimeOffset : Date.now();
                 const remaining = Math.floor((expiresAt - now) / 1000);
-                
+
                 setTimeRemaining(Math.max(0, remaining));
-                
+
                 // If expired while modal open, switch to expired
                 if (remaining <= 0 && modalOpen) {
                     console.warn('[TokenExpiry] Token expired during warning period');
@@ -248,7 +248,7 @@ export function TokenExpiryChecker() {
                 timerIntervalRef.current = null;
             }
         };
-    }, [session, status, sessionHealth, isPageVisible, modalOpen, modalReason, hasShownWarning, refreshSession]);
+    }, [session, status, sessionHealth, isPageVisible, modalOpen, modalReason, hasShownWarning, refreshSession, isLoading, heartbeatError]);
 
     const handleExtendSession = async () => {
         await refreshSession();
@@ -271,4 +271,3 @@ export function TokenExpiryChecker() {
         />
     );
 }
-

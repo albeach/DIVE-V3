@@ -1,0 +1,202 @@
+{
+  "title": "Recursos",
+  "subtitle": "Gestionar y acceder a recursos de información de la coalición",
+  "list": {
+    "title": "Navegador de recursos",
+    "searchPlaceholder": "Buscar recursos por título, clasificación o etiquetas...",
+    "noResults": "No se encontraron recursos",
+    "totalResources": "{{count}} recursos",
+    "showing": "Mostrando {{start}}-{{end}} de {{total}}",
+    "loadMore": "Cargar más",
+    "refresh": "Actualizar"
+  },
+  "filters": {
+    "title": "Filtros",
+    "clearAll": "Limpiar todo",
+    "classification": "Clasificación",
+    "releasability": "Difusión",
+    "coi": "Comunidad de interés",
+    "dateRange": "Rango de fechas",
+    "fileType": "Tipo de Archivo",
+    "encrypted": "Solo recursos encriptados",
+    "apply": "Aplicar filtros",
+    "reset": "Restablecer"
+  },
+  "fileTypes": {
+    "documents": "Documentos",
+    "images": "Imágenes",
+    "videos": "Videos",
+    "audio": "Audio",
+    "structured": "Estructurados",
+    "archives": "Archivos",
+    "text": "Texto",
+    "code": "Código"
+  },
+  "table": {
+    "title": "Título",
+    "classification": "Clasificación",
+    "releasability": "Difusión",
+    "created": "Creado",
+    "modified": "Modificado",
+    "actions": "Acciones",
+    "view": "Ver",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "download": "Descargar",
+    "requestAccess": "Solicitar acceso"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "No se encontraron resultados",
+      "description": "No pudimos encontrar documentos que coincidan con \"{{query}}\". Intente ajustar sus términos de búsqueda o filtros.",
+      "clearSearch": "Limpiar búsqueda"
+    },
+    "noMatchingDocuments": {
+      "title": "No hay documentos coincidentes",
+      "description": "Sus filtros actuales no coinciden con ningún documento. Intente relajar sus criterios de filtro.",
+      "clearFilters": "Limpiar filtros"
+    },
+    "error": {
+      "title": "Ocurrió un error",
+      "description": "Encontramos un error al cargar los documentos. Por favor, inténtelo de nuevo.",
+      "tryAgain": "Intentar de nuevo"
+    }
+  },
+  "detail": {
+    "title": "Detalles del recurso",
+    "metadata": "Metadatos",
+    "resourceId": "ID del recurso",
+    "createdBy": "Creado por",
+    "createdDate": "Fecha de creación",
+    "lastModified": "Última modificación",
+    "fileSize": "Tamaño del archivo",
+    "contentType": "Tipo de contenido",
+    "accessLog": "Registro de acceso",
+    "noAccessHistory": "No hay historial de acceso disponible"
+  },
+  "upload": {
+    "title": "Subir recurso",
+    "dragDrop": "Arrastre y suelte archivos aquí, o haga clic para navegar",
+    "selectFile": "Seleccionar archivo",
+    "maxSize": "Tamaño máximo del archivo: {{size}}MB",
+    "allowedTypes": "Tipos permitidos: {{types}}",
+    "metadata": {
+      "title": "Metadatos del recurso",
+      "titleLabel": "Título",
+      "titlePlaceholder": "Ingrese el título del recurso",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Ingrese la descripción del recurso",
+      "classification": "Nivel de clasificación",
+      "releasability": "Difundible a",
+      "coi": "Comunidades de interés",
+      "tags": "Etiquetas",
+      "encryption": "Encriptación"
+    },
+    "uploading": "Subiendo...",
+    "uploadProgress": "{{percent}}% subido",
+    "uploadSuccess": "Recurso subido exitosamente",
+    "uploadError": "Error al subir el recurso",
+    "cancel": "Cancelar subida"
+  },
+  "access": {
+    "requesting": "Solicitando acceso...",
+    "granted": "Acceso concedido",
+    "denied": "Acceso denegado",
+    "pending": "Acceso pendiente",
+    "reasonDenied": "Razón: {{reason}}",
+    "requestKey": "Solicitar clave de descifrado",
+    "keyReceived": "Clave de descifrado recibida",
+    "decrypting": "Descifrando...",
+    "decrypted": "Descifrado exitosamente"
+  },
+  "errors": {
+    "notFound": "Recurso no encontrado",
+    "accessDenied": "No tiene permisos para acceder a este recurso",
+    "loadFailed": "Error al cargar el recurso",
+    "uploadFailed": "Error al subir el recurso",
+    "deleteFailed": "Error al eliminar el recurso",
+    "insufficientClearance": "Nivel de autorización insuficiente",
+    "countryNotReleased": "Recurso no difundido a su país",
+    "coiNotMember": "No es miembro de la COI requerida"
+  },
+  "breadcrumbs": {
+    "resources": "Recursos",
+    "upload": "Subir",
+    "detail": "Detalles"
+  },
+  "federation": {
+    "local": "Local",
+    "federated": "Federado"
+  },
+  "classifications": {
+    "unclassified": "NO CLASIFICADO",
+    "restricted": "RESTRINGIDO",
+    "confidential": "CONFIDENCIAL",
+    "secret": "SECRETO",
+    "topSecret": "TOP SECRETO"
+  },
+  "auth": {
+    "signInToView": "Inicie sesión para ver recursos",
+    "needAuthentication": "Necesita estar autenticado para acceder a recursos de la coalición."
+  },
+  "sorting": {
+    "titleAZ": "Título A-Z",
+    "titleZA": "Título Z-A",
+    "newest": "Más reciente",
+    "oldest": "Más antiguo"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Documentos totales",
+    "ztdfEncrypted": "Encriptado ZTDF",
+    "local": "Local",
+    "federated": "Federado",
+    "classification": "Clasificación",
+    "instances": "instancias",
+    "accessRate": "Tasa de acceso",
+    "avgAge": "Edad promedio",
+    "topCOIs": "Top COI",
+    "coalition": "Coalición"
+  },
+  "viewModes": {
+    "grid": "Cuadrícula",
+    "list": "Lista",
+    "compact": "Compacto"
+  },
+  "bulkActions": {
+    "selected": "seleccionado",
+    "deselectAll": "Deseleccionar todo",
+    "selectAll": "Seleccionar todo",
+    "export": "Exportar",
+    "compare": "Comparar",
+    "compareTooltip": {
+      "selectMin": "Seleccione al menos 2 elementos para comparar",
+      "maxItems": "Puede comparar hasta 4 elementos",
+      "compareSelected": "Comparar elementos seleccionados"
+    }
+  },
+  "comparison": {
+    "title": "Comparar recursos",
+    "closeTooltip": "Cerrar (Escape)",
+    "metadata": "Metadatos"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Sin marcadores aún",
+      "description": "Marque documentos y políticas para acceso rápido. Haga clic en el icono de marcador en cualquier recurso para guardarlo aquí."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Fecha de creación",
+    "quickSelect": "Selección rápida",
+    "today": "Hoy",
+    "last7Days": "Últimos 7 días",
+    "last30Days": "Últimos 30 días",
+    "last90Days": "Últimos 90 días",
+    "thisMonth": "Este mes",
+    "lastMonth": "Mes pasado",
+    "customRange": "Rango personalizado",
+    "placeholder": "Filtrar por rango de fechas",
+    "clickToStart": "Haga clic en una fecha para comenzar la selección",
+    "clickToComplete": "Haga clic en otra fecha para completar el rango"
+  }
+}

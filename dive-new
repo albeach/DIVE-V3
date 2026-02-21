@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# =============================================================================
+# DIVE V3 CLI - Modular Unified Management Script (v5.0.0 - Consolidated)
+# =============================================================================
+# Usage:
+#   ./dive [options] [command] [subcommand] [args...]
+#
+# Global Options:
+#   --env local|gcp|pilot    Set environment (default: local)
+#   --instance usa|fra|deu   Set instance (default: usa)
+#   --dry-run                Show what would be done without executing
+#   --verbose                Show detailed output
+#   --quiet                  Suppress non-essential output
+#
+# Examples:
+#   ./dive hub deploy              # Deploy Hub
+#   ./dive spoke deploy ALB        # Deploy Albania spoke
+#   ./dive federation link ALB     # Link federation
+#   ./dive cleanup --all --force   # Clean everything
+# =============================================================================
+
+set -e
+
+# CLI Version
+DIVE_CLI_VERSION="5.0.0"
+DIVE_CLI_BUILD_DATE="2026-01-22"
+
+# Project root
+DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export DIVE_ROOT
+
+# Modules directory
+MODULES_DIR="${DIVE_ROOT}/scripts/dive-modules"
+
+# =============================================================================
+# MODULE LOADER - Consolidated paths preferred
+# =============================================================================
+
+# Load module with fallback to old location
+load_module() {
+    local new_path="$1"
+    local old_path="$2"
+
+    if [ -f "${MODULES_DIR}/${new_path}" ]; then
+        source "${MODULES_DIR}/${new_path}"
+    elif [ -f "${MODULES_DIR}/${old_path}" ]; then
+        source "${MODULES_DIR}/${old_path}"
+    else
+        log_error "Module not found: $new_path (or $old_path)"
+        return 1
+    fi
+}
+
+# =============================================================================
+# LOAD CORE MODULES
+# =============================================================================
+
+# Load common functions (SSOT)
+if [ -f "${MODULES_DIR}/common.sh" ]; then
+    source "${MODULES_DIR}/common.sh"
+    export DIVE_COMMON_LOADED=1
+else
+    echo "ERROR: Common module not found at ${MODULES_DIR}/common.sh"
+    exit 1
+fi
+
+# =============================================================================
+# ARGUMENT PARSING
+# =============================================================================
+
+# Parse global options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --env)
+            ENVIRONMENT="$2"
+            shift 2
+            ;;
+        --instance)
+            INSTANCE="$2"
+            shift 2
+            ;;
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --verbose|-v)
+            VERBOSE=true
+            shift
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        -h|--help)
+            load_module "utilities/help.sh" "help.sh"
+            cmd_help
+            exit 0
+            ;;
+        --version|-V)
+            echo "DIVE CLI v${DIVE_CLI_VERSION} (${DIVE_CLI_BUILD_DATE})"
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# =============================================================================
+# MAIN COMMAND DISPATCH
+# =============================================================================
+
+COMMAND="${1:-help}"
+shift || true
+
+cd "$DIVE_ROOT"
+
+case "$COMMAND" in
+    # Hub commands (deployment/hub.sh)
+    hub)
+        load_module "deployment/hub.sh" "hub.sh"
+        module_hub "$@"
+        ;;
+
+    # Spoke commands (deployment/spoke.sh)
+    spoke)
+        load_module "deployment/spoke.sh" "spoke.sh"
+        module_spoke "$@"
+        ;;
+
+    # Federation commands (federation/setup.sh)
+    federation|fed)
+        load_module "federation/setup.sh" "federation.sh"
+        module_federation "$@"
+        ;;
+
+    # Secrets commands (configuration/secrets.sh)
+    secrets)
+        load_module "configuration/secrets.sh" "secrets.sh"
+        module_secrets "$@"
+        ;;
+
+    # Terraform commands (configuration/terraform.sh)
+    tf|terraform)
+        load_module "configuration/terraform.sh" "terraform.sh"
+        module_terraform "$@"
+        ;;
+
+    # Orchestration database commands (orchestration/state.sh)
+    orch-db)
+        load_module "orchestration/state.sh" "orchestration-state-db.sh"
+        module_orch_db "$@"
+        ;;
+
+    # Policy commands (utilities/policy.sh)
+    policy)
+        load_module "utilities/policy.sh" "policy.sh"
+        module_policy "$@"
+        ;;
+
+    # SP Client commands (utilities/sp.sh)
+    sp)
+        load_module "utilities/sp.sh" "sp.sh"
+        module_sp "$@"
+        ;;
+
+    # Pilot VM commands (utilities/pilot.sh)
+    pilot)
+        load_module "utilities/pilot.sh" "pilot.sh"
+        module_pilot "$@"
+        ;;
+
+    # Cleanup commands (deployment/rollback.sh)
+    cleanup)
+        load_module "deployment/rollback.sh" "deploy.sh"
+        cmd_cleanup "$@"
+        ;;
+
+    # Core commands (core.sh) - legacy support
+    up|down|restart|logs|ps|exec)
+        if [ -f "${MODULES_DIR}/core.sh" ]; then
+            source "${MODULES_DIR}/core.sh"
+            case "$COMMAND" in
+                up)      cmd_up "$@" ;;
+                down)    cmd_down "$@" ;;
+                restart) cmd_restart "$@" ;;
+                logs)    cmd_logs "$@" ;;
+                ps)      cmd_ps "$@" ;;
+                exec)    cmd_exec "$@" ;;
+            esac
+        else
+            log_error "Core module not found. Use 'hub' or 'spoke' commands instead."
+            exit 1
+        fi
+        ;;
+
+    # Status commands (status.sh) - legacy support
+    status|health|validate|info)
+        if [ -f "${MODULES_DIR}/status.sh" ]; then
+            source "${MODULES_DIR}/status.sh"
+            case "$COMMAND" in
+                status)   cmd_status "$@" ;;
+                health)   cmd_health "$@" ;;
+                validate) cmd_validate "$@" ;;
+                info)     cmd_info "$@" ;;
+            esac
+        else
+            log_error "Status module not found"
+            exit 1
+        fi
+        ;;
+
+    # Deployment commands (deploy.sh) - legacy support
+    deploy|reset|clean|nuke)
+        if [ -f "${MODULES_DIR}/deploy.sh" ]; then
+            source "${MODULES_DIR}/deploy.sh"
+            case "$COMMAND" in
+                deploy) cmd_deploy "$@" ;;
+                reset)  cmd_reset "$@" ;;
+                clean)  cmd_reset "$@" ;;
+                nuke)
+                    load_module "deployment/rollback.sh" "deploy.sh"
+                    cmd_nuke
+                    ;;
+            esac
+        else
+            load_module "deployment/rollback.sh" "deploy.sh"
+            case "$COMMAND" in
+                deploy) log_error "Use './dive hub deploy' or './dive spoke deploy <CODE>'" ;;
+                reset|clean) cmd_cleanup "$@" ;;
+                nuke) cmd_nuke ;;
+            esac
+        fi
+        ;;
+
+    # Database commands - legacy support
+    seed|backup|restore)
+        if [ -f "${MODULES_DIR}/db.sh" ]; then
+            source "${MODULES_DIR}/db.sh"
+            case "$COMMAND" in
+                seed)    cmd_seed "$@" ;;
+                backup)  cmd_backup ;;
+                restore) cmd_restore "$@" ;;
+            esac
+        else
+            load_module "utilities/backup.sh" ""
+            case "$COMMAND" in
+                backup)  backup_create "$@" ;;
+                restore) backup_restore "$@" ;;
+                seed)    log_error "Use './dive hub seed' or './dive spoke seed <CODE>'" ;;
+            esac
+        fi
+        ;;
+
+    # Help
+    help|--help|-h)
+        load_module "utilities/help.sh" "help.sh"
+        cmd_help
+        ;;
+
+    # Version
+    version)
+        echo "DIVE CLI v${DIVE_CLI_VERSION} (${DIVE_CLI_BUILD_DATE})"
+        echo "Architecture: Consolidated (30 modules)"
+        ;;
+
+    # Unknown command
+    *)
+        log_error "Unknown command: $COMMAND"
+        echo ""
+        echo "Run './dive help' for usage information."
+        exit 1
+        ;;
+esac

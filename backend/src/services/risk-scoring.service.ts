@@ -147,16 +147,17 @@ class RiskScoringService {
             });
 
             return comprehensiveScore;
-        } catch (error: any) {
+        } catch (error) {
             const duration = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             logger.error('Risk scoring failed', {
                 submissionId: submissionData.submissionId,
-                error: error.message,
+                error: errorMessage,
                 durationMs: duration,
             });
 
             // Return fail-safe minimal score
-            return this.createFailSafeScore(error.message);
+            return this.createFailSafeScore(errorMessage);
         }
     }
 
@@ -692,4 +693,3 @@ class RiskScoringService {
 
 // Export singleton instance
 export const riskScoringService = new RiskScoringService();
-

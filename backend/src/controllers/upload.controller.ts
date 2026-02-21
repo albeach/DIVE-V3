@@ -1,7 +1,7 @@
 /**
  * Upload Controller
  * Week 3.2: Secure File Upload with Authorization
- * 
+ *
  * REST API controller for file upload with OPA authorization enforcement
  * ACP-240 compliant with fail-closed security
  */
@@ -12,13 +12,14 @@ import { uploadFile } from '../services/upload.service';
 import { IUploadMetadata, IUploaderInfo } from '../types/upload.types';
 import { ValidationError, ForbiddenError, UnauthorizedError } from '../middleware/error.middleware';
 import axios from 'axios';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 
 /**
  * Upload file handler
  * POST /api/upload
- * 
+ *
  * Requires:
  * - Multipart form data with 'file' field
  * - Metadata: classification, releasabilityTo, COI (optional), title
@@ -41,6 +42,8 @@ export const uploadFileHandler = async (
         // 2. Extract and validate metadata
         const metadata: IUploadMetadata = {
             classification: req.body.classification,
+            originalClassification: req.body.originalClassification,  // ACP-240 Section 4.3
+            originalCountry: req.body.originalCountry,                // ACP-240 Section 4.3
             releasabilityTo: req.body.releasabilityTo, // Already parsed by validateUploadMetadata middleware
             COI: req.body.COI || [],
             caveats: req.body.caveats || [],
@@ -129,7 +132,7 @@ export const uploadFileHandler = async (
 
 /**
  * Enforce upload authorization via OPA
- * 
+ *
  * Rules:
  * - User must be authenticated
  * - User clearance must be >= upload classification
@@ -187,12 +190,15 @@ async function enforceUploadAuthorization(
         });
 
         // Call OPA decision endpoint (same as authz middleware)
+        const httpsAgent = getSecureHttpsAgent();
+
         const response = await axios.post(
             `${OPA_URL}/v1/data/dive/authorization`,
             opaInput,
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 5000
+                timeout: 5000,
+                httpsAgent,
             }
         );
 
@@ -249,4 +255,3 @@ async function enforceUploadAuthorization(
         throw new ForbiddenError('Authorization service unavailable (fail-closed)');
     }
 }
-

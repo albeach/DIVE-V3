@@ -1,0 +1,54 @@
+{
+  "timestamp": "2025-12-03T01:47:32.000Z",
+  "source": {
+    "hash": "phase6-initial-baseline",
+    "policy_count": 53,
+    "commit": "phase6-complete"
+  },
+  "bundles": {
+    "usa": {
+      "revision": "2025-12-03T01-47-32-096Z",
+      "tenant": "USA",
+      "bundleId": "dive-v3-usa",
+      "classification_system": "US_STANDARD",
+      "opal_scope": "tenant:usa"
+    },
+    "fra": {
+      "revision": "2025-12-03T01-47-32-213Z",
+      "tenant": "FRA",
+      "bundleId": "dive-v3-fra",
+      "classification_system": "FRENCH_DEFENSE",
+      "opal_scope": "tenant:fra"
+    },
+    "gbr": {
+      "revision": "2025-12-03T01-47-32-328Z",
+      "tenant": "GBR",
+      "bundleId": "dive-v3-gbr",
+      "classification_system": "UK_GSC",
+      "opal_scope": "tenant:gbr"
+    },
+    "deu": {
+      "revision": "2025-12-03T01-47-32-443Z",
+      "tenant": "DEU",
+      "bundleId": "dive-v3-deu",
+      "classification_system": "GERMAN_VS",
+      "opal_scope": "tenant:deu"
+    }
+  },
+  "status": "baseline",
+  "metrics": {
+    "totalTests": 801,
+    "passingTests": 801,
+    "coverage": 86.29,
+    "bundleBuildTime": "451ms"
+  }
+}
+
+
+
+
+
+
+
+
+

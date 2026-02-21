@@ -1,0 +1,83 @@
+# =============================================================================
+# OPTIMIZED Production Dockerfile for DIVE V3 Frontend (Next.js)
+# =============================================================================
+# Zero Trust: Frontend serves HTTPS internally (custom server.js)
+# Multi-tenant: NEXT_PUBLIC_ vars replaced at container startup via entrypoint
+# Size: ~400MB (93% reduction from dev image)
+# =============================================================================
+
+FROM node:24-alpine AS base
+RUN apk add --no-cache libc6-compat tzdata ca-certificates
+WORKDIR /app
+
+# =============================================================================
+# STAGE 1: Install PRODUCTION dependencies only
+# =============================================================================
+FROM base AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --no-audit --no-fund && \
+    npm cache clean --force
+
+# =============================================================================
+# STAGE 2: Build application with ALL dependencies
+# =============================================================================
+FROM base AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# Build with placeholder NEXT_PUBLIC_ values — replaced at runtime by entrypoint
+# This allows a single ECR image to serve any spoke (GBR, FRA, DEU, etc.)
+ENV NEXT_PUBLIC_INSTANCE=__NEXT_PUBLIC_INSTANCE__
+ENV NEXT_PUBLIC_INSTANCE_NAME="__NEXT_PUBLIC_INSTANCE_NAME__"
+ENV NEXT_PUBLIC_API_URL=__NEXT_PUBLIC_API_URL__
+ENV NEXT_PUBLIC_KEYCLOAK_URL=__NEXT_PUBLIC_KEYCLOAK_URL__
+ENV NEXT_PUBLIC_KEYCLOAK_REALM=__NEXT_PUBLIC_KEYCLOAK_REALM__
+ENV NEXT_PUBLIC_BACKEND_URL=__NEXT_PUBLIC_BACKEND_URL__
+ENV NEXT_PUBLIC_BASE_URL=__NEXT_PUBLIC_BASE_URL__
+ENV NEXT_PUBLIC_EXTERNAL_DOMAINS=__NEXT_PUBLIC_EXTERNAL_DOMAINS__
+
+RUN npm run build
+
+# =============================================================================
+# STAGE 3: Production runtime (minimal)
+# =============================================================================
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone output (includes Next.js minimal node_modules)
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Override Next.js standalone HTTP server.js with custom HTTPS server.js
+# Uses NextServer (standalone-compatible) — not require('next') (needs webpack)
+# Zero Trust: ALL internal traffic must be TLS-encrypted
+COPY --from=builder --chown=nextjs:nodejs /app/server.standalone.js ./server.js
+
+# Runtime NEXT_PUBLIC_ entrypoint: replaces __PLACEHOLDER__ values in compiled JS
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["node", "server.js"]

@@ -1,0 +1,191 @@
+{
+  "title": "Resources",
+  "subtitle": "Manage and access coalition information resources",
+  "list": {
+    "title": "Resource Browser",
+    "searchPlaceholder": "Search resources by title, classification, or tags...",
+    "noResults": "No resources found",
+    "totalResources": "{{count}} resources",
+    "showing": "Showing {{start}}-{{end}} of {{total}}",
+    "loadMore": "Load More",
+    "refresh": "Refresh"
+  },
+  "filters": {
+    "title": "Filters",
+    "clearAll": "Clear All",
+    "classification": "Classification",
+    "releasability": "Releasability",
+    "coi": "Community of Interest",
+    "dateRange": "Date Range",
+    "encrypted": "Encrypted Resources Only",
+    "apply": "Apply Filters",
+    "reset": "Reset"
+  },
+  "table": {
+    "title": "Title",
+    "classification": "Classification",
+    "releasability": "Releasability",
+    "created": "Created",
+    "modified": "Modified",
+    "actions": "Actions",
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete",
+    "download": "Download",
+    "requestAccess": "Request Access"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "No results found",
+      "description": "We couldn't find any documents matching \"{{query}}\". Try adjusting your search terms or filters.",
+      "clearSearch": "Clear search"
+    },
+    "noMatchingDocuments": {
+      "title": "No matching documents",
+      "description": "Your current filters don't match any documents. Try loosening your filter criteria.",
+      "clearFilters": "Clear filters"
+    },
+    "error": {
+      "title": "An error occurred",
+      "description": "We encountered an error while loading documents. Please try again.",
+      "tryAgain": "Try again"
+    }
+  },
+  "detail": {
+    "title": "Resource Details",
+    "metadata": "Metadata",
+    "resourceId": "Resource ID",
+    "createdBy": "Created By",
+    "createdDate": "Created Date",
+    "lastModified": "Last Modified",
+    "fileSize": "File Size",
+    "contentType": "Content Type",
+    "accessLog": "Access Log",
+    "noAccessHistory": "No access history available"
+  },
+  "upload": {
+    "title": "Upload Resource",
+    "dragDrop": "Drag and drop files here, or click to browse",
+    "selectFile": "Select File",
+    "maxSize": "Maximum file size: {{size}}MB",
+    "allowedTypes": "Allowed types: {{types}}",
+    "metadata": {
+      "title": "Resource Metadata",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter resource title",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter resource description",
+      "classification": "Classification Level",
+      "releasability": "Releasable To",
+      "coi": "Communities of Interest",
+      "tags": "Tags",
+      "encryption": "Encryption"
+    },
+    "uploading": "Uploading...",
+    "uploadProgress": "{{percent}}% uploaded",
+    "uploadSuccess": "Resource uploaded successfully",
+    "uploadError": "Failed to upload resource",
+    "cancel": "Cancel Upload"
+  },
+  "access": {
+    "requesting": "Requesting Access...",
+    "granted": "Access Granted",
+    "denied": "Access Denied",
+    "pending": "Access Pending",
+    "reasonDenied": "Reason: {{reason}}",
+    "requestKey": "Request Decryption Key",
+    "keyReceived": "Decryption key received",
+    "decrypting": "Decrypting...",
+    "decrypted": "Decrypted successfully"
+  },
+  "errors": {
+    "notFound": "Resource not found",
+    "accessDenied": "You do not have permission to access this resource",
+    "loadFailed": "Failed to load resource",
+    "uploadFailed": "Failed to upload resource",
+    "deleteFailed": "Failed to delete resource",
+    "insufficientClearance": "Insufficient clearance level",
+    "countryNotReleased": "Resource not released to your country",
+    "coiNotMember": "You are not a member of the required COI"
+  },
+  "breadcrumbs": {
+    "resources": "Resources",
+    "upload": "Upload",
+    "detail": "Details"
+  },
+  "federation": {
+    "local": "Local",
+    "federated": "Federated"
+  },
+  "classifications": {
+    "unclassified": "UNCLASSIFIED",
+    "restricted": "RESTRICTED",
+    "confidential": "CONFIDENTIAL",
+    "secret": "SECRET",
+    "topSecret": "TOP SECRET"
+  },
+  "auth": {
+    "signInToView": "Sign in to view resources",
+    "needAuthentication": "You need to be authenticated to access coalition resources."
+  },
+  "sorting": {
+    "titleAZ": "Title A-Z",
+    "titleZA": "Title Z-A",
+    "newest": "Newest",
+    "oldest": "Oldest"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Total Documents",
+    "ztdfEncrypted": "ZTDF Encrypted",
+    "local": "Local",
+    "federated": "Federated",
+    "classification": "Classification",
+    "instances": "instances",
+    "accessRate": "Access Rate",
+    "avgAge": "Avg Age",
+    "topCOIs": "Top COIs",
+    "coalition": "Coalition"
+  },
+  "viewModes": {
+    "grid": "Grid",
+    "list": "List",
+    "compact": "Compact"
+  },
+  "bulkActions": {
+    "selected": "selected",
+    "deselectAll": "Deselect All",
+    "selectAll": "Select All",
+    "export": "Export",
+    "compare": "Compare",
+    "compareTooltip": {
+      "selectMin": "Select at least 2 items to compare",
+      "maxItems": "Can only compare up to 4 items",
+      "compareSelected": "Compare selected items"
+    }
+  },
+  "comparison": {
+    "title": "Compare Resources",
+    "closeTooltip": "Close (Escape)",
+    "metadata": "Metadata"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "No Bookmarks Yet",
+      "description": "Bookmark documents and policies for quick access. Click the bookmark icon on any resource to save it here."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Creation Date",
+    "quickSelect": "Quick Select",
+    "today": "Today",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "last90Days": "Last 90 days",
+    "thisMonth": "This month",
+    "lastMonth": "Last month",
+    "customRange": "Custom range",
+    "placeholder": "Filter by date range",
+    "clickToStart": "Click a date to start selection",
+    "clickToComplete": "Click another date to complete range"
+  }
+}

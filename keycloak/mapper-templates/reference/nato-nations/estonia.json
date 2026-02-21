@@ -1,0 +1,139 @@
+{
+  "nation": {
+    "name": "Estonia",
+    "iso3166": "EST",
+    "language": "Estonian",
+    "attributeConvention": "Baltic"
+  },
+  "attributes": {
+    "profile": {
+      "surname": "perekonnanimi",
+      "givenName": "eesnimi",
+      "email": "email"
+    },
+    "nationalId": {
+      "name": "isikukood",
+      "description": "Estonian personal identification code"
+    }
+  },
+  "protocolMappers": [
+    {
+      "name": "family_name",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "perekonnanimi",
+        "claim.name": "family_name",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "given_name",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "eesnimi",
+        "claim.name": "given_name",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "email",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "email",
+        "claim.name": "email",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "preferred_username",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "config": {
+        "user.attribute": "username",
+        "claim.name": "preferred_username",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "countryOfAffiliation",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "riigi_kuuluvus",
+        "claim.name": "countryOfAffiliation",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "clearance",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "julgeolekutase",
+        "claim.name": "clearance",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "uniqueID",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "unikaalne_tunnus",
+        "claim.name": "uniqueID",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "acpCOI",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "huvikogukond",
+        "claim.name": "acpCOI",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String",
+        "multivalued": "true"
+      }
+    },
+    {
+      "name": "nationalId",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "config": {
+        "user.attribute": "isikukood",
+        "claim.name": "nationalId",
+        "id.token.claim": "false",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "false",
+        "jsonType.label": "String"
+      }
+    }
+  ]
+}

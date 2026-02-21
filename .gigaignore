@@ -1,0 +1,53 @@
+# ============================================
+# .gigaignore — HARD ALLOWLIST
+# Keep ONLY:
+#   - backend/**
+#   - frontend/**
+#   - docker-compose.hub.yml
+#   - docker-compose.template.yml (repo currently has templates/spoke/docker-compose.template.yml)
+# Goal:
+#   - stay under ~2,000 included files by excluding generated/low-signal bulk
+# ============================================
+
+# 1) Ignore everything (including deep paths)
+*
+**/*
+
+# 2) Re-allow directories so traversal works (critical)
+!*/
+!***/
+
+# 3) Allow ONLY these root files (must defeat default *.yml)
+!/docker-compose.hub.yml
+!/docker-compose.template.yml
+!templates/spoke/docker-compose.template.yml
+
+# 4) Allow ONLY these directories + their contents
+!backend/
+!backend/**
+
+!frontend/
+!frontend/**
+
+# 5) Defense-in-depth: exclude junk even inside allowed trees
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/.cache/
+**/coverage/
+**/storybook-static/
+**/playwright-report/
+**/test-results/
+**/output/
+**/logs/
+**/policies/uploads/
+**/*.log
+**/*.tmp
+**/*.bak
+**/*.backup
+**/*.swp
+**/*.swo
+**/.DS_Store
+**/.env
+**/.env.*

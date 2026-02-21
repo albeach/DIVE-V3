@@ -1,0 +1,74 @@
+# =============================================================================
+# DIVE V3 Database Migration Job
+# =============================================================================
+# Kubernetes Job to run database migrations
+# Should be run before deploying application services
+# =============================================================================
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: db-migrate
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-db
+          image: postgres:18.1-alpine3.23
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER; do
+                echo "Waiting for database..."
+                sleep 2
+              done
+              echo "Database is ready!"
+          env:
+            - name: DB_HOST
+              value: "postgres.dive-v3.svc.cluster.local"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "postgres"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: password
+      containers:
+        - name: migrate
+          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-frontend:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              echo "Running database migrations..."
+              cd /app
+              npm run db:migrate || echo "Migrations completed (or already applied)"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: url
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

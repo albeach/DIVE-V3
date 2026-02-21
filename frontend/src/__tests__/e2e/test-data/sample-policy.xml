@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DIVE V3 Sample XACML Policy for E2E Testing
+
+  Enforces basic clearance and releasability access control.
+  Used by policies-lab upload tests.
+-->
+<Policy xmlns="urn:oasis:names:tc:xacml:3.0:core:schema:wd-17"
+        PolicyId="dive-v3-test-policy"
+        RuleCombiningAlgId="urn:oasis:names:tc:xacml:3.0:rule-combining-algorithm:deny-overrides"
+        Version="1.0">
+
+  <Description>
+    DIVE V3 E2E Test Policy - Basic clearance and releasability enforcement
+  </Description>
+
+  <Target>
+    <AnyOf>
+      <AllOf>
+        <Match MatchId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+          <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">resource</AttributeValue>
+          <AttributeDesignator
+            AttributeId="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+            DataType="http://www.w3.org/2001/XMLSchema#string"
+            Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+            MustBePresent="false"/>
+        </Match>
+      </AllOf>
+    </AnyOf>
+  </Target>
+
+  <!-- Rule 1: Allow if clearance is sufficient and country is releasable -->
+  <Rule RuleId="clearance-and-releasability-check" Effect="Permit">
+    <Description>Permit access when clearance and releasability requirements are met</Description>
+    <Condition>
+      <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:and">
+        <!-- Clearance check: user clearance >= resource classification -->
+        <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:integer-greater-than-or-equal">
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:integer-one-and-only">
+            <AttributeDesignator
+              AttributeId="urn:dive:v3:attribute:clearance-level"
+              DataType="http://www.w3.org/2001/XMLSchema#integer"
+              Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+              MustBePresent="true"/>
+          </Apply>
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:integer-one-and-only">
+            <AttributeDesignator
+              AttributeId="urn:dive:v3:attribute:classification-level"
+              DataType="http://www.w3.org/2001/XMLSchema#integer"
+              Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+              MustBePresent="true"/>
+          </Apply>
+        </Apply>
+
+        <!-- Releasability check: user country is in releasable-to list -->
+        <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-is-in">
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+            <AttributeDesignator
+              AttributeId="urn:dive:v3:attribute:country-of-affiliation"
+              DataType="http://www.w3.org/2001/XMLSchema#string"
+              Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+              MustBePresent="true"/>
+          </Apply>
+          <AttributeDesignator
+            AttributeId="urn:dive:v3:attribute:releasable-to"
+            DataType="http://www.w3.org/2001/XMLSchema#string"
+            Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+            MustBePresent="true"/>
+        </Apply>
+      </Apply>
+    </Condition>
+  </Rule>
+
+  <!-- Default deny rule -->
+  <Rule RuleId="default-deny" Effect="Deny">
+    <Description>Deny all access not explicitly permitted</Description>
+  </Rule>
+</Policy>

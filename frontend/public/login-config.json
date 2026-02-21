@@ -1,0 +1,839 @@
+{
+    "dive-v3-broker-usa": {
+        "displayName": {
+            "en": "DIVE V3 Super Administrator",
+            "fr": "Super Administrateur DIVE V3"
+        },
+        "description": {
+            "en": {
+                "title": "Welcome to DIVE V3 Admin Portal",
+                "subtitle": "Secure Identity & Access Management",
+                "content": "This portal provides comprehensive tools for managing identity providers, user access, and system audits. Ensure all actions comply with coalition security protocols.",
+                "features": [
+                    {
+                        "icon": "⚙️",
+                        "text": "IdP Governance & Management"
+                    },
+                    {
+                        "icon": "✅",
+                        "text": "Approval Workflows"
+                    },
+                    {
+                        "icon": "📋",
+                        "text": "Comprehensive Audit Logs"
+                    },
+                    {
+                        "icon": "🌍",
+                        "text": "Multi-Nation Support"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Portail d'Administration DIVE V3",
+                "subtitle": "Gestion Sécurisée des Identités et Accès",
+                "content": "Ce portail offre des outils complets pour gérer les fournisseurs d'identité, l'accès des utilisateurs et les audits système. Assurez-vous que toutes les actions respectent les protocoles de sécurité de la coalition.",
+                "features": [
+                    {
+                        "icon": "⚙️",
+                        "text": "Gouvernance et Gestion IdP"
+                    },
+                    {
+                        "icon": "✅",
+                        "text": "Flux d'Approbation"
+                    },
+                    {
+                        "icon": "📋",
+                        "text": "Journaux d'Audit Complets"
+                    },
+                    {
+                        "icon": "🌍",
+                        "text": "Support Multi-Nations"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#2AB079",
+            "accent": "#F59E0B",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/dive-v3-broker-usa.jpg",
+        "logo": "/logos/dive-v3-logo.svg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication is required for CONFIDENTIAL and above clearances.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA setup complete! You can now log in securely."
+                },
+                "fr": {
+                    "setupPrompt": "L'authentification multi-facteurs est requise pour les habilitations CONFIDENTIEL et supérieures.",
+                    "verifyPrompt": "Entrez votre code d'authentification à 6 chiffres",
+                    "setupComplete": "Configuration MFA terminée ! Vous pouvez maintenant vous connecter en toute sécurité."
+                }
+            }
+        }
+    },
+    "usa-idp": {
+        "displayName": {
+            "en": "United States Identity Provider",
+            "fr": "Fournisseur d'Identité des États-Unis"
+        },
+        "description": {
+            "en": {
+                "title": "Secure Access for US Personnel",
+                "subtitle": "Department of Defense Login",
+                "content": "This system is for authorized U.S. Government use only. Unauthorized access is prohibited. All activities are monitored and recorded. By proceeding, you acknowledge and consent to these terms.",
+                "features": [
+                    {
+                        "icon": "🇺🇸",
+                        "text": "US DoD Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "CAC/PIV Card Support"
+                    },
+                    {
+                        "icon": "🌐",
+                        "text": "Global Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Accès Sécurisé pour le Personnel Américain",
+                "subtitle": "Connexion Département de la Défense",
+                "content": "Ce système est réservé à l'usage autorisé du gouvernement américain uniquement. L'accès non autorisé est interdit. Toutes les activités sont surveillées et enregistrées. En continuant, vous reconnaissez et acceptez ces conditions.",
+                "features": [
+                    {
+                        "icon": "🇺🇸",
+                        "text": "Conforme DoD Américain"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Support Carte CAC/PIV"
+                    },
+                    {
+                        "icon": "🌐",
+                        "text": "Accès Global"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#B22234",
+            "accent": "#3C3B6E",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/usa-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIAL and above.",
+                    "verifyPrompt": "Enter your 6-digit code from your authenticator app",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour CONFIDENTIAL et supérieur.",
+                    "verifyPrompt": "Entrez votre code à 6 chiffres depuis votre application d'authentification",
+                    "setupComplete": "MFA configuré avec succès !"
+                }
+            }
+        }
+    },
+    "france-idp": {
+        "displayName": {
+            "en": "France Identity Provider",
+            "fr": "Fournisseur d'Identité Français"
+        },
+        "description": {
+            "en": {
+                "title": "French Defence Network Access",
+                "subtitle": "Secure Authentication Portal",
+                "content": "Access classified resources with your French defence credentials. All access is monitored in accordance with national security policies.",
+                "features": [
+                    {
+                        "icon": "🇫🇷",
+                        "text": "ANSSI Compliant"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Strong Authentication"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "National Classification"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Accès Réseau de Défense Français",
+                "subtitle": "Portail d'Authentification Sécurisé",
+                "content": "Accédez aux ressources classifiées avec vos identifiants de défense français. Tous les accès sont surveillés conformément aux politiques de sécurité nationales.",
+                "features": [
+                    {
+                        "icon": "🇫🇷",
+                        "text": "Conforme ANSSI"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Authentification Forte"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "Classification Nationale"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#0055A4",
+            "accent": "#EF4135",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/france-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "clearanceMappings": {
+                "CONFIDENTIEL DÉFENSE": "CONFIDENTIAL",
+                "SECRET DÉFENSE": "SECRET",
+                "TRÈS SECRET DÉFENSE": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIEL DÉFENSE and above.",
+                    "verifyPrompt": "Enter your authentication code",
+                    "setupComplete": "MFA setup complete!"
+                },
+                "fr": {
+                    "setupPrompt": "L'authentification multi-facteurs est obligatoire pour CONFIDENTIEL DÉFENSE et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification",
+                    "setupComplete": "Configuration MFA terminée !"
+                }
+            }
+        }
+    },
+    "canada-idp": {
+        "displayName": {
+            "en": "Canadian Identity Provider",
+            "fr": "Fournisseur d'Identité Canadien"
+        },
+        "description": {
+            "en": {
+                "title": "Canadian Defence Network",
+                "subtitle": "Secure Access Portal",
+                "content": "Access classified resources using your Canadian Armed Forces credentials. All activities are monitored in accordance with national security policies.",
+                "features": [
+                    {
+                        "icon": "🇨🇦",
+                        "text": "CAF Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Protected B Ready"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Real-Time Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Réseau de Défense Canadien",
+                "subtitle": "Portail d'Accès Sécurisé",
+                "content": "Accédez aux ressources classifiées en utilisant vos identifiants des Forces armées canadiennes. Toutes les activités sont surveillées conformément aux politiques de sécurité nationales.",
+                "features": [
+                    {
+                        "icon": "🇨🇦",
+                        "text": "Conforme FAC"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Prêt Protégé B"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Accès en Temps Réel"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#FF0000",
+            "accent": "#FFFFFF",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/canada-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "clearanceMappings": {
+                "PROTECTED B": "CONFIDENTIAL",
+                "PROTECTED C": "SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for PROTECTED B and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour PROTÉGÉ B et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification à 6 chiffres",
+                    "setupComplete": "MFA configuré avec succès !"
+                }
+            }
+        }
+    },
+    "industry-idp": {
+        "displayName": {
+            "en": "Industry Partner Access",
+            "fr": "Accès Partenaire Industrie"
+        },
+        "description": {
+            "en": {
+                "title": "Industry Partner Portal",
+                "subtitle": "Secure Collaboration Access",
+                "content": "Access coalition resources as an authorized industry partner. All activities are monitored and logged. By proceeding, you acknowledge compliance with applicable security policies.",
+                "features": [
+                    {
+                        "icon": "🏢",
+                        "text": "Partner Verified"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Secure Collaboration"
+                    },
+                    {
+                        "icon": "📊",
+                        "text": "Controlled Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Portail Partenaire Industrie",
+                "subtitle": "Accès Collaboration Sécurisée",
+                "content": "Accédez aux ressources de la coalition en tant que partenaire industriel autorisé. Toutes les activités sont surveillées et enregistrées. En continuant, vous reconnaissez la conformité aux politiques de sécurité applicables.",
+                "features": [
+                    {
+                        "icon": "🏢",
+                        "text": "Partenaire Vérifié"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Collaboration Sécurisée"
+                    },
+                    {
+                        "icon": "📊",
+                        "text": "Accès Contrôlé"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#059669",
+            "accent": "#10B981",
+            "background": "#F0FDF4"
+        },
+        "backgroundImage": "/login-backgrounds/industry-network.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "clearanceMappings": {
+                "PROPRIETARY": "CONFIDENTIAL",
+                "TRADE SECRET": "SECRET",
+                "HIGHLY CONFIDENTIAL": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIAL and above.",
+                    "verifyPrompt": "Enter your authentication code",
+                    "setupComplete": "MFA setup complete!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour CONFIDENTIEL et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification",
+                    "setupComplete": "Configuration MFA terminée !"
+                }
+            }
+        }
+    },
+    "deu-realm-broker": {
+        "displayName": {
+            "en": "Germany (Bundeswehr)",
+            "de": "Deutschland (Bundeswehr)"
+        },
+        "description": {
+            "en": {
+                "title": "German Armed Forces Portal",
+                "subtitle": "Bundeswehr Secure Access",
+                "content": "Access classified resources with your Bundeswehr credentials. All activities are monitored in accordance with German defence security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇩🇪",
+                        "text": "BSI Compliant"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "VS-NfD Classified"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "NATO Integration"
+                    }
+                ]
+            },
+            "de": {
+                "title": "Portal der Bundeswehr",
+                "subtitle": "Gesicherter Zugang Bundeswehr",
+                "content": "Greifen Sie mit Ihren Bundeswehr-Anmeldedaten auf klassifizierte Ressourcen zu. Alle Aktivitäten werden gemäß den deutschen Verteidigungssicherheitsrichtlinien und NATO-Compliance-Standards überwacht.",
+                "features": [
+                    {
+                        "icon": "🇩🇪",
+                        "text": "BSI-konform"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "VS-NfD Verschlusssachen"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "NATO-Integration"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#000000",
+            "accent": "#DD0000",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/germany-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "VS-VERTRAULICH",
+                "GEHEIM",
+                "STRENG GEHEIM"
+            ],
+            "clearanceMappings": {
+                "OFFEN": "UNCLASSIFIED",
+                "VS-VERTRAULICH": "CONFIDENTIAL",
+                "GEHEIM": "SECRET",
+                "STRENG GEHEIM": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for VS-VERTRAULICH and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "de": {
+                    "setupPrompt": "Zwei-Faktor-Authentifizierung erforderlich für VS-VERTRAULICH und höher.",
+                    "verifyPrompt": "Geben Sie Ihren 6-stelligen Authentifizierungscode ein",
+                    "setupComplete": "MFA erfolgreich konfiguriert!"
+                }
+            }
+        }
+    },
+    "gbr-realm-broker": {
+        "displayName": {
+            "en": "United Kingdom (MOD)"
+        },
+        "description": {
+            "en": {
+                "title": "UK Ministry of Defence",
+                "subtitle": "Secure MOD Access Portal",
+                "content": "Access classified resources with your MOD credentials. All access is monitored in accordance with UK national security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇬🇧",
+                        "text": "NCSC Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "OFFICIAL-SENSITIVE"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Real-Time Authorization"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#012169",
+            "accent": "#C8102E",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/uk-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENTIAL",
+                "SECRET",
+                "TOP_SECRET"
+            ],
+            "clearanceMappings": {
+                "UNCLASSIFIED": "UNCLASSIFIED",
+                "OFFICIAL-SENSITIVE": "CONFIDENTIAL",
+                "SECRET": "SECRET",
+                "TOP SECRET": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIAL and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                }
+            }
+        }
+    },
+    "ita-realm-broker": {
+        "displayName": {
+            "en": "Italy (Ministero della Difesa)",
+            "it": "Italia (Ministero della Difesa)"
+        },
+        "description": {
+            "en": {
+                "title": "Italian Defence Portal",
+                "subtitle": "Secure Access for Italian Forces",
+                "content": "Access classified resources with your Italian defence credentials. All activities are monitored in accordance with Italian national security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇮🇹",
+                        "text": "Italian Defence Compliant"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Classification Support"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "NATO Integration"
+                    }
+                ]
+            },
+            "it": {
+                "title": "Portale Difesa Italiana",
+                "subtitle": "Accesso Sicuro per le Forze Italiane",
+                "content": "Accedi alle risorse classificate con le tue credenziali di difesa italiana. Tutte le attività sono monitorate secondo le politiche di sicurezza nazionale italiana e gli standard di conformità NATO.",
+                "features": [
+                    {
+                        "icon": "🇮🇹",
+                        "text": "Difesa Italiana Conforme"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Supporto Classificazione"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "Integrazione NATO"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#009246",
+            "accent": "#CE2B37",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/italy-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "RISERVATO",
+                "SEGRETO",
+                "SEGRETISSIMO"
+            ],
+            "clearanceMappings": {
+                "NON CLASSIFICATO": "UNCLASSIFIED",
+                "RISERVATO": "CONFIDENTIAL",
+                "SEGRETO": "SECRET",
+                "SEGRETISSIMO": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for RISERVATO and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "it": {
+                    "setupPrompt": "Autenticazione a più fattori richiesta per RISERVATO e superiore.",
+                    "verifyPrompt": "Inserisci il tuo codice di autenticazione a 6 cifre",
+                    "setupComplete": "MFA configurato con successo!"
+                }
+            }
+        }
+    },
+    "esp-realm-broker": {
+        "displayName": {
+            "en": "Spain (Ministerio de Defensa)",
+            "es": "España (Ministerio de Defensa)"
+        },
+        "description": {
+            "en": {
+                "title": "Spanish Defence Portal",
+                "subtitle": "Secure Access for Spanish Forces",
+                "content": "Access classified resources with your Spanish defence credentials. All activities are monitored in accordance with Spanish national security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇪🇸",
+                        "text": "Spanish Defence Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Classification Support"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "NATO Integration"
+                    }
+                ]
+            },
+            "es": {
+                "title": "Portal de Defensa Español",
+                "subtitle": "Acceso Seguro para las Fuerzas Españolas",
+                "content": "Accede a recursos clasificados con tus credenciales de defensa española. Todas las actividades son monitoreadas de acuerdo con las políticas de seguridad nacional española y los estándares de cumplimiento de la OTAN.",
+                "features": [
+                    {
+                        "icon": "🇪🇸",
+                        "text": "Defensa Española Conforme"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Soporte de Clasificación"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Integración OTAN"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#AA151B",
+            "accent": "#F1BF00",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/spain-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "CONFIDENCIAL",
+                "SECRETO",
+                "ALTO SECRETO"
+            ],
+            "clearanceMappings": {
+                "NO CLASIFICADO": "UNCLASSIFIED",
+                "CONFIDENCIAL": "CONFIDENTIAL",
+                "SECRETO": "SECRET",
+                "ALTO SECRETO": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENCIAL and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "es": {
+                    "setupPrompt": "Autenticación multifactor requerida para CONFIDENCIAL y superior.",
+                    "verifyPrompt": "Ingrese su código de autenticación de 6 dígitos",
+                    "setupComplete": "¡MFA configurado con éxito!"
+                }
+            }
+        }
+    },
+    "pol-realm-broker": {
+        "displayName": {
+            "en": "Poland (Ministerstwo Obrony Narodowej)",
+            "pl": "Polska (Ministerstwo Obrony Narodowej)"
+        },
+        "description": {
+            "en": {
+                "title": "Polish Defence Portal",
+                "subtitle": "Secure Access for Polish Forces",
+                "content": "Access classified resources with your Polish defence credentials. All activities are monitored in accordance with Polish national security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇵🇱",
+                        "text": "Polish Defence Compliant"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Classification Support"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "NATO Integration"
+                    }
+                ]
+            },
+            "pl": {
+                "title": "Polski Portal Obronny",
+                "subtitle": "Bezpieczny Dostęp dla Sił Polskich",
+                "content": "Uzyskaj dostęp do zasobów niejawnych za pomocą swoich polskich poświadczeń obronnych. Wszystkie działania są monitorowane zgodnie z polityką bezpieczeństwa narodowego Polski i standardami zgodności NATO.",
+                "features": [
+                    {
+                        "icon": "🇵🇱",
+                        "text": "Zgodność z Obroną Polską"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Obsługa Klasyfikacji"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "Integracja z NATO"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#DC143C",
+            "accent": "#FFFFFF",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/poland-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "POUFNE",
+                "TAJNE",
+                "ŚCIŚLE TAJNE"
+            ],
+            "clearanceMappings": {
+                "NIEJAWNE": "UNCLASSIFIED",
+                "POUFNE": "CONFIDENTIAL",
+                "TAJNE": "SECRET",
+                "ŚCIŚLE TAJNE": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for POUFNE and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "pl": {
+                    "setupPrompt": "Wymagana uwierzytelnianie wieloskładnikowe dla POUFNE i wyższych.",
+                    "verifyPrompt": "Wprowadź swój 6-cyfrowy kod uwierzytelniający",
+                    "setupComplete": "MFA skonfigurowane pomyślnie!"
+                }
+            }
+        }
+    },
+    "nld-realm-broker": {
+        "displayName": {
+            "en": "Netherlands (Ministerie van Defensie)",
+            "nl": "Nederland (Ministerie van Defensie)"
+        },
+        "description": {
+            "en": {
+                "title": "Dutch Defence Portal",
+                "subtitle": "Secure Access for Dutch Forces",
+                "content": "Access classified resources with your Dutch defence credentials. All activities are monitored in accordance with Dutch national security policies and NATO compliance standards.",
+                "features": [
+                    {
+                        "icon": "🇳🇱",
+                        "text": "Dutch Defence Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Classification Support"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "NATO Integration"
+                    }
+                ]
+            },
+            "nl": {
+                "title": "Nederlands Defensieportaal",
+                "subtitle": "Beveiligde Toegang voor Nederlandse Strijdkrachten",
+                "content": "Toegang tot gerubriceerde bronnen met uw Nederlandse defensie-inloggegevens. Alle activiteiten worden gemonitord in overeenstemming met het Nederlandse nationale veiligheidsbeleid en NATO-nalevingsnormen.",
+                "features": [
+                    {
+                        "icon": "🇳🇱",
+                        "text": "Nederlandse Defensie Conform"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Classificatie Ondersteuning"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "NATO Integratie"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#21468B",
+            "accent": "#AE1C28",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/netherlands-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": [
+                "VERTROUWELIJK",
+                "GEHEIM",
+                "ZEER GEHEIM"
+            ],
+            "clearanceMappings": {
+                "NIET-GERUBRICEERD": "UNCLASSIFIED",
+                "VERTROUWELIJK": "CONFIDENTIAL",
+                "GEHEIM": "SECRET",
+                "ZEER GEHEIM": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for VERTROUWELIJK and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "nl": {
+                    "setupPrompt": "Multi-factor authenticatie vereist voor VERTROUWELIJK en hoger.",
+                    "verifyPrompt": "Voer uw 6-cijferige authenticatiecode in",
+                    "setupComplete": "MFA succesvol geconfigureerd!"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,547 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dive25.com/schemas/federation-registry.json",
+  "title": "DIVE V3 Federation Registry Schema",
+  "description": "JSON Schema for validating DIVE V3 federation configuration",
+  "type": "object",
+  "required": [
+    "version",
+    "metadata",
+    "defaults",
+    "instances",
+    "federation"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the registry format"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "lastUpdated",
+        "maintainer",
+        "compliance"
+      ],
+      "properties": {
+        "lastUpdated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last update"
+        },
+        "maintainer": {
+          "type": "string",
+          "description": "Team or person responsible for maintenance"
+        },
+        "compliance": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ACP-240",
+              "NIST 800-63",
+              "STANAG 4774",
+              "STANAG 4778"
+            ]
+          },
+          "description": "Compliance frameworks adhered to"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "required": [
+        "realm",
+        "clientId"
+      ],
+      "properties": {
+        "realm": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Default Keycloak realm name"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Default OIDC client ID"
+        },
+        "testUserPassword": {
+          "type": "string",
+          "minLength": 16,
+          "description": "Password for test users (NIST 800-63B compliant)"
+        },
+        "adminPassword": {
+          "type": "string",
+          "minLength": 16,
+          "description": "Password for admin accounts (NIST 800-63B compliant)"
+        },
+        "tokenLifetime": {
+          "type": "string",
+          "pattern": "^\\d+[smh]$",
+          "description": "Token lifetime (e.g., 15m, 1h)"
+        },
+        "sessionLifetime": {
+          "type": "string",
+          "pattern": "^\\d+[smh]$",
+          "description": "Session lifetime (e.g., 10h)"
+        },
+        "clearanceLevels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "UNCLASSIFIED",
+              "CONFIDENTIAL",
+              "SECRET",
+              "TOP_SECRET"
+            ]
+          }
+        },
+        "passwordPolicy": {
+          "type": "object",
+          "properties": {
+            "minLength": {
+              "type": "integer",
+              "minimum": 16
+            },
+            "requireUppercase": {
+              "type": "boolean"
+            },
+            "requireLowercase": {
+              "type": "boolean"
+            },
+            "requireDigits": {
+              "type": "boolean"
+            },
+            "requireSpecialChars": {
+              "type": "boolean"
+            },
+            "passwordHistory": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "instances": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z]{3}$": {
+          "$ref": "#/definitions/instance"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Map of instance code (ISO 3166-1 alpha-3) to instance configuration"
+    },
+    "federation": {
+      "type": "object",
+      "required": [
+        "model",
+        "matrix",
+        "defaultEnabled",
+        "trustModel"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": [
+            "hub-spoke",
+            "mesh",
+            "hierarchical"
+          ],
+          "description": "Federation topology model"
+        },
+        "matrix": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-z]{3}$": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]{3}$"
+              }
+            }
+          },
+          "description": "Federation relationships matrix"
+        },
+        "defaultEnabled": {
+          "type": "boolean"
+        },
+        "trustModel": {
+          "type": "string",
+          "enum": [
+            "bilateral",
+            "transitive",
+            "hierarchical"
+          ]
+        },
+        "attributeMapping": {
+          "type": "object",
+          "properties": {
+            "clearance": {
+              "$ref": "#/definitions/attributeDefinition"
+            },
+            "countryOfAffiliation": {
+              "$ref": "#/definitions/attributeDefinition"
+            },
+            "uniqueID": {
+              "$ref": "#/definitions/attributeDefinition"
+            },
+            "acpCOI": {
+              "$ref": "#/definitions/attributeDefinition"
+            }
+          }
+        }
+      }
+    },
+    "gcp": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+        },
+        "region": {
+          "type": "string"
+        },
+        "services": {
+          "type": "object"
+        },
+        "workloadIdentity": {
+          "type": "object"
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "properties": {
+        "prometheus": {
+          "type": "object"
+        },
+        "grafana": {
+          "type": "object"
+        },
+        "statusPage": {
+          "type": "object"
+        },
+        "blacklistRedis": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "instance": {
+      "type": "object",
+      "required": [
+        "code",
+        "name",
+        "type",
+        "enabled",
+        "deployment"
+      ],
+      "properties": {
+        "primary": {
+          "type": "boolean",
+          "description": "Whether this is the primary instance"
+        },
+        "locale": {
+          "type": "string",
+          "description": "Default locale for this instance"
+        },
+        "services": {
+          "type": "object",
+          "description": "Service configuration for this instance",
+          "properties": {
+            "frontend": {
+              "type": "object"
+            },
+            "backend": {
+              "type": "object"
+            },
+            "keycloak": {
+              "type": "object"
+            },
+            "kas": {
+              "type": "object"
+            },
+            "opa": {
+              "type": "object"
+            },
+            "mongodb": {
+              "type": "object"
+            },
+            "postgres": {
+              "type": "object"
+            },
+            "redis": {
+              "type": "object"
+            }
+          }
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 3166-1 alpha-3 country code"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable country name"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "local",
+            "remote"
+          ],
+          "description": "Deployment type"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether instance is active"
+        },
+        "deployment": {
+          "type": "object",
+          "required": [
+            "provider",
+            "host",
+            "domain"
+          ],
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "docker",
+                "kubernetes",
+                "cloudrun"
+              ]
+            },
+            "host": {
+              "type": "string",
+              "description": "Hostname or IP address"
+            },
+            "domain": {
+              "type": "string",
+              "description": "Base domain for URLs"
+            }
+          }
+        },
+        "urls": {
+          "type": "object",
+          "required": [
+            "app",
+            "api",
+            "idp"
+          ],
+          "properties": {
+            "app": {
+              "type": "string",
+              "format": "uri"
+            },
+            "api": {
+              "type": "string",
+              "format": "uri"
+            },
+            "idp": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "ports": {
+          "type": "object",
+          "required": [
+            "frontend",
+            "backend",
+            "keycloak",
+            "postgres",
+            "mongodb",
+            "redis"
+          ],
+          "properties": {
+            "frontend": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "backend": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "keycloak": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "keycloakHttp": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "keycloakManagement": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "postgres": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "mongodb": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "redis": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "opa": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "opaMetrics": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "kas": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "properties": {
+            "gcpProjectId": {
+              "type": "string"
+            },
+            "gcpSecretPath": {
+              "type": "string"
+            },
+            "adminPasswordId": {
+              "type": "string"
+            },
+            "clientSecretId": {
+              "type": "string"
+            },
+            "postgresPasswordId": {
+              "type": "string"
+            },
+            "mongoPasswordId": {
+              "type": "string"
+            },
+            "redisPasswordId": {
+              "type": "string"
+            }
+          }
+        },
+        "cloudflare": {
+          "type": "object",
+          "properties": {
+            "tunnelId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+            },
+            "tunnelName": {
+              "type": "string"
+            },
+            "credentialsFile": {
+              "type": "string"
+            }
+          }
+        },
+        "keycloak": {
+          "type": "object",
+          "properties": {
+            "adminUsername": {
+              "type": "string"
+            },
+            "database": {
+              "type": "object"
+            },
+            "theme": {
+              "type": "string"
+            }
+          }
+        },
+        "mongodb": {
+          "type": "object"
+        },
+        "redis": {
+          "type": "object"
+        },
+        "testUsers": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean"
+            },
+            "clearances": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              }
+            },
+            "usernameTemplate": {
+              "type": "string"
+            },
+            "emailDomain": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "attributeDefinition": {
+      "type": "object",
+      "required": [
+        "required",
+        "claim",
+        "type"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "claim": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "array",
+            "integer",
+            "boolean"
+          ]
+        },
+        "format": {
+          "type": "string"
+        },
+        "enum": {
+          "type": "array"
+        },
+        "items": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

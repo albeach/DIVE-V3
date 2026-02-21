@@ -1,0 +1,27 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-ci.yml'
+      - '.github/workflows/reusable-terraform-validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/reusable-terraform-validate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: ./.github/workflows/reusable-terraform-validate.yml
+    with:
+      terraform_version: "1.13.4"

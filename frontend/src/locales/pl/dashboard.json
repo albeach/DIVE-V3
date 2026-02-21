@@ -1,0 +1,344 @@
+{
+  "title": "Panel",
+  "dashboard.title": "Panel",
+  "subtitle": "Przegląd wywiadowczy koalicji",
+  "welcome": "Witaj ponownie, {{name}}",
+  "welcomeBack": "Witaj ponownie,",
+  "loading": "Ładowanie panelu...",
+  "refreshing": "Odświeżanie...",
+  "refresh": "Odśwież",
+  "lastUpdated": "Ostatnia aktualizacja: {{time}}",
+  "platformBadge": "Platforma ICAM Koalicji",
+  "glossary": "Słownik",
+  "description": "Twój bezpieczny dostęp do zasobów klasyfikowanych w całej koalicji. Wszystkie działania są chronione przez polityki ABAC i rejestrowane na potrzeby zgodności.",
+  "stats": {
+    "documentsAccessible": "Dostępne Dokumenty",
+    "authorizationRate": "Współczynnik Autoryzacji",
+    "avgResponseTime": "Średni Czas Odpowiedzi"
+  },
+  "federation": {
+    "directAccess": "Bezpośredni Dostęp",
+    "homeInstance": "Instancja Domowa",
+    "federated": "Sfederowany",
+    "status": {
+      "title": "Status Federacji",
+      "subtitle": "Twój obecny kontekst tożsamości i dostępu",
+      "federatedAccess": "Dostęp Sfederowany",
+      "homeInstance": "Instancja Domowa",
+      "portal": "Portal"
+    },
+    "stats": {
+      "partners": {
+        "title": "Partnerzy Federacji",
+        "description": "Aktywni dostawcy tożsamości w sieci"
+      },
+      "crossPartnerAccesses": {
+        "title": "Dostępy Między-Partnerami",
+        "description": "Zasoby dostępne z innych partnerów"
+      },
+      "authentications": {
+        "title": "Uwierzytelnienia Dzisiaj",
+        "description": "Połączenia federacji dzisiaj"
+      }
+    },
+    "explanation": {
+      "title": "Czym jest Federacja Tożsamości?",
+      "federationTerm": "Federacja tożsamości",
+      "description": "pozwala Ci uwierzytelnić się za pomocą dostawcy tożsamości Twojej organizacji i uzyskać dostęp do zasobów partnerów koalicji bez tworzenia oddzielnych kont. To podąża za",
+      "stanagTerm": "standardami ADatP-5663",
+      "standardsText": "dla zarządzania tożsamością NATO."
+    }
+  },
+  "resources": {
+    "accessibleDocuments": "Dostępne Dokumenty",
+    "yourUploads": "Twoje Przesłania",
+    "recentlyViewed": "Ostatnio Wyświetlane",
+    "resourceStats": "Statystyki Zasobów",
+    "resourcesByClassification": "Zasoby Według Klasyfikacji",
+    "recentActivity": "Ostatnia Aktywność",
+    "basedOnYourClearance": "Na podstawie Twojej autoryzacji",
+    "andCountryAffiliation": "i Twojej przynależności krajowej",
+    "youCanAccess": "możesz uzyskać dostęp",
+    "documentsAcross": "dokumenty przez",
+    "differentClassifications": "różne klasyfikacje",
+    "browseAll": "Przeglądaj Wszystko",
+    "yourAccessContext": "Twój Kontekst Dostępu",
+    "youCanAccessDocuments": "możesz uzyskać dostęp do dokumentów do klasyfikacji",
+    "thatAreReleasableTo": "które są wydawane do",
+    "maxClassification": "Maks. Klasyfikacja",
+    "releasability": "Wydawalność",
+    "mustInclude": "Musi Zawierać"
+  },
+  "authorization": {
+    "stats": {
+      "allowedRequests": "Dozwolone Żądania",
+      "deniedRequests": "Odrzucone Żądania",
+      "authorizationRate": "Współczynnik Autoryzacji",
+      "avgDecisionTime": "Średni Czas Decyzji"
+    },
+    "profile": {
+      "title": "Twój Profil Autoryzacji",
+      "subtitle": "Atrybuty używane do decyzji",
+      "decisions": "ABAC",
+      "current": "Bieżący",
+      "countryOfAffiliation": "Przynależność Krajowa",
+      "releasabilityTerm": "Wydawalność",
+      "releasabilityChecked": "sprawdzone względem tego",
+      "coiMemberships": "Członkostwa COI"
+    }
+  },
+  "activity": {
+    "stats": {
+      "totalEvents": "Całkowita Liczba Zdarzeń",
+      "successfulActions": "Pomyślne Akcje",
+      "lastLogin": "Ostatnie Logowanie",
+      "activeSessions": "Aktywne Sesje"
+    },
+    "compliance": {
+      "title": "Status Zgodności",
+      "subtitle": "Twoja zgodność z wymaganiami",
+      "requirements": "ACP-240",
+      "authenticationCompliance": {
+        "name": "Zgodność Uwierzytelniania",
+        "description": "Wszystkie uwierzytelnienia poprzez zatwierdzone IdP"
+      },
+      "accessControlAdherence": {
+        "name": "Przestrzeganie Kontroli Dostępu",
+        "description": "Brak nieautoryzowanych prób dostępu"
+      },
+      "auditTrailCompleteness": {
+        "name": "Kompletność Śladu Audytu",
+        "description": "Wszystkie działania zarejestrowane zgodnie z ACP-240"
+      },
+      "sessionSecurity": {
+        "name": "Bezpieczeństwo Sesji",
+        "description": "Czasy życia tokenów w granicach polityki"
+      }
+    }
+  },
+  "tabs": {
+    "overview": "Przegląd",
+    "federation": "Federacja",
+    "authorization": "Autoryzacja",
+    "resources": "Zasoby",
+    "activity": "Aktywność"
+  },
+  "overview": {
+    "title": "Przegląd Systemu",
+    "totalResources": "Całkowite Zasoby",
+    "activeUsers": "Aktywni Użytkownicy",
+    "requestsToday": "Żądania Dzisiaj",
+    "avgResponseTime": "Średni Czas Odpowiedzi",
+    "uptime": "Czas Działania Systemu",
+    "healthStatus": "Status Zdrowia",
+    "healthy": "Zdrowy",
+    "degraded": "Zdegradowany",
+    "down": "Nieczynny",
+    "authorizationRate": "Współczynnik Autoryzacji",
+    "systemHealth": "Zdrowie Systemu",
+    "features": {
+      "browseDocuments": {
+        "title": "Przeglądaj Dokumenty",
+        "description": "Bezpieczny dostęp do zasobów klasyfikowanych",
+        "educational": "Każdy dostęp do dokumentów jest oceniany względem polityk OPA. Twoja autoryzacja, kraj i członkostwa COI określają, co możesz zobaczyć.",
+        "stats": {
+          "accessible": "dostępne",
+          "authRate": "współczynnik autoryzacji"
+        },
+        "badges": {
+          "policyEnforced": "Polityka Wymuszona",
+          "endToEndEncrypted": "Szyfrowane End-to-End",
+          "auditLogged": "Audyt Zarejestrowany"
+        }
+      },
+      "federationNetwork": {
+        "title": "Sieć Federacji",
+        "description": "Federacja tożsamości między partnerami",
+        "educational": "Uwierzytelnij się za pomocą swojego domowego IdP i uzyskaj dostęp do zasobów partnerów koalicji. Federacja pozwala na płynną współpracę przy jednoczesnym zachowaniu bezpieczeństwa.",
+        "stats": {
+          "partners": "partnerzy"
+        }
+      },
+      "uploadDocument": {
+        "title": "Prześlij Dokument",
+        "description": "Bezpieczne przesyłanie dokumentów",
+        "educational": "Przesyłaj dokumenty z automatycznym szyfrowaniem ZTDF i etykietowaniem zgodnym z ACP-240. Ustaw klasyfikację i wydawalność podczas przesyłania.",
+        "badges": {
+          "ztdfEncryption": "Szyfrowanie ZTDF"
+        }
+      },
+      "authorizationPolicies": {
+        "title": "Polityki Autoryzacji",
+        "description": "Polityki Rego OPA",
+        "educational": "Eksploruj modułową suite polityk zasilającą silnik ABAC DIVE. Zobacz hierarchię polityk, testuj decyzje i zrozum logikę reguł.",
+        "stats": {
+          "policies": "polityki"
+        }
+      },
+      "integrationGuide": {
+        "title": "Przewodnik Integracji",
+        "description": "ADatP-5663 × ACP-240",
+        "educational": "Interaktywny tutorial wyjaśniający, jak federacja tożsamości (ADatP-5663) i kontrola dostępu (ACP-240) działają razem."
+      },
+      "apiDocumentation": {
+        "title": "Dokumentacja API",
+        "description": "Interaktywna referencja API",
+        "educational": "Eksploruj wszystkie punkty końcowe DIVE V3, testuj żywe żądania i zobacz przykłady żądania/odpowiedzi. Idealne dla programistów integrujących platformę ICAM koalicji."
+      },
+      "kasEncryption": {
+        "title": "Szyfrowanie KAS",
+        "description": "Usługa Dostępu do Kluczy",
+        "educational": "Wydanie klucza powiązane z polityką dla zaszyfrowanej zawartości. KAS ponownie ocenia politykę przed wydaniem kluczy deszyfrowania.",
+        "stats": {
+          "encrypted": "zaszyfrowane"
+        }
+      },
+      "compliance": {
+        "title": "Zgodność",
+        "description": "Przestrzeganie standardów NATO",
+        "educational": "Monitoruj zgodność z ACP-240, STANAG 4774/5636 i innymi wymaganiami bezpieczeństwa koalicji."
+      }
+    },
+    "sections": {
+      "howDiveWorks": {
+        "title": "Jak Działa DIVE V3",
+        "subtitle": "ICAM koalicji w akcji",
+        "steps": {
+          "federatedAuth": {
+            "title": "Uwierzytelnianie Federacyjne",
+            "description": "Zaloguj się przez swojego domowego IdP. Keycloak zarządza tożsamością przez partnerów koalicji."
+          },
+          "policyEval": {
+            "title": "Ocena Polityk",
+            "description": "PEP wysyła Twoje atrybuty do OPA dla decyzji ABAC."
+          },
+          "secureAccess": {
+            "title": "Bezpieczny Dostęp",
+            "description": "Jeśli autoryzowany, uzyskaj dostęp do zasobu. Dla zaszyfrowanej zawartości KAS uwalnia klucz deszyfrowania."
+          }
+        }
+      },
+      "quickTips": {
+        "title": "Szybkie Wskazówki",
+        "tips": {
+          "readOnlyAttributes": {
+            "title": "Twoje atrybuty są tylko do odczytu",
+            "description": "Autoryzacja i COI są zarządzane przez administratora Twojego domowego IdP"
+          },
+          "auditLogging": {
+            "title": "Wszystkie działania są audytowane",
+            "description": "Każda decyzja autoryzacji jest rejestrowana na potrzeby zgodności ACP-240"
+          },
+          "crossPartner": {
+            "title": "Współpraca między partnerami",
+            "description": "Użytkownicy IdP partnerów mogą uzyskać dostęp do Twoich dokumentów, jeśli wydawalność na to pozwala"
+          }
+        }
+      },
+      "federationPartners": {
+        "title": "Aktywni Partnerzy Federacji",
+        "providersAvailable": "dostępnych dostawców tożsamości",
+        "viewAll": "Zobacz Wszystko"
+      },
+      "systemStatus": {
+        "title": "Status Systemu",
+        "services": {
+          "opaEngine": "Silnik Polityk OPA",
+          "keycloakAuth": "Uwierzytelnianie Keycloak",
+          "resourceApi": "API Zasobów"
+        },
+        "status": {
+          "operational": "Operacyjny"
+        }
+      }
+    }
+  },
+  "widgets": {
+    "recentActivity": {
+      "title": "Ostatnia Aktywność",
+      "noActivity": "Brak ostatniej aktywności",
+      "viewAll": "Zobacz Wszystko"
+    },
+    "recentResources": {
+      "title": "Zasoby Ostatnio Dostępne",
+      "noResources": "Brak ostatnio dostępnych zasobów"
+    },
+    "notifications": {
+      "title": "Powiadomienia",
+      "noNotifications": "Brak nowych powiadomień",
+      "markAllRead": "Oznacz Wszystko Jako Przeczytane"
+    },
+    "quickActions": {
+      "title": "Szybkie Akcje",
+      "uploadResource": "Prześlij Zasób",
+      "browseResources": "Przeglądaj Zasoby",
+      "viewPolicies": "Zobacz Polityki",
+      "manageUsers": "Zarządzaj Użytkownikami"
+    },
+    "federationStatus": {
+      "title": "Status Federacji",
+      "connectedSpokes": "Połączone Szprychy",
+      "activeFederations": "Aktywne Federacje",
+      "viewFederation": "Zobacz Federację"
+    },
+    "kasStatus": {
+      "title": "Status KAS",
+      "totalKAS": "Całkowita Liczba Punktów Końcowych KAS",
+      "healthyKAS": "Zdrowe",
+      "unhealthyKAS": "Niezdrawe",
+      "viewKAS": "Zobacz Multi-KAS"
+    },
+    "accessRequests": {
+      "title": "Żądania Dostępu",
+      "pending": "Oczekujące",
+      "granted": "Przyznane Dzisiaj",
+      "denied": "Odmówione Dzisiaj",
+      "viewRequests": "Zobacz Wszystkie Żądania"
+    },
+    "securityMetrics": {
+      "title": "Metryki Bezpieczeństwa",
+      "authFailures": "Niepowodzenia Auth (24h)",
+      "policyDenials": "Odmowy Polityki (24h)",
+      "suspiciousActivity": "Podejrzana Aktywność",
+      "viewAuditLog": "Zobacz Dziennik Audytu"
+    }
+  },
+  "charts": {
+    "requestsOverTime": "Żądania w Czasie",
+    "accessByCountry": "Dostęp Według Kraju",
+    "classificationDistribution": "Rozkład Według Klasyfikacji",
+    "responseTimeTrends": "Trendy Czasu Odpowiedzi",
+    "today": "Dzisiaj",
+    "week": "Ten Tydzień",
+    "month": "Ten Miesiąc",
+    "custom": "Zakres Niestandardowy"
+  },
+  "filters": {
+    "timeRange": "Zakres Czasu",
+    "last24Hours": "Ostatnie 24 Godziny",
+    "last7Days": "Ostatnie 7 Dni",
+    "last30Days": "Ostatnie 30 Dni",
+    "customRange": "Zakres Niestandardowy"
+  },
+  "breadcrumbs": {
+    "dashboard": "Panel"
+  },
+  "instance": "Instancja",
+  "clearance": "Autoryzacja",
+  "country": "Kraj",
+  "greetings": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
+    "lateNight": "Welcome back"
+  },
+  "homeUser": {
+    "subtitle": "Welcome to your home instance",
+    "badge": "Home Instance"
+  },
+  "federatedUser": {
+    "subtitle": "Accessing via {{homeCountry}} → {{currentInstance}}",
+    "badge": "Federated Access",
+    "viewingFrom": "Viewing from"
+  }
+}

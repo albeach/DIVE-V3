@@ -1,0 +1,98 @@
+# =============================================================================
+# DIVE V3 OPA - Kubernetes Deployment
+# =============================================================================
+# Open Policy Agent (OPA) policy engine deployment
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: opa
+    app.kubernetes.io/component: policy-engine
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+        app.kubernetes.io/name: opa
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8181"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: extract-policies
+          image: busybox:1.36
+          command: ['sh', '-c', 'for key in $(ls /tmp/configmap); do if [ "$key" = "opa-policies.tar.gz" ]; then tar -xzf /tmp/configmap/$key -C /policies; fi; done && find /policies -name "._*" -delete && find /policies -name ".DS_Store" -delete && find /policies -name "*test*.rego" -delete && ls -la /policies && find /policies -type f | head -20']
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+            - name: policies-tar
+              mountPath: /tmp/configmap
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:0.68.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "run"
+            - "--server"
+            - "--addr=0.0.0.0:8181"
+            - "--log-level=info"
+            - "--log-format=json"
+            - "--set=decision_logs.console=true"
+            - "--set=status.console=true"
+            - "/policies/base"
+            - "/policies/org"
+            - "/policies/tenant"
+            - "/policies/entrypoints"
+            - "/policies/compat"
+            - "/policies/data/data.json"
+          ports:
+            - name: http
+              containerPort: 8181
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "500Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+      volumes:
+        - name: policies
+          emptyDir: {}
+        - name: policies-tar
+          configMap:
+            name: opa-policies

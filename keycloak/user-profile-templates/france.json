@@ -1,0 +1,164 @@
+{
+  "nation": {
+    "name": "France",
+    "iso3166": "FRA"
+  },
+  "attributes": [
+    {
+      "name": "nom",
+      "displayName": "Nom de famille",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "validations": {
+        "length": {
+          "min": 1,
+          "max": 255
+        }
+      }
+    },
+    {
+      "name": "prénom",
+      "displayName": "Prénom",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "validations": {
+        "length": {
+          "min": 1,
+          "max": 255
+        }
+      }
+    },
+    {
+      "name": "courriel",
+      "displayName": "Adresse électronique",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
+      },
+      "validations": {
+        "email": {}
+      }
+    },
+    {
+      "name": "numéroIdentification",
+      "displayName": "Numéro d'identification",
+      "required": false,
+      "permissions": {
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "validations": {
+        "length": {
+          "max": 50
+        }
+      }
+    },
+    {
+      "name": "countryOfAffiliation",
+      "displayName": "Country of Affiliation",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "validations": {
+        "length": {
+          "min": 3,
+          "max": 3
+        },
+        "pattern": "^[A-Z]{3}$"
+      }
+    },
+    {
+      "name": "clearance",
+      "displayName": "Security Clearance",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "validations": {
+        "options": [
+          "UNCLASSIFIED",
+          "CONFIDENTIAL",
+          "SECRET",
+          "TOP_SECRET"
+        ]
+      }
+    },
+    {
+      "name": "uniqueID",
+      "displayName": "Unique Identifier",
+      "required": true,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
+      },
+      "validations": {
+        "length": {
+          "min": 1,
+          "max": 255
+        }
+      }
+    },
+    {
+      "name": "acpCOI",
+      "displayName": "Communities of Interest",
+      "multivalued": true,
+      "required": false,
+      "permissions": {
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
+      }
+    }
+  ]
+}

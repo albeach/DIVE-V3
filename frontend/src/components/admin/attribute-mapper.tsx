@@ -1,13 +1,15 @@
 /**
  * Attribute Mapper Component
  * 
- * Step 4 of IdP wizard - Map IdP claims to DIVE attributes
+ * Step 4 of IdP wizard - Map IdP sources to DIVE attributes
  */
 
 'use client';
 
 import React from 'react';
 import { IAttributeMapping } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface IAttributeMappings {
     uniqueID: IAttributeMapping;
@@ -26,7 +28,7 @@ interface IAttributeMapperProps {
 export default function AttributeMapper({ mappings, onChange, protocol, errors = {} }: IAttributeMapperProps) {
     const handleMappingChange = (
         attribute: keyof IAttributeMappings,
-        field: 'claim' | 'userAttribute',
+        field: 'source' | 'userAttribute',
         value: string
     ) => {
         onChange({
@@ -38,12 +40,20 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
         });
     };
 
-    const claimLabel = protocol === 'oidc' ? 'Claim Name' : 'SAML Attribute Name';
+    const sourceLabel = protocol === 'oidc' ? 'Claim Name' : 'SAML Attribute Name';
 
     return (
         <div className="space-y-6">
             <div>
-                <h3 className="text-lg font-medium text-gray-900">DIVE Attribute Mapping</h3>
+                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                    DIVE Attribute Mapping
+                    <InlineHelp
+                        variant="info"
+                        size="md"
+                        position="bottom"
+                        content={IdPHelpContent.protocolMapper}
+                    />
+                </h3>
                 <p className="mt-1 text-sm text-gray-500">
                     Map {protocol.toUpperCase()} {protocol === 'oidc' ? 'claims' : 'attributes'} to DIVE user attributes.
                     These mappings ensure user identity attributes are correctly synchronized.
@@ -65,7 +75,7 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
                                 scope="col"
                                 className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
                             >
-                                {claimLabel}
+                                {sourceLabel}
                             </th>
                             <th
                                 scope="col"
@@ -85,13 +95,13 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <input
                                     type="text"
-                                    value={mappings.uniqueID.claim}
+                                    value={mappings.uniqueID.source}
                                     onChange={(e) =>
-                                        handleMappingChange('uniqueID', 'claim', e.target.value)
+                                        handleMappingChange('uniqueID', 'source', e.target.value)
                                     }
                                     placeholder={protocol === 'oidc' ? 'sub' : 'uniqueID'}
                                     className={`block w-full rounded-md shadow-sm sm:text-sm ${
-                                        errors['uniqueID.claim']
+                                        errors['uniqueID.source']
                                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                                     }`}
@@ -104,20 +114,26 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
 
                         {/* clearance */}
                         <tr>
-                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 flex items-center gap-2">
                                 clearance
                                 <span className="ml-1 text-red-500">*</span>
+                                <InlineHelp
+                                    variant="info"
+                                    size="sm"
+                                    position="right"
+                                    content={IdPHelpContent.clearanceMapping}
+                                />
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <input
                                     type="text"
-                                    value={mappings.clearance.claim}
+                                    value={mappings.clearance.source}
                                     onChange={(e) =>
-                                        handleMappingChange('clearance', 'claim', e.target.value)
+                                        handleMappingChange('clearance', 'source', e.target.value)
                                     }
                                     placeholder="clearance"
                                     className={`block w-full rounded-md shadow-sm sm:text-sm ${
-                                        errors['clearance.claim']
+                                        errors['clearance.source']
                                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                                     }`}
@@ -137,17 +153,17 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <input
                                     type="text"
-                                    value={mappings.countryOfAffiliation.claim}
+                                    value={mappings.countryOfAffiliation.source}
                                     onChange={(e) =>
                                         handleMappingChange(
                                             'countryOfAffiliation',
-                                            'claim',
+                                            'source',
                                             e.target.value
                                         )
                                     }
                                     placeholder={protocol === 'oidc' ? 'country' : 'countryOfAffiliation'}
                                     className={`block w-full rounded-md shadow-sm sm:text-sm ${
-                                        errors['countryOfAffiliation.claim']
+                                        errors['countryOfAffiliation.source']
                                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                                     }`}
@@ -166,9 +182,9 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <input
                                     type="text"
-                                    value={mappings.acpCOI.claim}
+                                    value={mappings.acpCOI.source}
                                     onChange={(e) =>
-                                        handleMappingChange('acpCOI', 'claim', e.target.value)
+                                        handleMappingChange('acpCOI', 'source', e.target.value)
                                     }
                                     placeholder={protocol === 'oidc' ? 'groups' : 'acpCOI'}
                                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -238,4 +254,3 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
         </div>
     );
 }
-

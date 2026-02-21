@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 Redis - FRA PVC Patch
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-fra
+  namespace: dive-v3-fra
+  labels:
+    app.kubernetes.io/instance: fra
+

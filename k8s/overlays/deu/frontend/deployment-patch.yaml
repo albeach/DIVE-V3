@@ -1,0 +1,35 @@
+# =============================================================================
+# DIVE V3 Frontend - DEU Deployment Patch
+# =============================================================================
+# Patches frontend Deployment with DEU-specific configuration
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dive-v3-deu
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/instance: deu
+    spec:
+      serviceAccountName: frontend
+      containers:
+        - name: frontend
+          env:
+            - name: INSTANCE_CODE
+              value: "DEU"
+            - name: INSTANCE_NAME
+              value: "Germany"
+            - name: NEXT_PUBLIC_INSTANCE
+              value: "DEU"
+            - name: NEXT_PUBLIC_INSTANCE_NAME
+              value: "Germany"
+            - name: NEXT_PUBLIC_LOCALE
+              value: "de-DE"
