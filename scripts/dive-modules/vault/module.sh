@@ -22,7 +22,9 @@
 #   - No cloud dependencies required
 # =============================================================================
 
-set -euo pipefail
+# NOTE: Do NOT use set -euo pipefail here — this file is sourced into the parent
+# shell, not executed directly. set -e/-u/-o pipefail would affect the parent's
+# error handling and cause silent failures in common.sh pipeline expressions.
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

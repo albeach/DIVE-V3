@@ -347,7 +347,7 @@ export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME:-/root}/.ssh/ABeach-SSH-Key.
 # NOTE: ENVIRONMENT is NOT read here — remote-exec deliberately passes --env local
 # to prevent SSH recursion, and we must respect that.
 if [ -f "${DIVE_ROOT}/.env.hub" ]; then
-    _hub_val() { grep "^${1}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | head -1 | cut -d= -f2-; }
+    _hub_val() { grep "^${1}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | head -1 | cut -d= -f2- || true; }
     [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]    && { _v=$(_hub_val DIVE_DOMAIN_SUFFIX);    [ -n "$_v" ] && export DIVE_DOMAIN_SUFFIX="$_v"; }
     [ -z "${CLOUDFLARE_API_TOKEN:-}" ]  && { _v=$(_hub_val CLOUDFLARE_API_TOKEN);  [ -n "$_v" ] && export CLOUDFLARE_API_TOKEN="$_v"; }
     [ -z "${HUB_EXTERNAL_ADDRESS:-}" ]  && { _v=$(_hub_val HUB_EXTERNAL_ADDRESS);  [ -n "$_v" ] && export HUB_EXTERNAL_ADDRESS="$_v"; }
@@ -405,9 +405,25 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
         export BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"
 
         # Derive domain names: dev.dive25.com → dev, usa → dev-usa-{service}.dive25.com
+        # DIVE_DOMAIN_SUFFIX must be: {env}.{base-domain}  e.g. dev.dive25.com
+        # A bare domain like 'dive25.com' produces wrong URLs (dive25-usa-app.com).
         _country_lower="$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')"
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
         _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+
+        # Guard: _base_domain must contain a dot (e.g. dive25.com), not just 'com'
+        if [[ "$_base_domain" != *.* ]]; then
+            echo "ERROR: DIVE_DOMAIN_SUFFIX='${DIVE_DOMAIN_SUFFIX}' is missing the environment prefix." >&2
+            echo "       Expected format: {env}.{base-domain}  e.g. dev.dive25.com" >&2
+            echo "       Got prefix='${_env_prefix}' base='${_base_domain}' — this would produce wrong domains." >&2
+            echo "       Fix: export DIVE_DOMAIN_SUFFIX=dev.${DIVE_DOMAIN_SUFFIX}" >&2
+            # Auto-correct: prepend ENVIRONMENT as prefix
+            _env_name="${ENVIRONMENT:-dev}"
+            _env_prefix="$_env_name"
+            _base_domain="${DIVE_DOMAIN_SUFFIX}"
+            echo "       Auto-corrected: using prefix='${_env_prefix}' base='${_base_domain}'" >&2
+            export DIVE_DOMAIN_SUFFIX="${_env_prefix}.${_base_domain}"
+        fi
 
         export CADDY_DOMAIN_APP="${CADDY_DOMAIN_APP:-${_env_prefix}-${_country_lower}-app.${_base_domain}}"
         export CADDY_DOMAIN_API="${CADDY_DOMAIN_API:-${_env_prefix}-${_country_lower}-api.${_base_domain}}"
