@@ -155,6 +155,9 @@ export interface IRegistrationRequest {
 
   // Auth code for zero-config remote spoke deployment
   authCode?: string;
+
+  // Skip IdP TLS validation during registration (Caddy ACME cert may still be provisioning)
+  skipValidation?: boolean;
 }
 
 export interface IHubStatistics {

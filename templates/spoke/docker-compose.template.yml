@@ -134,6 +134,18 @@ volumes:
       dive.resource.service: "kas"
       dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
       dive.resource.purpose: "logs"
+  vault_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "secrets-storage"
+  vault_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "audit-logs"
   caddy_data:
     labels:
       dive.resource.type: "volume"
@@ -780,6 +792,53 @@ services:
   # Enabled when SPOKE_CADDY_ENABLED=true (set by spoke deployment in remote mode).
   # Each spoke EC2 gets its own Caddy for Let's Encrypt certs on spoke domains.
   # Local dev does not use this (Hub Caddy handles all domains on same host).
+
+  # ==========================================================================
+  # VAULT (Spoke-Local Secrets Management — Data Sovereignty)
+  # ==========================================================================
+  vault-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "HashiCorp Vault for spoke {{INSTANCE_CODE_UPPER}} secrets management"
+    profiles: ["vault"]
+    image: hashicorp/vault:1.15
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: "https://127.0.0.1:8200"
+      VAULT_API_ADDR: "https://vault-{{INSTANCE_CODE_LOWER}}:8200"
+      VAULT_LOCAL_CONFIG: >-
+        {
+          "storage": {"file": {"path": "/vault/data"}},
+          "listener": [{
+            "tcp": {
+              "address": "0.0.0.0:8200",
+              "tls_cert_file": "/vault/certs/fullchain.pem",
+              "tls_key_file": "/vault/certs/key.pem",
+              "tls_disable": false
+            }
+          }],
+          "ui": true,
+          "log_level": "info",
+          "disable_mlock": false
+        }
+    command: ["server"]
+    ports:
+      - "127.0.0.1:{{VAULT_HOST_PORT}}:8200"
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./certs:/vault/certs:ro
+    networks:
+      dive-internal:
+    healthcheck:
+      test: ["CMD", "vault", "status", "-tls-skip-verify"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   caddy-{{INSTANCE_CODE_LOWER}}:
     labels:

@@ -15,8 +15,13 @@ if [ -z "${DIVE_DEPLOYMENT_VERIFICATION_LOADED:-}" ]; then
     fi
 fi
 
+# Load guided framework
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../guided/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../guided/framework.sh"
+fi
+
 # =============================================================================
-# SPOKE VERIFICATION (12-POINT CHECK)
+# SPOKE VERIFICATION (14-POINT CHECK)
 # =============================================================================
 
 spoke_verify() {
@@ -44,8 +49,13 @@ spoke_verify() {
     echo -e "${BOLD}Spoke Verification: ${code_upper}${NC}"
     echo ""
 
+    guided_explain "Spoke Health Check" \
+        "Running health checks on all services for spoke ${code_upper}.
+This verifies databases, identity provider, policy engine, Hub connectivity,
+certificates, and vault status." 2>/dev/null
+
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Would verify spoke connectivity (12 checks)"
+        log_dry "Would verify spoke connectivity (14 checks)"
         return 0
     fi
 
@@ -88,15 +98,15 @@ spoke_verify() {
     fi
 
     # Track results
-    # Custom domain adds 3 extra checks (13-15)
+    # Custom domain adds 3 extra checks (15-17)
     local _spoke_domain_var="SPOKE_${code_upper}_DOMAIN"
     local _spoke_domain="${!_spoke_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
-    local checks_total=12
-    [ -n "$_spoke_domain" ] && checks_total=15
+    local checks_total=14
+    [ -n "$_spoke_domain" ] && checks_total=17
     local checks_passed=0
     local checks_failed=0
 
-    echo -e "${CYAN}Running 12-Point Spoke Verification${NC}"
+    echo -e "${CYAN}Running 14-Point Spoke Verification${NC}"
     echo ""
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
@@ -352,12 +362,81 @@ spoke_verify() {
     fi
 
     # ------------------------------------------------------------------
-    # Checks 13-15: Custom Domain (only when SPOKE_{CODE}_DOMAIN is set)
+    # Check 13: Spoke Vault Health (optional — only when Vault container exists)
+    # ------------------------------------------------------------------
+    printf "  %-35s" "13. Spoke Vault Health:"
+    local vault_container="dive-spoke-${code_lower}-vault"
+    if docker inspect -f '{{.State.Running}}' "$vault_container" 2>/dev/null | grep -q true; then
+        # Container running — check initialized + unsealed
+        local vault_status
+        vault_status=$(docker exec -e VAULT_SKIP_VERIFY=true "$vault_container" vault status -tls-skip-verify -format=json 2>/dev/null || echo "{}")
+        local vault_init
+        vault_init=$(echo "$vault_status" | jq -r '.initialized // false' 2>/dev/null)
+        local vault_sealed
+        vault_sealed=$(echo "$vault_status" | jq -r '.sealed // true' 2>/dev/null)
+
+        if [ "$vault_init" = "true" ] && [ "$vault_sealed" = "false" ]; then
+            echo -e "${GREEN}PASS Initialized + Unsealed${NC}"
+            checks_passed=$((checks_passed + 1))
+        elif [ "$vault_init" = "true" ] && [ "$vault_sealed" = "true" ]; then
+            echo -e "${RED}FAIL Initialized but Sealed${NC}"
+            checks_failed=$((checks_failed + 1))
+        else
+            echo -e "${RED}FAIL Not initialized${NC}"
+            checks_failed=$((checks_failed + 1))
+        fi
+    else
+        # Vault container not running — check if this spoke uses Vault
+        local vault_init_file="${spoke_dir}/${SPOKE_VAULT_INIT_FILE:-.vault-init}"
+        if [ -f "$vault_init_file" ]; then
+            echo -e "${RED}FAIL Vault configured but container not running${NC}"
+            checks_failed=$((checks_failed + 1))
+        else
+            echo -e "${YELLOW}WARN Not deployed (standalone mode)${NC}"
+            checks_passed=$((checks_passed + 1))
+        fi
+    fi
+
+    # ------------------------------------------------------------------
+    # Check 14: Critical Secrets Available
+    # ------------------------------------------------------------------
+    printf "  %-35s" "14. Critical Secrets:"
+    local secrets_found=0
+    local secrets_checked=0
+    local critical_secrets=("POSTGRES_PASSWORD" "MONGO_PASSWORD" "REDIS_PASSWORD" "KEYCLOAK_ADMIN_PASSWORD")
+    for _secret_var in "${critical_secrets[@]}"; do
+        secrets_checked=$((secrets_checked + 1))
+        # Check instance-suffixed var first, then base var
+        local _suffixed="${_secret_var}_${code_upper}"
+        if [ -n "${!_suffixed:-}" ]; then
+            secrets_found=$((secrets_found + 1))
+        elif [ -n "${!_secret_var:-}" ]; then
+            secrets_found=$((secrets_found + 1))
+        elif [ -f "$env_file" ] && grep -q "^${_secret_var}=" "$env_file" 2>/dev/null; then
+            secrets_found=$((secrets_found + 1))
+        elif [ -f "$env_file" ] && grep -q "^${_suffixed}=" "$env_file" 2>/dev/null; then
+            secrets_found=$((secrets_found + 1))
+        fi
+    done
+
+    if [ $secrets_found -eq $secrets_checked ]; then
+        echo -e "${GREEN}PASS ${secrets_found}/${secrets_checked} available${NC}"
+        checks_passed=$((checks_passed + 1))
+    elif [ $secrets_found -gt 0 ]; then
+        echo -e "${YELLOW}WARN ${secrets_found}/${secrets_checked} available${NC}"
+        checks_passed=$((checks_passed + 1))
+    else
+        echo -e "${RED}FAIL No critical secrets found${NC}"
+        checks_failed=$((checks_failed + 1))
+    fi
+
+    # ------------------------------------------------------------------
+    # Checks 15-17: Custom Domain (only when SPOKE_{CODE}_DOMAIN is set)
     # ------------------------------------------------------------------
     if [ -n "$_spoke_domain" ]; then
 
-        # Check 13: DNS resolution for custom domain services
-        printf "  %-35s" "13. Custom Domain DNS:"
+        # Check 15: DNS resolution for custom domain services
+        printf "  %-35s" "15. Custom Domain DNS:"
         local _dns_ok=true
         local _dns_services=("app" "api" "idp")
         local _dns_resolved=0
@@ -383,8 +462,8 @@ spoke_verify() {
             checks_failed=$((checks_failed + 1))
         fi
 
-        # Check 14: TLS certificate validity for custom domain
-        printf "  %-35s" "14. Custom Domain TLS:"
+        # Check 16: TLS certificate validity for custom domain
+        printf "  %-35s" "16. Custom Domain TLS:"
         local _tls_ok=false
         local _tls_target="app.${_spoke_domain}"
 
@@ -418,8 +497,8 @@ spoke_verify() {
             fi
         fi
 
-        # Check 15: OIDC discovery endpoint accessible on custom domain
-        printf "  %-35s" "15. Custom Domain OIDC:"
+        # Check 17: OIDC discovery endpoint accessible on custom domain
+        printf "  %-35s" "17. Custom Domain OIDC:"
         local _oidc_url="https://idp.${_spoke_domain}/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
         local _oidc_response
         _oidc_response=$(curl -sf --max-time 10 --insecure "$_oidc_url" 2>/dev/null)
@@ -449,16 +528,20 @@ spoke_verify() {
     if [ $checks_failed -eq 0 ]; then
         echo -e "${GREEN}All ${checks_total} verification checks passed!${NC}"
         echo ""
+        guided_success "All ${checks_total} health checks passed for spoke ${code_upper}!" 2>/dev/null
         return 0
     else
         echo -e "${YELLOW}Some checks failed. See above for details.${NC}"
         echo ""
+        guided_warn "Some checks failed" \
+            "${checks_failed} of ${checks_total} checks need attention.
+Try: ./dive spoke logs ${code_upper} to investigate" 2>/dev/null
         return 1
     fi
 }
 
 ##
-# Verify all provisioned spokes (12-point check for each)
+# Verify all provisioned spokes (14-point check for each)
 #
 # Discovers spokes via dive_get_provisioned_spokes() with
 # instances/*/ directory fallback.

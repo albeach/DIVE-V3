@@ -707,6 +707,29 @@ _hub_execute_registered_phases() {
         local _phase_start
         _phase_start=$(date +%s)
 
+        # Guided mode: plain-language phase description
+        if is_guided 2>/dev/null; then
+            local _guided_desc=""
+            case "$_name" in
+                VAULT_BOOTSTRAP)  _guided_desc="Setting up the secure vault — this protects all passwords and encryption keys." ;;
+                DATABASE_INIT)    _guided_desc="Preparing databases — MongoDB for documents, PostgreSQL for structured data, Redis for fast caching." ;;
+                PREFLIGHT)        _guided_desc="Running pre-flight checks — making sure everything is ready before we start services." ;;
+                INITIALIZATION)   _guided_desc="Creating configuration files and generating security certificates." ;;
+                MONGODB_INIT)     _guided_desc="Loading initial data into MongoDB — clearance mappings, country definitions, and policy rules." ;;
+                BUILD)            _guided_desc="Building Docker images for all services. This may take a few minutes on first run." ;;
+                SERVICES)         _guided_desc="Starting all services — backend API, frontend app, policy engine, and supporting infrastructure." ;;
+                VAULT_DB_ENGINE)  _guided_desc="Connecting the vault to databases for automatic credential rotation." ;;
+                KEYCLOAK_CONFIG)  _guided_desc="Configuring the identity provider — setting up realms, clients, and authentication flows." ;;
+                REALM_VERIFY)     _guided_desc="Verifying that identity management is correctly configured and responding." ;;
+                KAS_REGISTER)     _guided_desc="Registering the Key Access Server for encrypted document handling." ;;
+                SEEDING)          _guided_desc="Loading sample data and test users into the system." ;;
+                KAS_INIT)         _guided_desc="Initializing the Key Access Server with encryption policies." ;;
+            esac
+            if [ -n "$_guided_desc" ]; then
+                guided_progress "Phase ${_num}: ${_label}" "$_guided_desc"
+            fi
+        fi
+
         if type progress_set_phase &>/dev/null; then
             progress_set_phase "$_num" "$_label"
         fi
@@ -906,6 +929,22 @@ hub_deploy() {
         log_info "Starting from phase: $DIVE_FROM_PHASE"
     fi
 
+    # Guided mode intro
+    if is_guided 2>/dev/null; then
+        guided_explain "Deploying the Hub" \
+            "${GUIDED_MSG_HUB_WHAT:-The Hub is the central command center of your DIVE network.
+It manages identity, policies, certificates, and coordinates all connected spokes.}"
+        guided_explain "What Will Happen" \
+            "The deployment runs 13 phases including:
+  - Setting up a secure vault for passwords and encryption keys
+  - Starting databases (MongoDB, PostgreSQL, Redis)
+  - Building and launching all services
+  - Configuring identity management (Keycloak)
+  - Loading security policies
+
+This typically takes 3-8 minutes."
+    fi
+
     # Execute orchestrated pipeline
     if ! type hub_pipeline_execute &>/dev/null; then
         log_error "Hub pipeline not available - module not loaded"
@@ -918,8 +957,34 @@ hub_deploy() {
         mode="resume"
     fi
 
-    hub_pipeline_execute "$mode"
-    return $?
+    local _hub_rc=0
+    hub_pipeline_execute "$mode" || _hub_rc=$?
+
+    # Guided mode completion messages
+    if is_guided 2>/dev/null; then
+        if [ $_hub_rc -eq 0 ]; then
+            guided_success "Hub deployment complete!
+
+Your Hub is now running with:
+  - Identity Provider (Keycloak) managing user authentication
+  - Policy Engine (OPA/OPAL) enforcing access control
+  - Secure Vault storing all credentials
+  - API server ready for spoke connections
+
+Next steps:
+  1. Verify:  ./dive hub verify
+  2. Authorize a spoke: ./dive spoke authorize FRA \"France\""
+        else
+            guided_error "Hub deployment failed" \
+                "One or more deployment phases encountered errors." \
+                "Try:
+  1. Check logs:    ./dive hub logs
+  2. Run diagnostics: ./dive hub diagnose
+  3. Resume:        ./dive hub deploy --resume"
+        fi
+    fi
+
+    return $_hub_rc
 }
 
 # =============================================================================

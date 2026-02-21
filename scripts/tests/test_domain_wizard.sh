@@ -196,20 +196,20 @@ source "$PROJECT_ROOT/scripts/dive-modules/spoke/domain-wizard.sh" 2>/dev/null |
 # Source verification module
 source "$PROJECT_ROOT/scripts/dive-modules/spoke/verification.sh" 2>/dev/null || true
 
-# Test: checks_total is 12 without custom domain
+# Test: checks_total is 14 without custom domain (12 core + 2 vault/secrets)
 (
-    # When no custom domain is set, checks_total should be 12
+    # When no custom domain is set, checks_total should be 14
     unset SPOKE_GBR_DOMAIN SPOKE_CUSTOM_DOMAIN
     # We can't directly test the local variable, but we verify the concept
-    total=12
-    assert_eq "12" "$total" "verification: 12 checks without custom domain"
+    total=14
+    assert_eq "14" "$total" "verification: 14 checks without custom domain"
 )
 
-# Test: checks_total is 15 with custom domain
+# Test: checks_total is 17 with custom domain (14 base + 3 custom domain)
 (
     export SPOKE_GBR_DOMAIN="gbr.mod.uk"
-    total=15
-    assert_eq "15" "$total" "verification: 15 checks with custom domain"
+    total=17
+    assert_eq "17" "$total" "verification: 17 checks with custom domain"
     unset SPOKE_GBR_DOMAIN
 )
 
