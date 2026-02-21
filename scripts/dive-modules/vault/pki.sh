@@ -595,7 +595,7 @@ module_vault_provision() {
     [ $total_failed -gt 0 ] && return 1
     return 0
 }
-export -f vault_spoke_is_provisioned
+# vault_spoke_is_provisioned was removed; stale export cleaned up
 
 
 # Load PKI credential management functions
