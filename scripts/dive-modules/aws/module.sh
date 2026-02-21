@@ -413,7 +413,7 @@ SHIM
         --security-group-ids "$sg_id" \
         --subnet-id "$subnet_id" \
         --associate-public-ip-address \
-        --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":'"${DIVE_AWS_VOLUME_SIZE}"',"VolumeType":"gp3","Encrypted":true}}]' \
+        --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":'"${DIVE_AWS_VOLUME_SIZE}"',"VolumeType":"gp3","Encrypted":true}}]' \
         --tag-specifications "$tag_specs" \
         --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
         "${user_data_flag[@]}" \

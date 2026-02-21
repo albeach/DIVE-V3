@@ -220,6 +220,68 @@ _bootstrap_compose() {
     log_success "Docker Compose installed: $(docker compose version --short 2>/dev/null)"
 }
 
+##
+# Auto-detect and mount unformatted EBS volumes (EC2 only).
+# Finds the largest unmounted block device (NVMe or xvd), formats ext4,
+# mounts to /data, and adds an fstab entry.
+# Safe to call on macOS (no-op) or when no extra volumes exist.
+##
+_bootstrap_ebs_automount() {
+    [ "$BOOTSTRAP_OS" = "darwin" ] && return 0
+    mountpoint -q /data 2>/dev/null && { log_verbose "/data already mounted"; return 0; }
+
+    # Find unmounted block devices > 20GB (skip root partitions)
+    local best_dev="" best_size=0
+    local dev size
+    for dev in /dev/nvme*n1 /dev/xvd[b-z]; do
+        [ -b "$dev" ] || continue
+        # Skip if device has partitions (likely root)
+        if lsblk -n "$dev" 2>/dev/null | grep -q part; then
+            continue
+        fi
+        size=$(lsblk -b -dn -o SIZE "$dev" 2>/dev/null || echo 0)
+        if [ "$size" -gt "$best_size" ] 2>/dev/null; then
+            best_size=$size
+            best_dev=$dev
+        fi
+    done
+
+    if [ -z "$best_dev" ]; then
+        log_verbose "No extra EBS volume detected — using root filesystem"
+        return 0
+    fi
+
+    local best_gb=$((best_size / 1073741824))
+    if [ "$best_gb" -lt 20 ]; then
+        log_verbose "Extra volume $best_dev is only ${best_gb}GB — skipping"
+        return 0
+    fi
+
+    log_info "Auto-mounting EBS volume: $best_dev (${best_gb}GB) → /data"
+
+    # Format only if no filesystem
+    if ! blkid "$best_dev" 2>/dev/null | grep -q TYPE; then
+        _bs_sudo mkfs.ext4 -F "$best_dev" >/dev/null 2>&1
+    fi
+
+    _bs_sudo mkdir -p /data
+    _bs_sudo mount "$best_dev" /data
+
+    # Persist in fstab (use UUID for reliability)
+    local uuid
+    uuid=$(blkid -s UUID -o value "$best_dev" 2>/dev/null || echo "")
+    if [ -n "$uuid" ] && ! grep -q "$uuid" /etc/fstab 2>/dev/null; then
+        echo "UUID=${uuid} /data ext4 defaults,nofail 0 2" | _bs_sudo tee -a /etc/fstab > /dev/null
+    fi
+
+    # Set ownership to the real user
+    local real_user
+    real_user=$(_bs_real_user 2>/dev/null || echo "ubuntu")
+    _bs_sudo chown -R "${real_user}:${real_user}" /data
+
+    log_success "EBS volume mounted: $best_dev → /data (${best_gb}GB)"
+}
+
 _bootstrap_docker_storage() {
     [ "$BOOTSTRAP_OS" = "darwin" ] && return 0
 
@@ -745,6 +807,7 @@ cmd_bootstrap() {
     _bootstrap_system_packages
     _bootstrap_docker
     _bootstrap_compose
+    _bootstrap_ebs_automount
     _bootstrap_docker_storage
     _bootstrap_node
     _bootstrap_mkcert
