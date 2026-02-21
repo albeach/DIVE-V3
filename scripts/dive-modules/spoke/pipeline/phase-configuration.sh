@@ -228,21 +228,29 @@ spoke_phase_configuration() {
             spoke_caddy_setup "$instance_code" || log_warn "Caddy setup had issues (non-fatal)"
         fi
 
-        # Start Caddy container if not already running
-        local _caddy_name="dive-spoke-${code_lower}-caddy"
-        if ! docker ps --format '{{.Names}}' | grep -q "^${_caddy_name}$"; then
-            log_info "Starting Caddy reverse proxy..."
-            local _compose_file="${spoke_dir}/docker-compose.yml"
-            if [ -f "$_compose_file" ]; then
-                COMPOSE_PROFILES=caddy docker compose -f "$_compose_file" \
-                    -p "dive-spoke-${code_lower}" up -d "caddy-${code_lower}" 2>&1 || \
-                    log_warn "Caddy container start had issues (non-fatal)"
-                # Wait for Caddy to obtain TLS certs
-                log_info "Waiting for Caddy TLS certificate provisioning..."
-                sleep 10
+        # Start/recreate Caddy container with current env vars
+        log_info "Starting Caddy reverse proxy..."
+        local _compose_file="${spoke_dir}/docker-compose.yml"
+        if [ -f "$_compose_file" ]; then
+            # Use --force-recreate to ensure env vars are fresh (not stale from prior run)
+            COMPOSE_PROFILES=caddy docker compose -f "$_compose_file" \
+                -p "dive-spoke-${code_lower}" up -d --force-recreate "caddy-${code_lower}" 2>&1 || \
+                log_warn "Caddy container start had issues (non-fatal)"
+            # Wait for Caddy to obtain TLS certs (HTTP-01 challenge needs ~15-30s)
+            log_info "Waiting for Caddy TLS certificate provisioning (up to 45s)..."
+            local _caddy_name="dive-spoke-${code_lower}-caddy"
+            local _caddy_wait=0
+            while [ $_caddy_wait -lt 45 ]; do
+                if curl -sk "https://localhost" -o /dev/null -w '%{http_code}' 2>/dev/null | grep -qE "^(200|301|302|404)$"; then
+                    log_success "Caddy TLS ready (${_caddy_wait}s)"
+                    break
+                fi
+                sleep 5
+                _caddy_wait=$((_caddy_wait + 5))
+            done
+            if [ $_caddy_wait -ge 45 ]; then
+                log_warn "Caddy TLS provisioning may still be in progress (check: docker logs ${_caddy_name})"
             fi
-        else
-            log_verbose "Caddy already running"
         fi
     fi
 
