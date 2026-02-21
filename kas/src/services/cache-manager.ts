@@ -93,7 +93,7 @@ export class CacheManager {
                 host: config.host || process.env.REDIS_HOST || 'localhost',
                 port: config.port || parseInt(process.env.REDIS_PORT || '6379', 10),
                 password: config.password || process.env.REDIS_PASSWORD,
-                retryStrategy: (times) => {
+                retryStrategy: (times: number) => {
                     const delay = Math.min(times * 50, 2000);
                     kasLogger.debug('Redis retry attempt', { times, delay });
                     return delay;
@@ -113,7 +113,7 @@ export class CacheManager {
                 });
             });
 
-            this.redis.on('error', (error) => {
+            this.redis.on('error', (error: Error) => {
                 kasLogger.error('Redis cache error', {
                     error: error.message,
                     code: (error as any).code
@@ -125,7 +125,7 @@ export class CacheManager {
             });
 
             // Connect immediately
-            this.redis.connect().catch((error) => {
+            this.redis.connect().catch((error: Error) => {
                 kasLogger.error('Redis cache initial connection failed', {
                     error: error.message
                 });

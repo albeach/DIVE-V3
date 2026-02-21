@@ -30,7 +30,7 @@
         "axios": "^1.13.5",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
-        "winston": "^3.18.3",
+        "ioredis": "^5.9.3",
         "jsonwebtoken": "^9.0.2",
         "jwk-to-pem": "^2.0.5",
         "mongodb": "^6.3.0",

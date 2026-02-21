@@ -134,18 +134,9 @@ volumes:
       dive.resource.service: "kas"
       dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
       dive.resource.purpose: "logs"
-  vault_data:
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "vault"
-      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
-      dive.resource.purpose: "secrets-storage"
-  vault_logs:
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "vault"
-      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
-      dive.resource.purpose: "audit-logs"
+  # vault_data and vault_logs use BIND MOUNTS (not named volumes)
+  # Created by PREPARE phase with correct UID ownership (vault=100)
+  # See: ./vault-data:/vault/data and ./vault-logs:/vault/logs in vault service
   caddy_data:
     labels:
       dive.resource.type: "volume"
@@ -362,7 +353,7 @@ services:
       APP_URL: {{BASE_URL}}
       API_URL: {{API_URL}}
       USA_IDP_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
-      USA_IDP_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
+      USA_IDP_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-spoke-users.sh
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
@@ -558,8 +549,9 @@ services:
       # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
       # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
       # ==========================================================================
-      # Token blacklist: set in .env (local=Hub Redis, remote=empty → API-based via HUB_API_URL)
-      BLACKLIST_REDIS_URL: ${BLACKLIST_REDIS_URL:-}
+      # Token blacklist: local default uses shared token-store over TLS.
+      # Remote mode can disable direct Redis with BLACKLIST_REDIS_URL="" and use HUB_API_URL.
+      BLACKLIST_REDIS_URL: ${BLACKLIST_REDIS_URL-rediss://:${REDIS_PASSWORD_BLACKLIST}@shared-token-store:6379}
       HUB_API_URL: ${HUB_API_URL:-}
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
@@ -623,15 +615,15 @@ services:
       - backend_logs:/app/logs
     depends_on:
       postgres-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # NEW: Backend uses orchestration DB
-      mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
+      mongodb-init-{{INSTANCE_CODE_LOWER}}:
+        condition: service_completed_successfully  # Replica set initialized
       redis-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # NEW: Backend uses redis for sessions
-      keycloak-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # NEW: Backend validates JWT tokens
+        condition: service_healthy
+      keycloak-init-{{INSTANCE_CODE_LOWER}}:
+        condition: service_completed_successfully  # Realm created
       opa-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # NEW: Explicit OPA dependency (policies loaded from volume + OPAL)
+        condition: service_healthy
       opal-client-{{INSTANCE_CODE_LOWER}}:
         condition: service_started  # Policies loaded via volume mount (OPAL sync is bonus)
     networks:
@@ -828,20 +820,103 @@ services:
     ports:
       - "127.0.0.1:{{VAULT_HOST_PORT}}:8200"
     volumes:
-      - vault_data:/vault/data
-      - vault_logs:/vault/logs
+      - ./vault-data:/vault/data    # Bind mount — permissions set in PREPARE phase (no root ownership issues)
+      - ./vault-logs:/vault/logs    # Bind mount — same reason
+      - ./vault-init:/vault/init    # Shared with vault-init container (stores unseal key + root token)
       - ./certs:/vault/certs:ro
     networks:
       dive-internal:
     healthcheck:
-      # vault status exit codes: 0=healthy+unsealed, 2=uninitialized (both are "vault is running")
-      # Exit 1=sealed, 3=error. Accept 0 and 2 as healthy during bootstrap.
-      # $$s / $$? use double-$ so Docker Compose passes literal $s/$? to the shell.
-      test: ["CMD-SHELL", "vault status -tls-skip-verify; s=$$?; [ $$s -eq 0 ] || [ $$s -eq 2 ]"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      # vault status exit codes: 0=healthy+unsealed, 1=sealed, 2=uninitialized
+      # Accept 0, 1, and 2 as "vault process is running" (init container handles unsealing).
+      # $$rc uses double-$ so Docker Compose passes literal $rc to the shell.
+      test: ["CMD-SHELL", "vault status -tls-skip-verify; rc=$$?; [ $$rc -eq 0 ] || [ $$rc -eq 1 ] || [ $$rc -eq 2 ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ==========================================================================
+  # INIT CONTAINERS (one-shot services for idempotent initialization)
+  # ==========================================================================
+  # These run once during deployment, initialize services, then exit.
+  # Uses service_completed_successfully condition so dependent services
+  # (backend, frontend, kas) only start after initialization is complete.
+  # ==========================================================================
+
+  mongodb-init-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "init"
+      dive.service.description: "One-shot: initializes MongoDB replica set for spoke {{INSTANCE_CODE_UPPER}}"
+    image: mongo:8.0.17
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb-init
+    depends_on:
+      mongodb-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/scripts/init-rs.sh"]
+    environment:
+      MONGO_CONTAINER: mongodb-{{INSTANCE_CODE_LOWER}}
+      MONGO_PORT: "27017"
+      MONGO_ADMIN_USER: admin
+      MONGO_ADMIN_PASS: ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      RS_NAME: rs0
+    volumes:
+      - ../../docker/mongodb-init:/scripts:ro
+      - ./certs:/certs:ro
+    networks:
+      - dive-internal
+    restart: "no"
+
+  vault-init-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "init"
+      dive.service.description: "One-shot: initializes spoke Vault (init + unseal + KV v2)"
+    image: hashicorp/vault:1.15
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-vault-init
+    profiles: ["vault"]
+    depends_on:
+      vault-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/init-vault.sh"]
+    environment:
+      VAULT_ADDR: "https://vault-{{INSTANCE_CODE_LOWER}}:8200"
+      VAULT_SKIP_VERIFY: "true"
+      KV_MOUNT: "spoke-secrets"
+    volumes:
+      - ../../docker/vault-init:/scripts:ro
+      - ./vault-init:/vault/init
+      - ./certs:/vault/certs:ro
+    networks:
+      - dive-internal
+    restart: "no"
+
+  keycloak-init-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "init"
+      dive.service.description: "One-shot: applies Terraform for Keycloak realm creation"
+    image: hashicorp/terraform:1.7
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-keycloak-init
+    depends_on:
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/init-realm.sh"]
+    environment:
+      TF_VAR_keycloak_url: "https://keycloak-{{INSTANCE_CODE_LOWER}}:8443"
+      TF_VAR_keycloak_admin: "admin"
+      TF_VAR_keycloak_admin_password: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      TF_VAR_realm_name: "dive-v3-broker-{{INSTANCE_CODE_LOWER}}"
+      TF_VAR_instance_code: "{{INSTANCE_CODE_LOWER}}"
+    volumes:
+      - ../../docker/keycloak-init:/scripts:ro
+      - ./terraform:/terraform
+      - ./certs:/certs:ro
+    networks:
+      - dive-internal
+    restart: "no"
+
+  # ==========================================================================
+  # CADDY REVERSE PROXY (Remote deployment — TLS termination for spoke domains)
+  # ==========================================================================
 
   caddy-{{INSTANCE_CODE_LOWER}}:
     labels:

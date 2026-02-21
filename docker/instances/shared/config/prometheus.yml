@@ -146,14 +146,14 @@ scrape_configs:
           realm: 'EST'
           service: 'opa'
 
-  # GBR - Ports: 3002/4002/8445/8283
+  # GBR - Ports: 3031/4031/8474/8491
   - job_name: 'gbr-backend'
     scheme: https
     tls_config:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['host.docker.internal:4002']
+      - targets: ['host.docker.internal:4031']
         labels:
           instance: 'gbr'
           realm: 'GBR'
@@ -165,7 +165,7 @@ scrape_configs:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['host.docker.internal:8283']
+      - targets: ['host.docker.internal:8491']
         labels:
           instance: 'gbr'
           realm: 'GBR'

@@ -57,6 +57,14 @@ else
     export SPOKE_PIPELINE_AVAILABLE=0
 fi
 
+# Load V2 pipeline (Docker Compose as orchestrator)
+if [ -f "${_PIPELINE_DIR}/spoke-pipeline-v2.sh" ]; then
+    source "${_PIPELINE_DIR}/spoke-pipeline-v2.sh"
+    export SPOKE_PIPELINE_V2_AVAILABLE=1
+else
+    export SPOKE_PIPELINE_V2_AVAILABLE=0
+fi
+
 # Mark this module as loaded
 export DIVE_SPOKE_DEPLOY_LOADED=1
 
@@ -168,11 +176,16 @@ spoke_deploy() {
     export DIVE_SEED_COUNT="${DIVE_SEED_COUNT:-5000}"
     local spoke_resume_mode=false
     local force_redeploy=false
+    local use_v2_pipeline=false
 
     # Parse options and positional args (CODE [NAME]) in any order.
     while [ $# -gt 0 ]; do
         local arg="$1"
         case "$arg" in
+            --v2)
+                use_v2_pipeline=true
+                log_info "Using V2 pipeline (Docker Compose as orchestrator)"
+                ;;
             --force)
                 force_redeploy=true
                 ;;
@@ -351,6 +364,7 @@ spoke_deploy() {
         echo "  ./dive spoke deploy GBR --seed --seed-count 5000"
         echo ""
         echo "Options:"
+        echo "  --v2                   Use V2 pipeline (Docker Compose as orchestrator, 3-phase)"
         echo "  --auth-code <UUID>     Pre-authorized federation code (from Hub: ./dive spoke authorize)"
         echo "  --force                Clean and redeploy"
         echo "  --resume               Resume from last checkpoint"
@@ -617,7 +631,21 @@ CONFIRM_EOF
         }
     fi
 
-    # Deploy using pipeline architecture
+    # =========================================================================
+    # V2 PIPELINE: Docker Compose as orchestrator (3-phase: PREPARE → UP → FEDERATE)
+    # =========================================================================
+    if [ "$use_v2_pipeline" = true ]; then
+        if [ "$SPOKE_PIPELINE_V2_AVAILABLE" != "1" ]; then
+            log_error "V2 pipeline not found at ${_PIPELINE_DIR}/spoke-pipeline-v2.sh"
+            return 1
+        fi
+        spoke_deploy_v2 "$instance_code" "$instance_name"
+        return $?
+    fi
+
+    # =========================================================================
+    # V1 PIPELINE: Traditional 6-phase bash orchestration
+    # =========================================================================
     if [ "$SPOKE_PIPELINE_AVAILABLE" != "1" ]; then
         log_error "Spoke pipeline modules not found at ${_PIPELINE_DIR}/spoke-pipeline.sh"
         return 1
