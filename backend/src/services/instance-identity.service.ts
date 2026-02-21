@@ -161,6 +161,37 @@ class InstanceIdentityService {
   }
 
   /**
+   * Sign arbitrary data with the instance private key.
+   * Used for cross-wire notification authentication.
+   */
+  async signData(data: string): Promise<string> {
+    const identity = await this.getIdentity();
+    const sign = crypto.createSign('SHA256');
+    sign.update(data);
+    sign.end();
+    return sign.sign(identity.privateKey, 'base64');
+  }
+
+  /**
+   * Verify a signature against arbitrary data using a presented certificate.
+   * Used for cross-wire notification authentication.
+   */
+  verifySignature(data: string, signature: string, certificatePEM: string): boolean {
+    try {
+      const cert = new X509Certificate(certificatePEM);
+      const verify = crypto.createVerify('SHA256');
+      verify.update(data);
+      verify.end();
+      return verify.verify(cert.publicKey, signature, 'base64');
+    } catch (error) {
+      logger.warn('Signature verification failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return false;
+    }
+  }
+
+  /**
    * Calculate the SHA256 fingerprint of a certificate PEM.
    * Returns SHA256:XX:XX:XX:... format for display.
    */

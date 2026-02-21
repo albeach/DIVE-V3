@@ -66,6 +66,8 @@ jest.mock('../services/bidirectional-federation', () => ({
     };
     return names[instanceCode.toUpperCase()] || instanceCode;
   }),
+  isHubInstance: jest.fn(() => false),
+  isHubCode: jest.fn((code: string) => code.toUpperCase() === 'USA'),
 }));
 
 // Mock opal-trust

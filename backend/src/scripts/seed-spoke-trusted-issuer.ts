@@ -41,6 +41,7 @@ import { Db } from 'mongodb';
 import { config } from 'dotenv';
 import * as path from 'path';
 import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+import { isHubInstance } from '../services/bidirectional-federation';
 
 // ============================================
 // CONFIGURATION
@@ -316,7 +317,7 @@ async function registerHubTrustedIssuer(
   spokeCode: string
 ): Promise<{ registered: number; skipped: number; error?: string }> {
   // Skip if this IS the hub
-  if (spokeCode === 'USA') {
+  if (isHubInstance()) {
     console.log('ℹ Skipping hub issuer cross-registration (this IS the hub)');
     return { registered: 0, skipped: 0 };
   }

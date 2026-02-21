@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
+import { isHubInstance } from '../services/bidirectional-federation';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -36,7 +37,7 @@ async function validateSecretSync(): Promise<ValidationCheck> {
     const instanceLower = instanceCode.toLowerCase();
 
     // For hub, check main client secret
-    if (instanceCode === 'USA') {
+    if (isHubInstance()) {
       const tfSecret = await getTerraformSecret('hub', 'client_secret');
       const gcpSecret = await getGCPSecret('dive-v3-keycloak-client-secret');
       const envSecret = process.env.KEYCLOAK_CLIENT_SECRET || process.env.AUTH_KEYCLOAK_SECRET;

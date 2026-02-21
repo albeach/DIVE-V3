@@ -17,6 +17,7 @@
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import { getKeycloakPassword } from '../utils/gcp-secrets';
 import logger from '../utils/logger';
+import { isHubInstance, isHubCode } from '../services/bidirectional-federation';
 
 interface IUserProfileAttribute {
   name: string;
@@ -154,8 +155,8 @@ async function initUserProfile(instanceCode: string): Promise<void> {
   logger.info('Initializing User Profile for instance', { instanceCode: code });
 
   // Get Keycloak configuration for this instance
-  const isHub = code === 'USA';
-  const realm = isHub ? 'dive-v3-broker-usa' : `dive-v3-broker-${code.toLowerCase()}`;
+  const isHub = isHubCode(code);
+  const realm = `dive-v3-broker-${code.toLowerCase()}`;
   
   // Determine Keycloak URL (internal Docker network)
   const keycloakUrl = isHub 

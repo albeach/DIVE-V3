@@ -17,6 +17,34 @@ import { logger } from '../utils/logger';
 const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
+// INSTANCE ROLE DETECTION
+// ============================================
+
+/**
+ * Determine if this instance is the Hub.
+ * Priority: IS_HUB env var > SPOKE_MODE check > legacy USA fallback.
+ */
+export function isHubInstance(): boolean {
+  if (process.env.IS_HUB === 'true') return true;
+  if (process.env.IS_HUB === 'false') return false;
+  if (process.env.SPOKE_MODE === 'true') return false;
+  // Legacy fallback: USA without explicit flags = Hub
+  return (process.env.INSTANCE_CODE || 'USA').toUpperCase() === 'USA';
+}
+
+/**
+ * Determine if a remote instance code uses Hub-style Docker container naming.
+ * In development, the Hub uses `dive-hub-*` while spokes use `dive-spoke-{code}-*`.
+ * In production, all instances use public URLs so container naming is irrelevant.
+ */
+export function isHubCode(instanceCode: string): boolean {
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production' || env === 'staging') return false;
+  const hubCode = (process.env.HUB_INSTANCE_CODE || 'USA').toUpperCase();
+  return instanceCode.toUpperCase() === hubCode;
+}
+
+// ============================================
 // URL BUILDERS
 // ============================================
 
@@ -32,15 +60,9 @@ export function getInternalKeycloakUrl(instanceCode: string, publicUrl: string):
 
   if (env === 'development' || env === 'local') {
     // Local development: use Docker container names for internal communication
-    let internalUrl: string;
-
-    if (code === 'USA') {
-      // USA Hub uses dive-hub-keycloak with HTTPS on port 8443
-      internalUrl = 'https://dive-hub-keycloak:8443';
-    } else {
-      // All spokes use dive-spoke-{code}-keycloak with HTTPS on 8443
-      internalUrl = `https://dive-spoke-${code.toLowerCase()}-keycloak:8443`;
-    }
+    const internalUrl = isHubCode(code)
+      ? 'https://dive-hub-keycloak:8443'
+      : `https://dive-spoke-${code.toLowerCase()}-keycloak:8443`;
 
     logger.debug('Using internal Docker URL for backend communication', {
       instanceCode: code,
@@ -103,16 +125,10 @@ export function getLocalIdpUrl(): string {
 
 /**
  * Get local realm name by instance code.
+ * All instances (Hub and Spokes) use the same naming pattern.
  */
 export function getLocalRealmName(instanceCode: string): string {
-  const code = instanceCode.toLowerCase();
-
-  // USA uses base realm name, others have suffix
-  if (code === 'usa') {
-    return 'dive-v3-broker-usa';
-  }
-
-  return `dive-v3-broker-${code}`;
+  return `dive-v3-broker-${instanceCode.toLowerCase()}`;
 }
 
 // ============================================

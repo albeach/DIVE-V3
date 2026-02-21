@@ -571,6 +571,87 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /api/federation/graph
+ * Returns the federation topology as an adjacency list.
+ * Available on any instance (Hub or Spoke) — queries local enrollment + spoke records.
+ */
+router.get('/graph', async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const { isHubInstance } = await import('../services/bidirectional-federation');
+        const localInstanceCode = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
+
+        const nodes = new Set<string>();
+        const edges: Array<{ from: string; to: string; enrollmentId: string; activatedAt?: Date }> = [];
+        nodes.add(localInstanceCode);
+
+        // V2 enrollments (Zero Trust federation)
+        try {
+            const { enrollmentStore } = await import('../models/enrollment.model');
+            const activeEnrollments = await enrollmentStore.list({ status: 'active' });
+
+            for (const enrollment of activeEnrollments) {
+                const requester = enrollment.requesterInstanceCode.toUpperCase();
+                const approver = enrollment.approverInstanceCode.toUpperCase();
+                nodes.add(requester);
+                nodes.add(approver);
+                edges.push({
+                    from: requester,
+                    to: approver,
+                    enrollmentId: enrollment.enrollmentId,
+                    activatedAt: enrollment.statusHistory?.find((h: { status: string }) => h.status === 'active')?.timestamp,
+                });
+            }
+        } catch (error) {
+            logger.debug('Could not query V2 enrollments for graph', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+
+        // V1 approved spokes (legacy federation)
+        try {
+            const allSpokes = await hubSpokeRegistry.listAllSpokes();
+            for (const spoke of allSpokes) {
+                if (spoke.status === 'approved') {
+                    const code = spoke.instanceCode.toUpperCase();
+                    nodes.add(code);
+                    const alreadyInV2 = edges.some(
+                        e => (e.from === code || e.to === code) && (e.from === localInstanceCode || e.to === localInstanceCode),
+                    );
+                    if (!alreadyInV2) {
+                        edges.push({
+                            from: code,
+                            to: localInstanceCode,
+                            enrollmentId: `v1-${spoke.spokeId}`,
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            logger.debug('Could not query V1 spokes for graph', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+
+        res.json({
+            instanceCode: localInstanceCode,
+            isHub: isHubInstance(),
+            nodes: Array.from(nodes).sort(),
+            edges,
+            edgeCount: edges.length,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error) {
+        logger.error('Failed to build federation graph', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to build federation graph',
+        });
+    }
+});
+
+/**
  * @openapi
  * /api/federation/discovery:
  *   get:
@@ -1733,7 +1814,7 @@ router.post('/enrollment/:enrollmentId/revoke', authenticateJWT, requireAdmin, a
  */
 router.post('/notify-revocation', strictRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { enrollmentId, revokerInstanceCode, reason } = req.body;
+        const { enrollmentId, revokerInstanceCode, reason, signature, signerCertPEM, timestamp, nonce } = req.body;
 
         if (!revokerInstanceCode || typeof revokerInstanceCode !== 'string') {
             res.status(400).json({
@@ -1741,6 +1822,53 @@ router.post('/notify-revocation', strictRateLimiter, async (req: Request, res: R
                 message: 'revokerInstanceCode is required',
             });
             return;
+        }
+
+        // Verify signature if present (backward-compatible: unsigned accepted with warning)
+        if (signature && signerCertPEM) {
+            const { instanceIdentityService } = await import('../services/instance-identity.service');
+            const signedFields: Record<string, string> = {};
+            if (enrollmentId) signedFields.enrollmentId = enrollmentId;
+            signedFields.revokerInstanceCode = revokerInstanceCode;
+            if (reason) signedFields.reason = reason;
+            if (timestamp) signedFields.timestamp = timestamp;
+            if (nonce) signedFields.nonce = nonce;
+
+            const canonical = JSON.stringify(
+                Object.keys(signedFields).sort().reduce((acc, key) => { acc[key] = signedFields[key]; return acc; }, {} as Record<string, string>),
+            );
+
+            const isValid = instanceIdentityService.verifySignature(canonical, signature, signerCertPEM);
+            if (!isValid) {
+                logger.warn('Revocation notification signature verification failed', { revokerInstanceCode });
+                res.status(401).json({
+                    error: 'InvalidSignature',
+                    message: 'Revocation notification signature verification failed',
+                });
+                return;
+            }
+
+            // Cross-check fingerprint against enrollment record (warn-only)
+            if (enrollmentId) {
+                try {
+                    const enrollment = await enrollmentService.getEnrollment(enrollmentId);
+                    if (enrollment?.requesterFingerprint) {
+                        const signerFingerprint = instanceIdentityService.calculateFingerprint(signerCertPEM);
+                        if (signerFingerprint !== enrollment.requesterFingerprint) {
+                            logger.warn('Revocation signer fingerprint does not match enrollment (cert may have rotated)', {
+                                expected: enrollment.requesterFingerprint,
+                                actual: signerFingerprint,
+                            });
+                        }
+                    }
+                } catch {
+                    // Enrollment lookup failure is non-fatal for fingerprint check
+                }
+            }
+
+            logger.info('Revocation notification signature verified', { revokerInstanceCode });
+        } else {
+            logger.warn('Unsigned revocation notification received (legacy client)', { revokerInstanceCode });
         }
 
         logger.info('Received cross-wire revocation notification', {

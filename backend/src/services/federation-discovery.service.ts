@@ -11,6 +11,7 @@
 
 import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
+import { isHubInstance, isHubCode } from './bidirectional-federation';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
 const httpsAgent = getSecureHttpsAgent();
@@ -50,10 +51,7 @@ class FederationDiscoveryService {
     constructor() {
         this.instanceCode = process.env.INSTANCE_CODE || 'USA';
 
-        // CRITICAL FIX (Issue #3 - 2026-02-03): Use explicit IS_HUB flag
-        // Don't rely on instance code comparison which is fragile
-        // Hub deployments MUST set IS_HUB=true, spokes MUST set IS_HUB=false or SPOKE_MODE=true
-        this.isHub = process.env.IS_HUB === 'true' || (process.env.SPOKE_MODE !== 'true' && this.instanceCode === 'USA');
+        this.isHub = isHubInstance();
 
         logger.info('FederationDiscoveryService initialized', {
             instanceCode: this.instanceCode,
@@ -224,7 +222,7 @@ class FederationDiscoveryService {
                         backend: {
                             ...i.services?.backend,
                             // Use Docker internal container names for inter-container communication
-                            containerName: i.code === 'USA'
+                            containerName: isHubCode(i.code)
                                 ? 'dive-hub-backend'
                                 : `dive-spoke-${i.code.toLowerCase()}-backend`
                         }

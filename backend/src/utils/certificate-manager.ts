@@ -20,6 +20,7 @@ import crypto, { X509Certificate } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from './logger';
+import { isHubInstance } from '../services/bidirectional-federation';
 
 /**
  * Certificate types
@@ -244,7 +245,7 @@ export class CertificateManager {
     resolveCertificatePaths(): ICertificatePaths {
         // Check for instance-specific PKI directory first (spoke model)
         const instanceCode = process.env.INSTANCE_CODE || 'USA';
-        const isHub = instanceCode.toUpperCase() === 'USA';
+        const isHub = isHubInstance();
 
         // For spokes, check instance-specific PKI directory
         const instancePkiDir = path.join(this.certDir, 'pki');

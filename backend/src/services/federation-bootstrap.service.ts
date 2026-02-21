@@ -23,6 +23,7 @@ import { opalClient } from './opal-client';
 // Note: federation-sync.service.ts (Phase 5) handles drift detection separately
 // This service handles spoke lifecycle event cascades
 import { logger } from '../utils/logger';
+import { isHubInstance } from './bidirectional-federation';
 import type { ISpokeRegistration } from './registry-types';
 
 interface ISpokeEvent {
@@ -59,53 +60,43 @@ class FederationBootstrapService {
       return;
     }
 
-    // CRITICAL FIX (Issue #3 - 2026-02-03): Use explicit IS_HUB flag
-    // Don't rely solely on SPOKE_MODE - Hub must explicitly set IS_HUB=true
-    const isHub = process.env.IS_HUB === 'true' || (process.env.SPOKE_MODE !== 'true');
+    const isHub = isHubInstance();
     const instanceCode = process.env.INSTANCE_CODE || 'USA';
-
-    if (!isHub) {
-      logger.info('Skipping federation bootstrap - running in spoke mode', {
-        instanceCode,
-        spokeMode: process.env.SPOKE_MODE,
-        IS_HUB: process.env.IS_HUB
-      });
-      this.initialized = true;
-      return;
-    }
 
     logger.info('Initializing federation bootstrap service', {
       instanceCode,
-      isHub: true,
+      isHub,
       IS_HUB: process.env.IS_HUB
     });
 
     try {
-      // SSOT ARCHITECTURE (2026-01-27): Auto-register Hub's own instance and KAS
-      // On a clean deployment, Hub must register itself before seeding can occur
-      await this.registerHubInstance(instanceCode);
-      await this.registerHubKAS(instanceCode);
+      if (isHub) {
+        // Hub-specific: self-registration, V1 spoke events, replay
+        await this.registerHubInstance(instanceCode);
+        await this.registerHubKAS(instanceCode);
+        await this.registerHubTrustedIssuer(instanceCode);
 
-      // SSOT ARCHITECTURE (2026-01-22): Register Hub's trusted issuer on startup
-      // This is the ONLY issuer that should exist on a clean slate
-      // Spoke issuers are added when spokes register via the federation API
-      await this.registerHubTrustedIssuer(instanceCode);
+        // Wire V1 spoke lifecycle event handlers (Hub-only)
+        this.registerSpokeEventHandlers();
 
-      // Wire up event subscriptions from Hub-Spoke Registry
-      this.registerEventHandlers();
+        // Replay events for spokes that were approved while Hub was down
+        await this.replayMissedEvents();
+      }
 
-      // CRITICAL FIX (Issue #6 - 2026-02-03): Event replay mechanism
-      // Replay events for spokes that were approved while Hub was down
-      await this.replayMissedEvents();
+      // UNIVERSAL: V2 enrollment event handlers (mesh federation)
+      // Both Hub and Spoke need these for auto-activation and revocation cascade
+      this.registerEnrollmentEventHandlers();
 
       this.initialized = true;
-      this.bootstrapComplete = true;  // Mark bootstrap as complete
+      this.bootstrapComplete = true;
 
       logger.info('Federation bootstrap service initialized successfully', {
         instanceCode,
-        eventsWired: ['spoke:approved', 'spoke:suspended', 'spoke:revoked'],
+        isHub,
+        eventsWired: isHub
+          ? ['spoke:approved', 'spoke:suspended', 'spoke:revoked', 'enrollment:*']
+          : ['enrollment:*'],
         cascadeEnabled: true,
-        hubRegistered: true,
         bootstrapComplete: true
       });
     } catch (error) {
@@ -113,7 +104,7 @@ class FederationBootstrapService {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
-      this.bootstrapComplete = false;  // Mark as incomplete on error
+      this.bootstrapComplete = false;
       throw error;
     }
   }
@@ -579,11 +570,10 @@ class FederationBootstrapService {
   }
 
   /**
-   * Register event handlers for Hub-Spoke Registry events
-   *
-   * This is the critical wiring that was previously missing!
+   * Register event handlers for V1 Hub-Spoke Registry events (Hub-only).
+   * Handles spoke:registered, spoke:approved, spoke:suspended, spoke:revoked.
    */
-  private registerEventHandlers(): void {
+  private registerSpokeEventHandlers(): void {
     if (this.eventHandlersRegistered) {
       logger.warn('Event handlers already registered');
       return;
@@ -785,15 +775,10 @@ class FederationBootstrapService {
       }
     });
 
-    // ============================================
-    // ENROLLMENT EVENTS (V2 Zero Trust Federation)
-    // ============================================
-    this.registerEnrollmentEventHandlers();
-
     this.eventHandlersRegistered = true;
 
-    logger.info('Federation event handlers registered', {
-      events: ['spoke:approved', 'spoke:suspended', 'spoke:revoked', 'enrollment:*']
+    logger.info('V1 spoke event handlers registered', {
+      events: ['spoke:approved', 'spoke:suspended', 'spoke:revoked']
     });
   }
 
@@ -912,12 +897,12 @@ class FederationBootstrapService {
           const fullEnrollment = await enrService.getEnrollment(event.enrollment.enrollmentId);
           await federationActivationService.activateHubSide(fullEnrollment);
 
-          logger.info('Hub-side federation activated automatically', {
+          logger.info('Approver-side federation activated automatically', {
             enrollmentId: event.enrollment.enrollmentId,
             requesterInstanceCode: event.enrollment.requesterInstanceCode,
           });
         } catch (error) {
-          logger.error('Hub-side auto-activation failed (manual activation available via POST /enrollment/:id/activate)', {
+          logger.error('Approver-side auto-activation failed (manual activation available via POST /enrollment/:id/activate)', {
             enrollmentId: event.enrollment.enrollmentId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
@@ -956,14 +941,14 @@ class FederationBootstrapService {
           const fullEnrollment = await enrService.getEnrollment(event.enrollment.enrollmentId);
           const summary = await federationRevocationService.revokeHubSide(fullEnrollment);
 
-          logger.info('Hub-side trust revocation cascade completed', {
+          logger.info('Approver-side trust revocation cascade completed', {
             enrollmentId: event.enrollment.enrollmentId,
             requesterInstanceCode: event.enrollment.requesterInstanceCode,
             successfulSteps: summary.successfulSteps,
             failedSteps: summary.failedSteps,
           });
         } catch (error) {
-          logger.error('Hub-side trust revocation cascade failed', {
+          logger.error('Approver-side trust revocation cascade failed', {
             enrollmentId: event.enrollment.enrollmentId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
@@ -1131,7 +1116,7 @@ class FederationBootstrapService {
       initialized: this.initialized,
       bootstrapComplete: this.bootstrapComplete,
       eventHandlersRegistered: this.eventHandlersRegistered,
-      isHub: process.env.SPOKE_MODE !== 'true',
+      isHub: isHubInstance(),
       instanceCode: process.env.INSTANCE_CODE || 'USA'
     };
   }

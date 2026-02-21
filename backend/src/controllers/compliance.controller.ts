@@ -19,6 +19,7 @@ import { Request, Response } from "express";
 import { complianceMetricsService } from "../services/compliance-metrics.service";
 import { policyBundleService } from "../services/policy-bundle.service";
 import { logger } from "../utils/logger";
+import { isHubInstance } from "../services/bidirectional-federation";
 
 // =============================================================================
 // SECTION DEFINITIONS (ACP-240 requirement counts per specification)
@@ -885,7 +886,7 @@ export async function getCertificateStatus(
 
         // Get instance code from environment
         const instanceCode = process.env.INSTANCE_CODE || 'USA';
-        const isHub = instanceCode.toUpperCase() === 'USA';
+        const isHub = isHubInstance();
 
         // Determine overall PKI health
         const allHealthy = pkiInitialized &&

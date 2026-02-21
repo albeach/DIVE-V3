@@ -115,7 +115,7 @@ function buildApiUrl(instanceCode: string): string {
     // Hub (USA) uses HUB_URL env var, spokes use calculated ports from discovery
     const hubUrl = process.env.HUB_URL || process.env.USA_API_URL || process.env.BACKEND_URL;
     if (hubUrl) {
-        return code === 'USA' ? hubUrl : hubUrl;
+        return hubUrl;
     }
 
     // Fallback: return URL that will likely fail, triggering discovery refresh

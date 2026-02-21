@@ -343,15 +343,39 @@ class FederationRevocationService {
       return;
     }
 
+    const crypto = await import('crypto');
     const https = await import('https');
     const { getSecureHttpsAgent } = await import('../utils/https-agent');
 
     const notificationUrl = `${partnerApiUrl}/api/federation/notify-revocation`;
-    const payload = JSON.stringify({
+    const revokerInstanceCode = enrollment.approverInstanceCode || process.env.INSTANCE_CODE || 'USA';
+    const timestamp = new Date().toISOString();
+    const nonce = crypto.randomBytes(16).toString('hex');
+
+    const body: Record<string, string> = {
       enrollmentId: enrollment.enrollmentId,
-      revokerInstanceCode: enrollment.approverInstanceCode || process.env.INSTANCE_CODE || 'USA',
+      revokerInstanceCode,
       reason: 'Federation revoked by approver',
-    });
+      timestamp,
+      nonce,
+    };
+
+    // Sign the notification for cross-wire authentication
+    try {
+      const { instanceIdentityService } = await import('./instance-identity.service');
+      const canonical = JSON.stringify(
+        Object.keys(body).sort().reduce((acc, key) => { acc[key] = body[key]; return acc; }, {} as Record<string, string>),
+      );
+      body.signature = await instanceIdentityService.signData(canonical);
+      body.signerCertPEM = await instanceIdentityService.getCertificatePEM();
+    } catch (error) {
+      logger.warn('Could not sign revocation notification (sending unsigned)', {
+        enrollmentId: enrollment.enrollmentId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    const payload = JSON.stringify(body);
 
     logger.info('Notifying partner of revocation', {
       enrollmentId: enrollment.enrollmentId,

@@ -103,11 +103,11 @@ export async function updateOPATrustForSpoke(
       federation_class: isDevelopment ? 'LOCAL' : 'NATIONAL'
     });
 
-    const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
-    const currentPartners = await getCurrentFederationPartners(hubInstanceCode);
+    const localInstanceCode = process.env.INSTANCE_CODE || 'USA';
+    const currentPartners = await getCurrentFederationPartners(localInstanceCode);
     if (!currentPartners.includes(instanceCode)) {
       currentPartners.push(instanceCode);
-      await opalDataService.updateFederationMatrix(hubInstanceCode, currentPartners);
+      await opalDataService.updateFederationMatrix(localInstanceCode, currentPartners);
     }
 
     logger.info('OPA trust data updated for approved spoke', {
@@ -119,11 +119,11 @@ export async function updateOPATrustForSpoke(
   } else {
     await opalDataService.removeTrustedIssuer(issuerUrl);
 
-    const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
-    const currentPartners = await getCurrentFederationPartners(hubInstanceCode);
+    const localInstanceCode = process.env.INSTANCE_CODE || 'USA';
+    const currentPartners = await getCurrentFederationPartners(localInstanceCode);
     const updatedPartners = currentPartners.filter(p => p !== instanceCode);
     if (updatedPartners.length !== currentPartners.length) {
-      await opalDataService.updateFederationMatrix(hubInstanceCode, updatedPartners);
+      await opalDataService.updateFederationMatrix(localInstanceCode, updatedPartners);
     }
 
     logger.info('OPA trust data removed for suspended/revoked spoke', {

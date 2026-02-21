@@ -17,6 +17,7 @@ import { getDb } from '../utils/mongodb-singleton';
 import { getAllCircuitBreakerStats, CircuitState } from '../utils/circuit-breaker';
 import { authzCacheService } from './authz-cache.service';
 import { prometheusMetrics } from './prometheus-metrics.service';
+import { isHubInstance } from './bidirectional-federation';
 
 // ============================================
 // Health Check Service (Phase 3)
@@ -478,7 +479,7 @@ class HealthService {
 
         // CRITICAL: For Hub instances, also check if bootstrap is complete
         // This ensures seeding doesn't start until Hub self-registration is done
-        const isHub = process.env.SPOKE_MODE !== 'true';
+        const isHub = isHubInstance();
         let bootstrapReady = true;  // Spokes don't need bootstrap check
 
         if (isHub) {

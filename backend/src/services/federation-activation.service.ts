@@ -325,7 +325,7 @@ class FederationActivationService {
     try {
       const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
       const { getPortOffsetForCountry, mapKASTrustLevel } = await import('./federation-cascade');
-      const { getInstanceName } = await import('./bidirectional-federation');
+      const { getInstanceName, isHubCode } = await import('./bidirectional-federation');
 
       const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
       const kasId = `${code.toLowerCase()}-kas`;
@@ -341,9 +341,9 @@ class FederationActivationService {
         const portOffset = getPortOffsetForCountry(code);
 
         // Hub-aware URL construction:
-        // Hub uses dive-hub-kas, not dive-spoke-usa-kas
-        const isHub = code === 'USA';
-        const internalKasUrl = isHub
+        // Hub uses dive-hub-kas, spokes use dive-spoke-{code}-kas
+        const partnerIsHub = isHubCode(code);
+        const internalKasUrl = partnerIsHub
           ? 'https://dive-hub-kas:8080'
           : `https://dive-spoke-${code.toLowerCase()}-kas:8080`;
         const publicKasUrl = partnerKasUrl
@@ -406,6 +406,22 @@ class FederationActivationService {
       await opalDataService.publishKasRegistry();
     } catch (error) {
       logger.error('Failed to register partner KAS locally (non-fatal)', {
+        partnerInstanceCode: code,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // Step 3.5: Update COI memberships for mesh federation
+    try {
+      const { updateCoiMembershipsForFederation } = await import('./federation-cascade');
+      const { createSpokeStore } = await import('./registry-types');
+      const store = createSpokeStore();
+      await updateCoiMembershipsForFederation(store);
+      logger.info('COI memberships updated for spoke-side activation', {
+        partnerInstanceCode: code,
+      });
+    } catch (error) {
+      logger.error('COI membership update failed (non-fatal)', {
         partnerInstanceCode: code,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
