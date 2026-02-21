@@ -24,6 +24,11 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load guided framework
+if [ -f "${MODULES_DIR}/guided/framework.sh" ]; then
+    source "${MODULES_DIR}/guided/framework.sh"
+fi
+
 # =============================================================================
 # AUTHORIZATION FUNCTIONS
 # =============================================================================
@@ -97,6 +102,11 @@ spoke_authorize() {
             name="$code_upper Instance"
         fi
     fi
+
+    guided_explain "Authorizing a Spoke" \
+        "You are creating an invitation for ${code_upper} (${name}) to join your federation.
+This generates a one-time authorization code that the spoke operator will use
+during deployment. The code expires in ${ttl_hours} hours." 2>/dev/null
 
     log_info "Authorizing spoke: $code_upper ($name)"
     log_info "Authorization TTL: ${ttl_hours}h"
@@ -220,6 +230,15 @@ spoke_authorize() {
     echo "  The spoke operator will be prompted for this Hub's domain."
     echo "  Auth code is validated by Hub API → auto-federated bidirectional SSO."
     echo ""
+
+    guided_success "Authorization complete!
+
+Send the following to the spoke operator:
+  Authorization Code: $auth_code
+  Hub Domain:         $(hostname -f 2>/dev/null || echo 'your-hub-domain')
+
+They will run:
+  ./dive spoke deploy $code_upper --auth-code $auth_code" 2>/dev/null
 
     return 0
 }

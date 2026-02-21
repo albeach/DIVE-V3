@@ -10,6 +10,11 @@
 [ -n "${DIVE_DEPLOY_NUKE_LOADED:-}" ] && return 0
 export DIVE_DEPLOY_NUKE_LOADED=1
 
+# Load guided framework for interactive nuke warnings
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/guided/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/guided/framework.sh"
+fi
+
 # =============================================================================
 # NUKE HELPER FUNCTIONS (Modular Architecture)
 # =============================================================================
@@ -633,6 +638,18 @@ cmd_nuke() {
         return 1
     fi
 
+    # Guided mode: explain what nuke does
+    if is_guided 2>/dev/null; then
+        guided_warn "Destructive Operation" \
+            "This will permanently remove all ${scope_description} including:
+  - Docker containers and their data
+  - Database volumes (all stored data will be lost)
+  - Generated certificates and secrets
+  - Configuration files and deployment state
+
+This cannot be undone. You will need to redeploy from scratch."
+    fi
+
     # Display starting message
     if [ "$target_type" = "all" ]; then
         log_warn "NUKING EVERYTHING..."
@@ -682,4 +699,14 @@ cmd_nuke() {
     echo ""
     log_step "Verifying clean state for ${scope_description}..."
     _nuke_verify_clean
+
+    # Guided completion
+    if is_guided 2>/dev/null; then
+        guided_success "Clean-up complete!
+
+All ${scope_description} have been removed.
+To redeploy, run:
+  ./dive hub deploy    # Deploy the Hub
+  ./dive spoke deploy  # Deploy a Spoke"
+    fi
 }

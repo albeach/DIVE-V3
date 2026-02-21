@@ -397,11 +397,12 @@ assert_eq "0" "$standard_with_warn" "functional: standard phases have no warn me
 # Test 35: Hub pipeline line count within expected range
 # Phase 7 registry refactor: ~700 lines (registration + engine)
 # Growth to ~1100: dry-run mode, SIGINT handling, heartbeat, circuit breakers, observability
+# Growth to ~1160: guided mode progress descriptions for all 13 phases
 total_lines=$(wc -l < "$hub_pipeline" | tr -d ' ')
-if [ "$total_lines" -lt 1150 ]; then
-    assert_eq "0" "0" "line count: hub-pipeline.sh is $total_lines lines (hardened engine)"
+if [ "$total_lines" -lt 1200 ]; then
+    assert_eq "0" "0" "line count: hub-pipeline.sh is $total_lines lines (hardened engine + guided)"
 else
-    assert_eq "<1150" "$total_lines" "line count: should be under 1150 lines (registry + hardened engine)"
+    assert_eq "<1200" "$total_lines" "line count: should be under 1200 lines (registry + guided + hardened engine)"
 fi
 
 # =============================================================================

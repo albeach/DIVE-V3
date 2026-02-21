@@ -15,6 +15,14 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load guided mode framework + messages (no-ops in Pro mode)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../guided/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../guided/framework.sh"
+fi
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../guided/messages.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../guided/messages.sh"
+fi
+
 # Load orchestration state management (database-backed)
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh"
@@ -287,6 +295,11 @@ spoke_deploy() {
         return 1
     fi
 
+    # =========================================================================
+    # GUIDED MODE: Welcome + intro
+    # =========================================================================
+    guided_explain "Deploying a Spoke" "${GUIDED_MSG_SPOKE_DEPLOY_INTRO:-}"
+
     if ! [[ "${DIVE_SEED_COUNT:-5000}" =~ ^[0-9]+$ ]] || [ "${DIVE_SEED_COUNT:-0}" -le 0 ]; then
         log_error "--seed-count must be a positive integer"
         return 1
@@ -399,7 +412,7 @@ spoke_deploy() {
     # =========================================================================
     # HUB DOMAIN PROMPT (zero-config remote/standalone deployment)
     # =========================================================================
-    # If no Hub is detectable locally, prompt for Hub domain (30s timeout).
+    # Guided mode: wizard with explanations. Pro mode: env vars or 30s prompt.
     # Input → federated mode (derive Hub URLs, set DEPLOYMENT_MODE=remote)
     # No input → standalone mode (SKIP_FEDERATION=true, fully local)
     # =========================================================================
@@ -409,7 +422,16 @@ spoke_deploy() {
         if [ "$_hub_containers" -eq 0 ]; then
             local _hub_domain=""
 
-            if is_interactive; then
+            if is_guided; then
+                # Guided mode: explain federation and ask for Hub address
+                guided_step_reset
+                guided_explain "Connecting to a Hub" "${GUIDED_MSG_FEDERATION_WHAT:-}"
+                guided_explain "What is a Hub?" "${GUIDED_MSG_HUB_WHAT:-}"
+                guided_ask "What is your Hub's web address?" _hub_domain "" \
+                    "${GUIDED_MSG_HUB_URL_HELP:-Enter the Hub API domain, e.g. dev-usa-api.dive25.com. Leave blank for standalone mode.}"
+
+            elif is_interactive; then
+                # Pro interactive: concise prompt
                 echo ""
                 echo "============================================"
                 echo "  NO HUB DETECTED"
@@ -457,7 +479,17 @@ spoke_deploy() {
                 log_info "  API:  $HUB_API_URL"
                 log_info "  IdP:  $HUB_KC_URL"
                 log_info "  OPAL: $HUB_OPAL_URL"
+
+                guided_success "Connected to Hub at ${_hub_domain}"
             else
+                if is_guided; then
+                    guided_explain "Standalone Mode" \
+                        "No Hub address provided. Your spoke will deploy in standalone mode.
+It will be fully functional on its own, but won't be connected to
+any Hub for shared identity or policy decisions.
+
+You can connect to a Hub later using: ./dive spoke federate ${instance_code}"
+                fi
                 log_warn "No Hub domain provided — deploying in STANDALONE mode"
                 log_warn "Spoke will be fully functional but NOT federated with any Hub"
                 export SKIP_FEDERATION=true
@@ -471,6 +503,27 @@ spoke_deploy() {
         export ORCH_DB_ENABLED=false
         export ORCH_DB_DUAL_WRITE=false
         export ORCH_DB_SOURCE_OF_TRUTH="file"
+    fi
+
+    # =========================================================================
+    # AUTH CODE ENFORCEMENT (zero trust: remote/federated spokes must present auth code)
+    # =========================================================================
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] && [ "${SKIP_FEDERATION:-false}" = "false" ] && [ -z "${SPOKE_AUTH_CODE:-}" ]; then
+        # In guided mode, we'll prompt later (in the guided auth code section below)
+        # In pro mode, require it upfront
+        if is_pro; then
+            log_error "Authorization code required for federated spoke deployment"
+            log_error ""
+            log_error "Get a code from your Hub admin:"
+            log_error "  Hub side:  ./dive spoke authorize ${instance_code}"
+            log_error ""
+            log_error "Then deploy with:"
+            log_error "  ./dive spoke deploy ${instance_code} --auth-code <UUID>"
+            log_error ""
+            log_error "Or deploy standalone (no federation):"
+            log_error "  ./dive spoke deploy ${instance_code} --skip-federation"
+            return 1
+        fi
     fi
 
     # AUTO-PROVISION: Ensure Vault provisioning before spoke deployment
@@ -531,6 +584,37 @@ spoke_deploy() {
         else
             instance_name="$code_upper Instance"
         fi
+    fi
+
+    # =========================================================================
+    # GUIDED MODE: Auth code collection + confirmation
+    # =========================================================================
+    if is_guided && [ "${SKIP_FEDERATION:-false}" = "false" ] && [ -z "${SPOKE_AUTH_CODE:-}" ]; then
+        guided_explain "Authorization" "${GUIDED_MSG_AUTH_CODE_WHAT:-}"
+        guided_ask "Enter the authorization code from your Hub admin:" SPOKE_AUTH_CODE "" \
+            "${GUIDED_MSG_AUTH_CODE_HELP:-}"
+        if [ -n "$SPOKE_AUTH_CODE" ]; then
+            log_info "Auth code provided: ${SPOKE_AUTH_CODE:0:8}..."
+        fi
+    fi
+
+    if is_guided; then
+        local _mode_desc="standalone"
+        [ "${SKIP_FEDERATION:-false}" = "false" ] && _mode_desc="federated with Hub"
+        guided_confirm "$(cat <<CONFIRM_EOF
+Hub:      ${HUB_EXTERNAL_ADDRESS:-standalone (no Hub)}
+Spoke:    ${instance_code} (${instance_name})
+Domain:   ${SPOKE_CUSTOM_DOMAIN:-${DIVE_DOMAIN_SUFFIX:-localhost}}
+Mode:     ${_mode_desc}
+Auth:     ${SPOKE_AUTH_CODE:+provided (${SPOKE_AUTH_CODE:0:8}...)}${SPOKE_AUTH_CODE:-not needed (standalone)}
+
+This will set up about 12 services including a secure vault,
+database, identity provider, and policy engine.
+CONFIRM_EOF
+        )" || {
+            log_info "Deployment cancelled by user"
+            return 0
+        }
     fi
 
     # Deploy using pipeline architecture

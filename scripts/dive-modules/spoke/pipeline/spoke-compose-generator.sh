@@ -195,6 +195,7 @@ spoke_compose_get_placeholders() {
     local opa_port="${SPOKE_OPA_PORT:-$((DEFAULT_OPA_PORT + SPOKE_PORT_OFFSET))}"
     local opal_opa_port=$((9181 + SPOKE_PORT_OFFSET))  # OPAL inline OPA (separate from standalone OPA)
     local kas_port="${SPOKE_KAS_PORT:-$((DEFAULT_KAS_PORT + SPOKE_PORT_OFFSET))}"
+    local vault_port="${SPOKE_VAULT_PORT:-$((8200 + SPOKE_PORT_OFFSET))}"
 
     # Domain-aware URLs: when SPOKE_CUSTOM_DOMAIN or DIVE_DOMAIN_SUFFIX is set,
     # use external domain names instead of localhost:port.
@@ -247,6 +248,7 @@ FRONTEND_HOST_PORT="${frontend_port}"
 OPA_HOST_PORT="${opa_port}"
 OPAL_OPA_PORT="${opal_opa_port}"
 KAS_HOST_PORT="${kas_port}"
+VAULT_HOST_PORT="${vault_port}"
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TEMPLATE_HASH="${template_hash}"
 TEMPLATE_LAST_UPDATED="${template_date}"
@@ -438,6 +440,7 @@ spoke_compose_render_template() {
     template_content="${template_content//\{\{OPA_HOST_PORT\}\}/${OPA_HOST_PORT}}"
     template_content="${template_content//\{\{OPAL_OPA_PORT\}\}/${OPAL_OPA_PORT}}"
     template_content="${template_content//\{\{KAS_HOST_PORT\}\}/${KAS_HOST_PORT}}"
+    template_content="${template_content//\{\{VAULT_HOST_PORT\}\}/${VAULT_HOST_PORT}}"
     template_content="${template_content//\{\{TIMESTAMP\}\}/${TIMESTAMP}}"
     template_content="${template_content//\{\{TEMPLATE_HASH\}\}/${TEMPLATE_HASH}}"
     template_content="${template_content//\{\{TEMPLATE_LAST_UPDATED\}\}/${TEMPLATE_LAST_UPDATED}}"

@@ -11,6 +11,8 @@
 #   --domain <suffix>              Set domain suffix (e.g., myorg.com)
 #   --cloud-provider aws|gcp|local Set cloud provider explicitly
 #   --secrets-provider vault|gcp|aws|local  Set secrets provider
+#   --guided                       Guided mode: wizard-like flow for new users
+#   --pro                          Pro mode: non-interactive, flags/env vars
 #   --non-interactive              Skip all prompts, use defaults (CI/CD mode)
 #   --yes / -y                     Alias for --non-interactive
 #   --dry-run / -n                 Show what would be done without executing
@@ -76,6 +78,15 @@ while [[ $# -gt 0 ]]; do
             export QUIET=true
             shift
             ;;
+        --guided)
+            export DIVE_MODE=guided
+            shift
+            ;;
+        --pro)
+            export DIVE_MODE=pro
+            export DIVE_NON_INTERACTIVE=true
+            shift
+            ;;
         --non-interactive|--yes|-y)
             export DIVE_NON_INTERACTIVE=true
             shift
@@ -109,7 +120,7 @@ done
 
 # Guard against misplaced global flags after the command
 for arg in "$@"; do
-    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" ]]; then
+    if [[ "$arg" == "--instance" || "$arg" == "--env" || "$arg" == "--cloud-provider" || "$arg" == "--secrets-provider" || "$arg" == "--non-interactive" || "$arg" == "--profile" || "$arg" == "--guided" || "$arg" == "--pro" ]]; then
         log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
         exit 1
     fi

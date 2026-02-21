@@ -3,9 +3,11 @@
 # DIVE V3 CLI - Unified Spoke Secret Management
 # =============================================================================
 # Centralized secret management with clear precedence:
-#   1. GCP Secret Manager (SSOT for production)
-#   2. .env file (local fallback)
-#   3. Generate new (initialization only)
+#   1. Spoke-local Vault (data sovereignty — highest priority)
+#   2. Hub Vault AppRole (centralized fallback)
+#   3. GCP Secret Manager (cloud fallback)
+#   4. .env file (local fallback)
+#   5. Generate new (initialization only)
 #
 # Consolidates 5+ duplicate secret loading implementations into one.
 # =============================================================================
@@ -118,10 +120,16 @@ spoke_secrets_load() {
 
     case "$mode" in
         load)
-            # Try primary provider first (Vault or GCP)
+            # Priority 1: Spoke-local Vault (data sovereignty)
+            if spoke_secrets_load_from_spoke_vault "$instance_code" 2>/dev/null; then
+                log_success "Loaded secrets from spoke-local Vault"
+                return 0
+            fi
+
+            # Priority 2-3: Hub Vault or GCP
             if [ "$SECRETS_PROVIDER" = "vault" ]; then
                 if spoke_secrets_load_from_vault "$instance_code"; then
-                    log_success "Loaded secrets from HashiCorp Vault"
+                    log_success "Loaded secrets from Hub Vault"
                     spoke_secrets_sync_to_env "$instance_code"
                     return 0
                 fi
@@ -133,9 +141,9 @@ spoke_secrets_load() {
                 fi
             fi
 
-            # Fallback to .env
+            # Priority 4: .env fallback
             if spoke_secrets_load_from_env "$instance_code"; then
-                log_warn "Using .env secrets ($ssot_name unavailable) - may be stale"
+                log_warn "Using .env secrets (Vault/GCP unavailable) - may be stale"
                 return 0
             fi
 
@@ -178,6 +186,94 @@ spoke_secrets_load() {
             return 1
             ;;
     esac
+}
+
+# =============================================================================
+# SPOKE-LOCAL VAULT INTEGRATION (Data Sovereignty)
+# =============================================================================
+
+##
+# Load secrets from spoke-local Vault (highest priority).
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success (all required secrets loaded)
+#   1 - Failure (spoke Vault not available or missing secrets)
+##
+spoke_secrets_load_from_spoke_vault() {
+    local instance_code="$1"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local init_file="${spoke_dir}/.vault-init"
+
+    # Quick check: is spoke Vault configured?
+    if [ ! -f "$init_file" ]; then
+        log_verbose "No spoke-local Vault (no .vault-init file)"
+        return 1
+    fi
+
+    # Check Vault container is running + unsealed
+    local vault_container="dive-spoke-${code_lower}-vault"
+    if ! docker inspect -f '{{.State.Running}}' "$vault_container" 2>/dev/null | grep -q true; then
+        log_verbose "Spoke Vault container not running"
+        return 1
+    fi
+
+    local vault_sealed
+    vault_sealed=$(docker exec -e VAULT_SKIP_VERIFY=true "$vault_container" \
+        vault status -tls-skip-verify -format=json 2>/dev/null | jq -r '.sealed // true')
+    if [ "$vault_sealed" = "true" ]; then
+        log_verbose "Spoke Vault is sealed"
+        return 1
+    fi
+
+    log_verbose "Loading secrets from spoke-local Vault"
+
+    local secrets_loaded=0
+    local kv_mount="${SPOKE_VAULT_KV_MOUNT:-spoke-secrets}"
+
+    # Map of env var → Vault path/field under spoke-secrets/core/{code}/
+    for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
+        local env_var_name="${base_secret}_${code_upper}"
+        local vault_key=""
+        local vault_field="password"
+
+        case "$base_secret" in
+            POSTGRES_PASSWORD)      vault_key="postgres" ;;
+            MONGO_PASSWORD)         vault_key="mongodb" ;;
+            REDIS_PASSWORD)         vault_key="redis" ;;
+            KEYCLOAK_ADMIN_PASSWORD) vault_key="keycloak-admin" ;;
+            KEYCLOAK_CLIENT_SECRET) vault_key="keycloak-client"; vault_field="secret" ;;
+            AUTH_SECRET)            vault_key="nextauth"; vault_field="secret" ;;
+            *)                      continue ;;
+        esac
+
+        local secret_value
+        secret_value=$(docker exec -e VAULT_SKIP_VERIFY=true "$vault_container" \
+            vault kv get -tls-skip-verify -field="$vault_field" \
+            "${kv_mount}/core/${code_lower}/${vault_key}" 2>/dev/null)
+
+        if [ -n "$secret_value" ]; then
+            export "${env_var_name}=${secret_value}"
+            export "${base_secret}=${secret_value}"
+            secrets_loaded=$((secrets_loaded + 1))
+            log_verbose "Loaded $base_secret from spoke Vault"
+        fi
+    done
+
+    if [ $secrets_loaded -ge ${#SPOKE_REQUIRED_SECRETS[@]} ]; then
+        log_info "Loaded $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} secrets from spoke-local Vault"
+        return 0
+    else
+        log_verbose "Only $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} from spoke Vault — falling back"
+        return 1
+    fi
 }
 
 # =============================================================================

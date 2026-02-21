@@ -219,6 +219,7 @@ export YELLOW='\033[1;33m'
 export CYAN='\033[0;36m'
 export GRAY='\033[0;90m'
 export BOLD='\033[1m'
+export DIM='\033[2m'
 export NC='\033[0m'
 
 # =============================================================================
@@ -297,6 +298,41 @@ confirm_destructive() {
         return 0
     fi
 }
+
+# =============================================================================
+# GUIDED / PRO CLI MODE
+# =============================================================================
+# Two CLI modes: Guided (wizard-like for new users) and Pro (flags/env vars for power users).
+# Auto-detect: interactive terminal → guided, CI → pro, overridable with --guided/--pro or DIVE_MODE.
+
+# Returns the current CLI mode: "guided" or "pro"
+dive_mode() {
+    # Explicit override takes priority
+    if [ -n "${DIVE_MODE:-}" ]; then
+        echo "$DIVE_MODE"
+        return
+    fi
+    # CI environments → always pro
+    if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${JENKINS_URL:-}" ]; then
+        echo "pro"
+        return
+    fi
+    # Non-interactive flag → pro
+    if [ "${DIVE_NON_INTERACTIVE:-false}" = "true" ]; then
+        echo "pro"
+        return
+    fi
+    # Interactive terminal → guided, otherwise pro
+    if [ -t 0 ] && [ -t 1 ]; then
+        echo "guided"
+    else
+        echo "pro"
+    fi
+}
+
+# Shorthand mode checks
+is_guided() { [ "$(dive_mode)" = "guided" ]; }
+is_pro()    { [ "$(dive_mode)" = "pro" ]; }
 
 # =============================================================================
 # AWS CONFIGURATION (used by dev/staging environments)

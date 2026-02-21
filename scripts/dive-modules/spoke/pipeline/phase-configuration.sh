@@ -275,6 +275,38 @@ spoke_phase_configuration() {
         fi
     fi
 
+    # Step 1.9: Pre-validate auth code (fail fast before registration)
+    if [ "$standalone_mode" != "true" ] && [ -n "${SPOKE_AUTH_CODE:-}" ] && [ -n "${hub_url:-}" ]; then
+        guided_progress "AUTH VALIDATION" "${GUIDED_MSG_AUTH_VALIDATING:-Checking authorization code with Hub...}"
+        log_step "Pre-validating authorization code..."
+        local _auth_check
+        _auth_check=$(curl -sk --max-time 10 \
+            "${hub_url}/api/federation/auth-code/${code_upper}/validate?code=${SPOKE_AUTH_CODE}" 2>/dev/null)
+        local _auth_valid
+        _auth_valid=$(echo "$_auth_check" | jq -r '.valid // false' 2>/dev/null)
+        if [ "$_auth_valid" = "true" ]; then
+            log_success "Authorization code valid"
+            guided_success "${GUIDED_MSG_AUTH_VALID:-Authorization code accepted by Hub.}"
+        elif [ "$_auth_valid" = "false" ]; then
+            local _auth_reason
+            _auth_reason=$(echo "$_auth_check" | jq -r '.reason // "unknown"' 2>/dev/null)
+            local _auth_msg
+            _auth_msg=$(echo "$_auth_check" | jq -r '.message // "Auth code validation failed"' 2>/dev/null)
+            log_error "Authorization code invalid: $_auth_msg (reason: $_auth_reason)"
+            case "$_auth_reason" in
+                expired)  guided_error "Authorization code expired" "${GUIDED_MSG_AUTH_EXPIRED:-}" ;;
+                consumed) guided_error "Authorization code already used" "${GUIDED_MSG_AUTH_CONSUMED:-}" ;;
+                *)        guided_error "Authorization code invalid" "$_auth_msg" \
+                            "Ask your Hub admin to create a new code: ./dive spoke authorize ${code_upper}" ;;
+            esac
+            if [ "${SKIP_FEDERATION_ERRORS:-false}" != "true" ]; then
+                return 1
+            fi
+        else
+            log_warn "Could not pre-validate auth code (Hub may not support this endpoint yet)"
+        fi
+    fi
+
     # Step 2: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
     # NOTE (2026-02-09): Moved BEFORE federation setup to eliminate race condition.
     # Hub API auto-approval triggers createBidirectionalFederation() which creates IdP links.
