@@ -1053,6 +1053,445 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     }
 });
 
+// ============================================
+// V2 ENROLLMENT PROTOCOL (Zero Trust Federation Handshake)
+// ============================================
+// These endpoints implement the Zero Trust federation enrollment protocol.
+// No auth codes, no shared passwords. Cryptographic identity + OOB verification.
+//
+// Flow: DISCOVER → ENROLL → OOB VERIFY → APPROVE → CREDENTIAL EXCHANGE → ACTIVATE
+// See: /.well-known/dive-federation for discovery metadata
+// ============================================
+
+import { enrollmentService, type EnrollmentRequest } from '../services/enrollment.service';
+
+const enrollmentRequestSchema = z.object({
+    instanceCode: z.string().min(2).max(5).toUpperCase(),
+    instanceName: z.string().min(2).max(100),
+    instanceCertPEM: z.string().min(100),   // PEM-encoded X.509 certificate
+    oidcDiscoveryUrl: z.string().url(),
+    apiUrl: z.string().url(),
+    idpUrl: z.string().url(),
+    kasUrl: z.string().url().optional(),
+    requestedCapabilities: z.array(z.string()).min(1),
+    requestedTrustLevel: z.enum(['development', 'partner', 'bilateral', 'national']),
+    contactEmail: z.string().email(),
+    enrollmentSignature: z.string().min(1),  // ECDSA signature over canonical payload
+    signatureTimestamp: z.string().min(1),
+    signatureNonce: z.string().min(1),
+});
+
+/**
+ * POST /api/federation/enroll
+ * Submit a federation enrollment request.
+ * Public endpoint — no auth required. The enrollment signature proves identity.
+ */
+router.post('/enroll', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const parsed = enrollmentRequestSchema.safeParse(req.body);
+
+        if (!parsed.success) {
+            res.status(400).json({
+                error: 'Validation failed',
+                details: parsed.error.issues,
+            });
+            return;
+        }
+
+        const request: EnrollmentRequest = parsed.data;
+
+        const response = await enrollmentService.processEnrollment(request);
+
+        res.status(201).json(response);
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+
+        // Distinguish client errors from server errors
+        if (message.includes('signature') || message.includes('certificate') ||
+            message.includes('timestamp') || message.includes('already exists')) {
+            logger.warn('Enrollment request rejected', { error: message });
+            res.status(400).json({
+                error: 'EnrollmentRejected',
+                message,
+            });
+        } else {
+            logger.error('Enrollment processing failed', { error: message });
+            res.status(500).json({
+                error: 'InternalError',
+                message: 'Enrollment processing failed',
+            });
+        }
+    }
+});
+
+/**
+ * GET /api/federation/enrollment/:enrollmentId/status
+ * Poll enrollment status. Public endpoint for the enrolling instance.
+ */
+router.get('/enrollment/:enrollmentId/status', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const status = await enrollmentService.getStatus(enrollmentId);
+        res.json(status);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else {
+            logger.error('Failed to get enrollment status', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Failed to get enrollment status' });
+        }
+    }
+});
+
+/**
+ * GET /api/federation/enrollment/:enrollmentId
+ * Get full enrollment details. Admin-only.
+ */
+router.get('/enrollment/:enrollmentId', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const enrollment = await enrollmentService.getEnrollment(enrollmentId);
+
+        // Redact sensitive fields for the response
+        const safeEnrollment = {
+            ...enrollment,
+            approverCredentials: enrollment.approverCredentials ? { ...enrollment.approverCredentials, oidcClientSecret: '***' } : undefined,
+            requesterCredentials: enrollment.requesterCredentials ? { ...enrollment.requesterCredentials, oidcClientSecret: '***' } : undefined,
+        };
+
+        res.json(safeEnrollment);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else {
+            logger.error('Failed to get enrollment', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Failed to get enrollment' });
+        }
+    }
+});
+
+/**
+ * GET /api/federation/enrollments
+ * List all enrollments. Admin-only.
+ */
+router.get('/enrollments', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const statusFilter = req.query.status as string | undefined;
+        const enrollments = await enrollmentService.listAll(
+            statusFilter ? { status: statusFilter as 'pending_verification' } : undefined,
+        );
+
+        // Redact secrets
+        const safeEnrollments = enrollments.map(e => ({
+            ...e,
+            approverCredentials: e.approverCredentials ? { ...e.approverCredentials, oidcClientSecret: '***' } : undefined,
+            requesterCredentials: e.requesterCredentials ? { ...e.requesterCredentials, oidcClientSecret: '***' } : undefined,
+        }));
+
+        res.json({
+            enrollments: safeEnrollments,
+            count: safeEnrollments.length,
+        });
+    } catch (error) {
+        logger.error('Failed to list enrollments', { error: error instanceof Error ? error.message : 'Unknown error' });
+        res.status(500).json({ error: 'InternalError', message: 'Failed to list enrollments' });
+    }
+});
+
+/**
+ * GET /api/federation/enrollments/pending
+ * List pending enrollments for admin dashboard.
+ */
+router.get('/enrollments/pending', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const pending = await enrollmentService.listPending();
+        res.json({
+            enrollments: pending,
+            count: pending.length,
+        });
+    } catch (error) {
+        logger.error('Failed to list pending enrollments', { error: error instanceof Error ? error.message : 'Unknown error' });
+        res.status(500).json({ error: 'InternalError', message: 'Failed to list pending enrollments' });
+    }
+});
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/verify-fingerprint
+ * Mark fingerprint as verified after OOB verification. Admin-only.
+ */
+router.post('/enrollment/:enrollmentId/verify-fingerprint', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
+
+        const enrollment = await enrollmentService.verifyFingerprint(enrollmentId, actor);
+
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: enrollment.status,
+            message: 'Fingerprint verified. Enrollment is ready for approval.',
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Invalid state')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Fingerprint verification failed', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Fingerprint verification failed' });
+        }
+    }
+});
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/approve
+ * Approve an enrollment request. Admin-only.
+ */
+router.post('/enrollment/:enrollmentId/approve', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
+
+        const enrollment = await enrollmentService.approve(enrollmentId, actor);
+
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: enrollment.status,
+            requesterInstanceCode: enrollment.requesterInstanceCode,
+            message: 'Enrollment approved. Credential exchange will begin.',
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Invalid state')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Enrollment approval failed', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Enrollment approval failed' });
+        }
+    }
+});
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/reject
+ * Reject an enrollment request with a reason. Admin-only.
+ */
+router.post('/enrollment/:enrollmentId/reject', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
+        const { reason } = req.body;
+
+        if (!reason || typeof reason !== 'string' || reason.length < 5) {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'A reason (min 5 characters) is required when rejecting an enrollment',
+            });
+            return;
+        }
+
+        const enrollment = await enrollmentService.reject(enrollmentId, actor, reason);
+
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: enrollment.status,
+            requesterInstanceCode: enrollment.requesterInstanceCode,
+            message: 'Enrollment rejected.',
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Invalid state')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Enrollment rejection failed', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Enrollment rejection failed' });
+        }
+    }
+});
+
+/**
+ * GET /api/federation/enrollment/:enrollmentId/credentials
+ * Get credentials after approval (for the enrolling instance to pick up).
+ * Authenticated by enrollment certificate verification.
+ */
+router.get('/enrollment/:enrollmentId/credentials', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const enrollment = await enrollmentService.getEnrollment(enrollmentId);
+
+        if (enrollment.status !== 'approved' && enrollment.status !== 'credentials_exchanged') {
+            res.status(409).json({
+                error: 'NotReady',
+                status: enrollment.status,
+                message: `Credentials not available — enrollment is ${enrollment.status}`,
+            });
+            return;
+        }
+
+        if (!enrollment.approverCredentials) {
+            res.status(202).json({
+                status: enrollment.status,
+                message: 'Approved but credentials are still being generated. Retry shortly.',
+            });
+            return;
+        }
+
+        res.json({
+            status: enrollment.status,
+            credentials: enrollment.approverCredentials,
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else {
+            logger.error('Failed to get enrollment credentials', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Failed to get credentials' });
+        }
+    }
+});
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/credentials
+ * Push reciprocal credentials from the enrolling instance.
+ */
+router.post('/enrollment/:enrollmentId/credentials', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const credentialSchema = z.object({
+            oidcClientId: z.string().min(1),
+            oidcClientSecret: z.string().min(1),
+            oidcIssuerUrl: z.string().url(),
+            oidcDiscoveryUrl: z.string().url(),
+            kasPublicKey: z.string().optional(),
+        });
+
+        const parsed = credentialSchema.safeParse(req.body);
+        if (!parsed.success) {
+            res.status(400).json({
+                error: 'Validation failed',
+                details: parsed.error.issues,
+            });
+            return;
+        }
+
+        const enrollment = await enrollmentService.storeRequesterCredentials(
+            enrollmentId,
+            parsed.data,
+        );
+
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: enrollment.status,
+            message: enrollment.status === 'credentials_exchanged'
+                ? 'Credentials exchanged. Federation activation in progress.'
+                : 'Requester credentials stored. Awaiting approver credentials.',
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Cannot store')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Failed to store requester credentials', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Failed to store credentials' });
+        }
+    }
+});
+
+/**
+ * GET /api/federation/enrollment/:enrollmentId/events
+ * Server-Sent Events stream for enrollment status updates.
+ * The enrolling instance opens this to receive real-time status changes.
+ */
+router.get('/enrollment/:enrollmentId/events', async (req: Request, res: Response): Promise<void> => {
+    const { enrollmentId } = req.params;
+
+    // Verify enrollment exists
+    try {
+        await enrollmentService.getEnrollment(enrollmentId);
+    } catch {
+        res.status(404).json({ error: 'NotFound', message: `Enrollment not found: ${enrollmentId}` });
+        return;
+    }
+
+    // Set up SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',  // Disable nginx buffering
+    });
+
+    // Send initial status
+    const initialStatus = await enrollmentService.getStatus(enrollmentId);
+    res.write(`event: status_change\ndata: ${JSON.stringify(initialStatus)}\n\n`);
+
+    // Listen for enrollment events
+    const onEvent = (event: { type: string; enrollment: { enrollmentId: string; status: string } }) => {
+        if (event.enrollment.enrollmentId === enrollmentId) {
+            res.write(`event: ${event.type.replace('enrollment:', '')}\ndata: ${JSON.stringify({
+                status: event.enrollment.status,
+                type: event.type,
+                timestamp: new Date().toISOString(),
+            })}\n\n`);
+
+            // If terminal state, close the stream
+            if (['active', 'rejected', 'revoked', 'expired'].includes(event.enrollment.status)) {
+                res.write('event: close\ndata: {"reason": "terminal_state"}\n\n');
+                cleanup();
+                res.end();
+            }
+        }
+    };
+
+    enrollmentService.on('enrollment', onEvent);
+
+    // Heartbeat every 30 seconds to keep connection alive
+    const heartbeat = setInterval(() => {
+        res.write(': heartbeat\n\n');
+    }, 30000);
+
+    // Cleanup on disconnect
+    const cleanup = () => {
+        clearInterval(heartbeat);
+        enrollmentService.removeListener('enrollment', onEvent);
+    };
+
+    req.on('close', cleanup);
+    req.on('error', cleanup);
+});
+
+/**
+ * GET /api/federation/enrollment-stats
+ * Get enrollment statistics. Admin-only.
+ */
+router.get('/enrollment-stats', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const stats = await enrollmentService.getStatistics();
+        res.json(stats);
+    } catch (error) {
+        logger.error('Failed to get enrollment stats', { error: error instanceof Error ? error.message : 'Unknown error' });
+        res.status(500).json({ error: 'InternalError', message: 'Failed to get enrollment statistics' });
+    }
+});
+
+// ============================================
+// LEGACY V1 REGISTRATION (preserved for backward compatibility)
+// ============================================
+
 /**
  * GET /api/federation/auth-code/:instanceCode/validate
  * Pre-validate an authorization code before attempting registration.

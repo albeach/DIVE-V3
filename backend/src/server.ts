@@ -24,6 +24,7 @@ import policiesLabRoutes from './routes/policies-lab.routes';  // Policies Lab
 import oauthRoutes from './routes/oauth.routes';  // OAuth 2.0 for SP federation
 import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
 import federationRoutes from './routes/federation.routes';  // Federation endpoints
+import federationDiscoveryRoutes from './routes/federation-discovery.routes';  // Zero Trust federation discovery
 import federationSyncRoutes from './routes/federation-sync.routes';  // Phase 5: Federation state sync
 import federationConstraintRoutes from './routes/federation-constraint.routes';  // Phase 2: Federation constraints (bilateral)
 import policyUpdatesStreamRoutes from './routes/policy-updates-stream.routes';  // Phase 5: Real-time policy updates (SSE)
@@ -172,6 +173,7 @@ app.use('/api-docs', swaggerRoutes);  // API Documentation (OpenAPI/Swagger UI)
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server
 app.use('/scim/v2', scimRoutes);  // SCIM 2.0 User Provisioning
+app.use('/', federationDiscoveryRoutes);  // Zero Trust federation discovery (public, no auth)
 app.use('/api/federation', federationRoutes);  // Hub-Spoke federation management (Phase 3-5)
 app.use('/api/federation-constraints', federationConstraintRoutes);  // Phase 2: Bilateral federation constraints (tenant-controlled)
 app.use('/api/drift', federationSyncRoutes);  // Phase 5: Federation state drift detection (no auth required)

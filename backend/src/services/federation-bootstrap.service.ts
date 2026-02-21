@@ -785,11 +785,123 @@ class FederationBootstrapService {
       }
     });
 
+    // ============================================
+    // ENROLLMENT EVENTS (V2 Zero Trust Federation)
+    // ============================================
+    this.registerEnrollmentEventHandlers();
+
     this.eventHandlersRegistered = true;
 
     logger.info('Federation event handlers registered', {
-      events: ['spoke:approved', 'spoke:suspended', 'spoke:revoked']
+      events: ['spoke:approved', 'spoke:suspended', 'spoke:revoked', 'enrollment:*']
     });
+  }
+
+  /**
+   * Register enrollment event handlers for V2 Zero Trust federation.
+   * Wires enrollment lifecycle events to the notification service.
+   */
+  private registerEnrollmentEventHandlers(): void {
+    try {
+      // Lazy import to avoid circular dependencies
+      const { enrollmentService } = require('./enrollment.service');
+      const enrollmentNotifications: Record<string, { title: string; priority: 'low' | 'medium' | 'high' | 'critical' }> = {
+        'enrollment:requested': { title: 'Federation Enrollment Request', priority: 'high' },
+        'enrollment:fingerprint_verified': { title: 'Enrollment Fingerprint Verified', priority: 'medium' },
+        'enrollment:approved': { title: 'Enrollment Approved', priority: 'medium' },
+        'enrollment:rejected': { title: 'Enrollment Rejected', priority: 'medium' },
+        'enrollment:credentials_exchanged': { title: 'Enrollment Credentials Exchanged', priority: 'low' },
+        'enrollment:activated': { title: 'Federation Active', priority: 'medium' },
+        'enrollment:revoked': { title: 'Enrollment Revoked', priority: 'high' },
+      };
+
+      enrollmentService.on('enrollment', async (event: {
+        type: string;
+        enrollment: {
+          enrollmentId: string;
+          requesterInstanceCode: string;
+          requesterInstanceName: string;
+          requesterFingerprint: string;
+          requesterContactEmail: string;
+          status: string;
+        };
+        actor?: string;
+        reason?: string;
+      }) => {
+        const config = enrollmentNotifications[event.type];
+        if (!config) return;
+
+        try {
+          const { notificationService } = await import('./notification.service');
+          const enrollment = event.enrollment;
+
+          let message: string;
+          switch (event.type) {
+            case 'enrollment:requested':
+              message = `"${enrollment.requesterInstanceName}" (${enrollment.requesterInstanceCode}) requests federation. ` +
+                `Fingerprint: ${enrollment.requesterFingerprint}. ` +
+                `Contact: ${enrollment.requesterContactEmail}`;
+              break;
+            case 'enrollment:fingerprint_verified':
+              message = `Fingerprint verified for "${enrollment.requesterInstanceCode}". Ready for approval.`;
+              break;
+            case 'enrollment:approved':
+              message = `Federation enrollment approved for "${enrollment.requesterInstanceCode}" by ${event.actor || 'admin'}.`;
+              break;
+            case 'enrollment:rejected':
+              message = `Federation enrollment rejected for "${enrollment.requesterInstanceCode}". Reason: ${event.reason || 'No reason provided'}.`;
+              break;
+            case 'enrollment:credentials_exchanged':
+              message = `Credential exchange complete with "${enrollment.requesterInstanceCode}". Activating federation.`;
+              break;
+            case 'enrollment:activated':
+              message = `Federation is now ACTIVE with "${enrollment.requesterInstanceCode}".`;
+              break;
+            case 'enrollment:revoked':
+              message = `Federation revoked for "${enrollment.requesterInstanceCode}". Reason: ${event.reason || 'No reason provided'}.`;
+              break;
+            default:
+              message = `Enrollment event: ${event.type} for ${enrollment.requesterInstanceCode}`;
+          }
+
+          await notificationService.createAdminNotification({
+            type: 'federation_event',
+            title: `${config.title}: ${enrollment.requesterInstanceCode}`,
+            message,
+            actionUrl: `/admin/federation/enrollments/${enrollment.enrollmentId}`,
+            priority: config.priority,
+            metadata: {
+              enrollmentId: enrollment.enrollmentId,
+              requesterInstanceCode: enrollment.requesterInstanceCode,
+              requesterInstanceName: enrollment.requesterInstanceName,
+              eventType: event.type,
+              actor: event.actor,
+              reason: event.reason,
+            },
+          });
+
+          logger.info('Admin notification created for enrollment event', {
+            type: event.type,
+            enrollmentId: enrollment.enrollmentId,
+            requesterInstanceCode: enrollment.requesterInstanceCode,
+          });
+        } catch (error) {
+          logger.warn('Failed to create admin notification for enrollment event', {
+            type: event.type,
+            enrollmentId: event.enrollment.enrollmentId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          // Non-blocking: notification failure doesn't affect enrollment flow
+        }
+      });
+
+      logger.debug('Enrollment event handlers registered');
+    } catch (error) {
+      logger.warn('Failed to register enrollment event handlers', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // Non-blocking: enrollment is an optional v2 feature
+    }
   }
 
   /**

@@ -1923,6 +1923,335 @@ federation_repair() {
 ##
 # Federation module command dispatcher
 ##
+# =============================================================================
+# V2 ZERO TRUST ENROLLMENT CLI COMMANDS
+# =============================================================================
+
+##
+# Discover federation metadata from a remote instance
+# Usage: ./dive federation discover <URL>
+# Example: ./dive federation discover https://api.usa.dive25.com
+##
+cmd_federation_discover() {
+    local remote_url="${1:-}"
+
+    if [ -z "$remote_url" ]; then
+        log_error "Usage: ./dive federation discover <URL>"
+        log_info "Example: ./dive federation discover https://api.usa.dive25.com"
+        return 1
+    fi
+
+    # Strip trailing slash
+    remote_url="${remote_url%/}"
+
+    log_info "Fetching federation metadata from ${remote_url}..."
+
+    local metadata
+    metadata=$(curl -sS --max-time 10 -k "${remote_url}/.well-known/dive-federation" 2>&1)
+    local curl_rc=$?
+
+    if [ $curl_rc -ne 0 ]; then
+        log_error "Failed to reach ${remote_url}/.well-known/dive-federation"
+        log_error "curl exit code: ${curl_rc}"
+        log_info "Is the remote instance running? Check the URL and try again."
+        return 1
+    fi
+
+    # Validate it's JSON
+    if ! echo "$metadata" | jq '.' &>/dev/null; then
+        log_error "Invalid response from ${remote_url} (not JSON)"
+        log_debug "Response: ${metadata:0:200}"
+        return 1
+    fi
+
+    # Display federation metadata
+    local inst_code inst_name fingerprint enrollment_url
+    inst_code=$(echo "$metadata" | jq -r '.instanceCode // "unknown"')
+    inst_name=$(echo "$metadata" | jq -r '.instanceName // "unknown"')
+    fingerprint=$(echo "$metadata" | jq -r '.identity.instanceCertFingerprint // "not available"')
+    enrollment_url=$(echo "$metadata" | jq -r '.federation.enrollmentEndpoint // "not available"')
+
+    echo ""
+    echo "============================================"
+    echo "  Federation Discovery: ${inst_code}"
+    echo "============================================"
+    echo ""
+    echo "  Instance:     ${inst_name} (${inst_code})"
+    echo "  Fingerprint:  ${fingerprint}"
+    echo "  OIDC Issuer:  $(echo "$metadata" | jq -r '.identity.oidcIssuer // "N/A"')"
+    echo "  Enroll URL:   ${enrollment_url}"
+    echo "  Capabilities: $(echo "$metadata" | jq -r '.capabilities | join(", ")')"
+    echo "  Contact:      $(echo "$metadata" | jq -r '.contact // "N/A"')"
+    echo ""
+    echo "  To enroll with this instance:"
+    echo "    ./dive federation enroll ${remote_url}"
+    echo ""
+
+    return 0
+}
+
+##
+# Show this instance's identity fingerprint for OOB verification
+# Usage: ./dive federation show-fingerprint
+##
+cmd_federation_show_fingerprint() {
+    local instance_code="${INSTANCE_CODE:-${COUNTRY_CODE:-USA}}"
+    instance_code="${instance_code^^}"
+
+    local cert_dir="${CERT_DIR:-/app/certs}"
+    local fingerprint_file="${cert_dir}/identity/fingerprint.txt"
+
+    if [ -f "$fingerprint_file" ]; then
+        local fingerprint
+        fingerprint=$(cat "$fingerprint_file" | tr -d '\n')
+        echo ""
+        echo "============================================"
+        echo "  Instance Identity: ${instance_code}"
+        echo "============================================"
+        echo ""
+        echo "  Fingerprint: ${fingerprint}"
+        echo ""
+        echo "  Share this fingerprint with your federation"
+        echo "  partner via a secure out-of-band channel"
+        echo "  (phone call, Signal, JWICS, etc.)"
+        echo ""
+        return 0
+    fi
+
+    # Try to get fingerprint from running backend container
+    local container_name="dive-hub-backend"
+    if [ "${SPOKE_MODE:-}" = "true" ] || [ -n "${COUNTRY_CODE:-}" ]; then
+        local code_lower="${instance_code,,}"
+        container_name="dive-spoke-${code_lower}-backend-${code_lower}"
+    fi
+
+    local fp
+    fp=$(docker exec "$container_name" cat /app/certs/identity/fingerprint.txt 2>/dev/null | tr -d '\n')
+
+    if [ -n "$fp" ]; then
+        echo ""
+        echo "============================================"
+        echo "  Instance Identity: ${instance_code}"
+        echo "============================================"
+        echo ""
+        echo "  Fingerprint: ${fp}"
+        echo ""
+        echo "  Share this fingerprint with your federation"
+        echo "  partner via a secure out-of-band channel."
+        echo ""
+        return 0
+    fi
+
+    log_warn "Identity fingerprint not yet generated."
+    log_info "The fingerprint is created on first backend startup."
+    log_info "Deploy the instance first: ./dive hub deploy  OR  ./dive spoke deploy ${instance_code}"
+    return 1
+}
+
+##
+# Enroll with a remote instance (initiate federation handshake)
+# Usage: ./dive federation enroll <URL>
+# Example: ./dive federation enroll https://api.usa.dive25.com
+##
+cmd_federation_enroll() {
+    local remote_url="${1:-}"
+
+    if [ -z "$remote_url" ]; then
+        log_error "Usage: ./dive federation enroll <URL>"
+        log_info "Step 1: Discover first: ./dive federation discover <URL>"
+        log_info "Step 2: Then enroll:    ./dive federation enroll <URL>"
+        return 1
+    fi
+
+    remote_url="${remote_url%/}"
+
+    # Get enrollment endpoint from discovery
+    log_info "Discovering remote instance..."
+    local metadata
+    metadata=$(curl -sS --max-time 10 -k "${remote_url}/.well-known/dive-federation" 2>&1)
+    if [ $? -ne 0 ] || ! echo "$metadata" | jq '.' &>/dev/null; then
+        log_error "Cannot reach ${remote_url}/.well-known/dive-federation"
+        return 1
+    fi
+
+    local enrollment_endpoint
+    enrollment_endpoint=$(echo "$metadata" | jq -r '.federation.enrollmentEndpoint // ""')
+    if [ -z "$enrollment_endpoint" ]; then
+        log_error "Remote instance does not support V2 enrollment"
+        return 1
+    fi
+
+    local remote_code remote_fingerprint
+    remote_code=$(echo "$metadata" | jq -r '.instanceCode')
+    remote_fingerprint=$(echo "$metadata" | jq -r '.identity.instanceCertFingerprint // "unknown"')
+
+    log_info "Remote instance: ${remote_code} (fingerprint: ${remote_fingerprint})"
+
+    # Get local identity
+    local instance_code="${INSTANCE_CODE:-${COUNTRY_CODE:-}}"
+    if [ -z "$instance_code" ]; then
+        log_error "INSTANCE_CODE or COUNTRY_CODE must be set"
+        return 1
+    fi
+    instance_code="${instance_code^^}"
+
+    local cert_dir="${CERT_DIR:-/app/certs}"
+    local cert_file="${cert_dir}/identity/instance.crt"
+
+    if [ ! -f "$cert_file" ]; then
+        log_error "Instance identity certificate not found at ${cert_file}"
+        log_info "Deploy the instance first to generate identity."
+        return 1
+    fi
+
+    local cert_pem
+    cert_pem=$(cat "$cert_file")
+
+    # Generate signature
+    local timestamp nonce
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    nonce=$(openssl rand -hex 16)
+
+    local local_api_url="${API_URL:-${PUBLIC_API_URL:-https://localhost:4000}}"
+
+    # Sign the enrollment payload
+    local sign_payload="{\"instanceCode\":\"${instance_code}\",\"nonce\":\"${nonce}\",\"targetUrl\":\"${local_api_url}\",\"timestamp\":\"${timestamp}\"}"
+    local signature
+    signature=$(echo -n "$sign_payload" | openssl dgst -sha256 -sign "${cert_dir}/identity/instance.key" | base64 | tr -d '\n')
+
+    # Determine OIDC discovery URL
+    local idp_url="${PUBLIC_IDP_URL:-${IDP_URL:-https://localhost:8443}}"
+    local realm="${KEYCLOAK_REALM:-dive-v3-broker-${instance_code,,}}"
+    local oidc_discovery="${idp_url}/realms/${realm}/.well-known/openid-configuration"
+
+    log_info "Submitting enrollment request to ${remote_code}..."
+
+    local response
+    response=$(curl -sS --max-time 30 -k \
+        -X POST "${enrollment_endpoint}" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"instanceCode\": \"${instance_code}\",
+            \"instanceName\": \"$(hostname -f 2>/dev/null || echo "DIVE Instance ${instance_code}")\",
+            \"instanceCertPEM\": $(echo "$cert_pem" | jq -Rs .),
+            \"oidcDiscoveryUrl\": \"${oidc_discovery}\",
+            \"apiUrl\": \"${local_api_url}\",
+            \"idpUrl\": \"${idp_url}\",
+            \"requestedCapabilities\": [\"oidc-federation\", \"kas\", \"opal-policy-sync\"],
+            \"requestedTrustLevel\": \"partner\",
+            \"contactEmail\": \"${FEDERATION_CONTACT_EMAIL:-admin@${instance_code,,}.dive25.com}\",
+            \"enrollmentSignature\": \"${signature}\",
+            \"signatureTimestamp\": \"${timestamp}\",
+            \"signatureNonce\": \"${nonce}\"
+        }" 2>&1)
+
+    local http_code=$?
+    if [ $http_code -ne 0 ]; then
+        log_error "Enrollment request failed"
+        log_debug "Response: ${response:0:500}"
+        return 1
+    fi
+
+    # Check for error response
+    if echo "$response" | jq -e '.error' &>/dev/null; then
+        log_error "Enrollment rejected: $(echo "$response" | jq -r '.message // .error')"
+        return 1
+    fi
+
+    local enrollment_id status verifier_fp
+    enrollment_id=$(echo "$response" | jq -r '.enrollmentId // ""')
+    status=$(echo "$response" | jq -r '.status // "unknown"')
+    verifier_fp=$(echo "$response" | jq -r '.verifierFingerprint // "unknown"')
+
+    echo ""
+    echo "============================================"
+    echo "  Enrollment Submitted"
+    echo "============================================"
+    echo ""
+    echo "  Enrollment ID:  ${enrollment_id}"
+    echo "  Status:         ${status}"
+    echo "  Remote:         ${remote_code}"
+    echo "  Remote FP:      ${verifier_fp}"
+    echo ""
+    echo "  NEXT STEPS:"
+    echo "  1. Contact the ${remote_code} admin via secure channel"
+    echo "  2. Share your fingerprint: ./dive federation show-fingerprint"
+    echo "  3. Verify their fingerprint: ${verifier_fp}"
+    echo "  4. Wait for approval (check: curl ${remote_url}/api/federation/enrollment/${enrollment_id}/status)"
+    echo ""
+
+    return 0
+}
+
+##
+# List pending enrollments (admin)
+# Usage: ./dive federation enrollments
+##
+cmd_federation_enrollments() {
+    local api_url
+    api_url="$(_fed_hub_api_url)"
+    local admin_key
+    admin_key="$(_fed_admin_key)"
+
+    log_info "Fetching pending enrollments..."
+
+    local response
+    response=$(_fed_api_call "GET" "${api_url}/api/federation/enrollments/pending" "" "$admin_key")
+
+    if [ $? -ne 0 ]; then
+        log_error "Failed to fetch enrollments"
+        return 1
+    fi
+
+    local count
+    count=$(echo "$response" | jq -r '.count // 0')
+
+    if [ "$count" = "0" ]; then
+        log_info "No pending enrollments"
+        return 0
+    fi
+
+    echo ""
+    echo "Pending Federation Enrollments (${count}):"
+    echo "--------------------------------------------"
+    echo "$response" | jq -r '.enrollments[] | "  \(.enrollmentId)  \(.requesterInstanceCode) (\(.requesterInstanceName))  status=\(.status)  fingerprint=\(.requesterFingerprint)"'
+    echo ""
+}
+
+##
+# Verify enrollment fingerprint (admin)
+# Usage: ./dive federation verify-fingerprint <ENROLLMENT_ID>
+##
+cmd_federation_verify_fingerprint() {
+    local enrollment_id="${1:-}"
+
+    if [ -z "$enrollment_id" ]; then
+        log_error "Usage: ./dive federation verify-fingerprint <ENROLLMENT_ID>"
+        return 1
+    fi
+
+    local api_url
+    api_url="$(_fed_hub_api_url)"
+    local admin_key
+    admin_key="$(_fed_admin_key)"
+
+    log_info "Marking fingerprint as verified for ${enrollment_id}..."
+
+    local response
+    response=$(_fed_api_call "POST" "${api_url}/api/federation/enrollment/${enrollment_id}/verify-fingerprint" "{}" "$admin_key")
+
+    if [ $? -ne 0 ]; then
+        log_error "Failed to verify fingerprint"
+        log_debug "Response: ${response:0:300}"
+        return 1
+    fi
+
+    local new_status
+    new_status=$(echo "$response" | jq -r '.status // "unknown"')
+    log_success "Fingerprint verified! Status: ${new_status}"
+    log_info "Next: ./dive federation approve ${enrollment_id}"
+}
+
 module_federation() {
     local action="${1:-help}"
     shift || true
@@ -2022,6 +2351,25 @@ module_federation() {
             fi
             federation_repair "$@"
             ;;
+        # =============================================
+        # V2 Zero Trust Enrollment Protocol
+        # =============================================
+        discover)
+            cmd_federation_discover "$@"
+            ;;
+        show-fingerprint)
+            cmd_federation_show_fingerprint "$@"
+            ;;
+        enrollments)
+            cmd_federation_enrollments "$@"
+            ;;
+        enroll)
+            cmd_federation_enroll "$@"
+            ;;
+        verify-fingerprint)
+            cmd_federation_verify_fingerprint "$@"
+            ;;
+
         help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
             echo ""
@@ -2036,6 +2384,15 @@ module_federation() {
             echo "  token-revocation  Test cross-instance token revocation"
             echo "  status            Show overall federation status"
             echo "  list-idps         List configured IdPs on Hub"
+            echo ""
+            echo "V2 Zero Trust Enrollment:"
+            echo "  discover <URL>         Fetch federation metadata from a remote instance"
+            echo "  show-fingerprint       Display this instance's identity fingerprint"
+            echo "  enroll <URL>           Request federation enrollment with a remote instance"
+            echo "  enrollments            List pending enrollment requests (admin)"
+            echo "  verify-fingerprint <ID>  Mark enrollment fingerprint as verified (admin)"
+            echo "  approve <CODE|ID>      Approve a pending spoke or enrollment"
+            echo "  reject <ID> --reason TEXT  Reject an enrollment request"
             echo ""
             echo "External Federation (cross-network):"
             echo "  register-spoke CODE --idp-url URL --secret SECRET [--api-url URL]"
@@ -2082,6 +2439,12 @@ export -f cmd_federation_suspend
 export -f cmd_federation_revoke
 # External federation (Phase 4)
 export -f _federation_oidc_discover
+# V2 Zero Trust Enrollment
+export -f cmd_federation_discover
+export -f cmd_federation_show_fingerprint
+export -f cmd_federation_enroll
+export -f cmd_federation_enrollments
+export -f cmd_federation_verify_fingerprint
 export -f _federation_update_trusted_issuers
 export -f federation_register_external_spoke
 export -f federation_register_hub_on_spoke
