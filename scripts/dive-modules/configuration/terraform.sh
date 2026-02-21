@@ -445,8 +445,8 @@ terraform_apply_spoke() {
         log_warn "Country tfvars not found: $tfvars_file"
         log_info "Auto-generating tfvars for ${code_upper}..."
         local generator="${DIVE_ROOT}/scripts/generate-country-tfvars.sh"
-        if [ -x "$generator" ]; then
-            "$generator" "$code_upper" || {
+        if [ -f "$generator" ]; then
+            bash "$generator" "$code_upper" || {
                 log_error "Failed to generate tfvars for ${code_upper}"
                 return 1
             }
@@ -537,8 +537,8 @@ terraform_plan_spoke() {
         log_warn "Country tfvars not found: $tfvars_file"
         log_info "Auto-generating tfvars for ${code_upper}..."
         local generator="${DIVE_ROOT}/scripts/generate-country-tfvars.sh"
-        if [ -x "$generator" ]; then
-            "$generator" "$code_upper" || {
+        if [ -f "$generator" ]; then
+            bash "$generator" "$code_upper" || {
                 log_error "Failed to generate tfvars for ${code_upper}"
                 return 1
             }
