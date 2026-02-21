@@ -221,21 +221,28 @@ _bootstrap_compose() {
 }
 
 ##
-# Auto-detect and mount unformatted EBS volumes (EC2 only).
-# Finds the largest unmounted block device (NVMe or xvd), formats ext4,
-# mounts to /data, and adds an fstab entry.
-# Safe to call on macOS (no-op) or when no extra volumes exist.
+# Auto-detect and mount extra data volumes.
+#
+# Scenarios handled:
+#   1. EC2: Separate EBS volume (NVMe/xvd) → format + mount to /data
+#   2. Home server: Large root disk (>50GB free) → create /data dir on root
+#   3. Home server: Separate data disk → format + mount to /data
+#   4. macOS: No-op (Docker Desktop manages storage)
+#
+# The /data directory is used by Docker storage and large persistent data.
+# If no separate volume exists and root has enough space, /data is just
+# a directory on root (no separate mount needed).
 ##
 _bootstrap_ebs_automount() {
     [ "$BOOTSTRAP_OS" = "darwin" ] && return 0
     mountpoint -q /data 2>/dev/null && { log_verbose "/data already mounted"; return 0; }
 
-    # Find unmounted block devices > 20GB (skip root partitions)
+    # Find unmounted, unpartitioned block devices > 20GB
     local best_dev="" best_size=0
     local dev size
-    for dev in /dev/nvme*n1 /dev/xvd[b-z]; do
+    for dev in /dev/nvme*n1 /dev/xvd[b-z] /dev/sd[b-z] /dev/vd[b-z]; do
         [ -b "$dev" ] || continue
-        # Skip if device has partitions (likely root)
+        # Skip if device has partitions (likely root or OS disk)
         if lsblk -n "$dev" 2>/dev/null | grep -q part; then
             continue
         fi
@@ -246,40 +253,50 @@ _bootstrap_ebs_automount() {
         fi
     done
 
-    if [ -z "$best_dev" ]; then
-        log_verbose "No extra EBS volume detected — using root filesystem"
-        return 0
+    if [ -n "$best_dev" ]; then
+        local best_gb=$((best_size / 1073741824))
+        if [ "$best_gb" -ge 20 ]; then
+            log_info "Mounting data volume: $best_dev (${best_gb}GB) → /data"
+
+            # Format only if no filesystem exists
+            if ! blkid "$best_dev" 2>/dev/null | grep -q TYPE; then
+                _bs_sudo mkfs.ext4 -F "$best_dev" >/dev/null 2>&1
+            fi
+
+            _bs_sudo mkdir -p /data
+            _bs_sudo mount "$best_dev" /data
+
+            # Persist in fstab (use UUID for reliability)
+            local uuid
+            uuid=$(blkid -s UUID -o value "$best_dev" 2>/dev/null || echo "")
+            if [ -n "$uuid" ] && ! grep -q "$uuid" /etc/fstab 2>/dev/null; then
+                echo "UUID=${uuid} /data ext4 defaults,nofail 0 2" | _bs_sudo tee -a /etc/fstab > /dev/null
+            fi
+
+            local real_user
+            real_user=$(_bs_real_user 2>/dev/null || echo "ubuntu")
+            _bs_sudo chown -R "${real_user}:${real_user}" /data
+
+            log_success "Data volume mounted: $best_dev → /data (${best_gb}GB)"
+            return 0
+        fi
     fi
 
-    local best_gb=$((best_size / 1073741824))
-    if [ "$best_gb" -lt 20 ]; then
-        log_verbose "Extra volume $best_dev is only ${best_gb}GB — skipping"
-        return 0
+    # No separate data volume — check if root has enough space
+    local root_avail_kb
+    root_avail_kb=$(df -k / 2>/dev/null | tail -1 | awk '{print $4}')
+    local root_avail_gb=$(( (root_avail_kb + 0) / 1048576 ))
+
+    if [ "$root_avail_gb" -ge 50 ] 2>/dev/null; then
+        # Root has enough space — just create /data on root filesystem
+        _bs_sudo mkdir -p /data
+        local real_user
+        real_user=$(_bs_real_user 2>/dev/null || echo "ubuntu")
+        _bs_sudo chown -R "${real_user}:${real_user}" /data
+        log_info "Using root filesystem for /data (${root_avail_gb}GB available)"
+    else
+        log_verbose "No extra volume and root has ${root_avail_gb}GB free — /data not created"
     fi
-
-    log_info "Auto-mounting EBS volume: $best_dev (${best_gb}GB) → /data"
-
-    # Format only if no filesystem
-    if ! blkid "$best_dev" 2>/dev/null | grep -q TYPE; then
-        _bs_sudo mkfs.ext4 -F "$best_dev" >/dev/null 2>&1
-    fi
-
-    _bs_sudo mkdir -p /data
-    _bs_sudo mount "$best_dev" /data
-
-    # Persist in fstab (use UUID for reliability)
-    local uuid
-    uuid=$(blkid -s UUID -o value "$best_dev" 2>/dev/null || echo "")
-    if [ -n "$uuid" ] && ! grep -q "$uuid" /etc/fstab 2>/dev/null; then
-        echo "UUID=${uuid} /data ext4 defaults,nofail 0 2" | _bs_sudo tee -a /etc/fstab > /dev/null
-    fi
-
-    # Set ownership to the real user
-    local real_user
-    real_user=$(_bs_real_user 2>/dev/null || echo "ubuntu")
-    _bs_sudo chown -R "${real_user}:${real_user}" /data
-
-    log_success "EBS volume mounted: $best_dev → /data (${best_gb}GB)"
 }
 
 _bootstrap_docker_storage() {
