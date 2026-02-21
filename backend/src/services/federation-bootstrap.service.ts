@@ -924,6 +924,52 @@ class FederationBootstrapService {
         }
       });
 
+      // Auto-revoke Hub-side trust when enrollment is revoked (V2 Phase E)
+      enrollmentService.on('enrollment', async (event: {
+        type: string;
+        enrollment: {
+          enrollmentId: string;
+          requesterInstanceCode: string;
+          status: string;
+          statusHistory?: Array<{ status: string }>;
+        };
+      }) => {
+        if (event.type !== 'enrollment:revoked') return;
+
+        // Only run cascade if trust artifacts were ever created
+        // (enrollment reached 'active' or 'credentials_exchanged')
+        const history = event.enrollment.statusHistory || [];
+        const hadTrustArtifacts = history.some(
+          (h: { status: string }) => h.status === 'active' || h.status === 'credentials_exchanged',
+        );
+
+        if (!hadTrustArtifacts) {
+          logger.info('Enrollment revoked before trust artifacts created — skipping cascade', {
+            enrollmentId: event.enrollment.enrollmentId,
+          });
+          return;
+        }
+
+        try {
+          const { federationRevocationService } = await import('./federation-revocation.service');
+          const { enrollmentService: enrService } = require('./enrollment.service');
+          const fullEnrollment = await enrService.getEnrollment(event.enrollment.enrollmentId);
+          const summary = await federationRevocationService.revokeHubSide(fullEnrollment);
+
+          logger.info('Hub-side trust revocation cascade completed', {
+            enrollmentId: event.enrollment.enrollmentId,
+            requesterInstanceCode: event.enrollment.requesterInstanceCode,
+            successfulSteps: summary.successfulSteps,
+            failedSteps: summary.failedSteps,
+          });
+        } catch (error) {
+          logger.error('Hub-side trust revocation cascade failed', {
+            enrollmentId: event.enrollment.enrollmentId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      });
+
       // Audit trail: log all enrollment lifecycle events to federation_audits (ACP-240)
       const enrollmentAuditMap: Record<string, string> = {
         'enrollment:requested': 'ENROLLMENT_CREATED',

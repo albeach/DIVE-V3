@@ -22,7 +22,7 @@ import { logger } from '../utils/logger';
 
 // Sub-module imports
 import type { KeycloakContext } from './federation-client-setup';
-import { ensureFederationClientCore } from './federation-client-setup';
+import { ensureFederationClientCore, deleteFederationClientCore } from './federation-client-setup';
 import {
   createOIDCIdentityProviderCore,
   getIdentityProviderCore,
@@ -244,6 +244,15 @@ export class KeycloakFederationService {
   async deleteIdentityProvider(alias: string): Promise<void> {
     await this.initialize();
     await deleteIdentityProviderCore(this.getContext(), alias);
+  }
+
+  /**
+   * Delete a federation OIDC client.
+   * @see federation-client-setup.ts for implementation
+   */
+  async deleteFederationClient(clientId: string): Promise<boolean> {
+    await this.initialize();
+    return deleteFederationClientCore(this.getContext(), clientId);
   }
 
   /**
@@ -565,6 +574,7 @@ export {
   ensureCrossBorderClient,
   ensureProtocolMappersForClient,
   ensureFederationClientCore,
+  deleteFederationClientCore,
 } from './federation-client-setup';
 
 // idp-management.ts

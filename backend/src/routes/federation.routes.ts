@@ -1676,6 +1676,148 @@ router.post('/activate-local', requireAdmin, async (req: Request, res: Response)
 });
 
 // ============================================
+// V2 ENROLLMENT REVOCATION (Phase E)
+// ============================================
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/revoke
+ * Permanently revoke a federation enrollment.
+ * Triggers trust cascade: deletes IdP, OIDC client, OPA trust, KAS, COI update, OPAL sync.
+ * Admin-only. Requires reason.
+ */
+router.post('/enrollment/:enrollmentId/revoke', authenticateJWT, requireAdmin, adminRateLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const { reason } = req.body;
+
+        if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'Reason is required for revocation',
+            });
+            return;
+        }
+
+        const actor = (req as Request & { user?: { uniqueID?: string } }).user?.uniqueID || 'admin';
+
+        const enrollment = await enrollmentService.revoke(enrollmentId, actor, reason.trim());
+
+        // Cascade fires asynchronously via EventEmitter in bootstrap service.
+        // Return immediately — cascade runs in background.
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: 'revoked',
+            requesterInstanceCode: enrollment.requesterInstanceCode,
+            message: `Enrollment revoked. Trust cascade initiated for ${enrollment.requesterInstanceCode}.`,
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Invalid transition') || message.includes('Cannot transition')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Enrollment revocation failed', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Enrollment revocation failed' });
+        }
+    }
+});
+
+/**
+ * POST /api/federation/notify-revocation
+ * Cross-wire revocation notification from a partner instance.
+ * When a partner revokes federation, they send this notification so
+ * the local side can clean up trust artifacts.
+ * Rate-limited to prevent abuse.
+ */
+router.post('/notify-revocation', strictRateLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId, revokerInstanceCode, reason } = req.body;
+
+        if (!revokerInstanceCode || typeof revokerInstanceCode !== 'string') {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'revokerInstanceCode is required',
+            });
+            return;
+        }
+
+        logger.info('Received cross-wire revocation notification', {
+            enrollmentId,
+            revokerInstanceCode,
+            reason,
+        });
+
+        const { federationRevocationService } = await import('../services/federation-revocation.service');
+        const summary = await federationRevocationService.revokeLocalSide(revokerInstanceCode);
+
+        // Also update local enrollment record to revoked if it exists
+        if (enrollmentId) {
+            try {
+                await enrollmentService.revoke(enrollmentId, 'system', reason || 'Revoked by partner notification');
+            } catch {
+                // Enrollment may not exist locally or may already be revoked — not an error
+                logger.debug('Local enrollment status update skipped (may not exist or already revoked)', {
+                    enrollmentId,
+                });
+            }
+        }
+
+        res.json({
+            acknowledged: true,
+            revokerInstanceCode,
+            summary,
+        });
+    } catch (error) {
+        logger.error('Cross-wire revocation notification processing failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to process revocation notification',
+        });
+    }
+});
+
+/**
+ * POST /api/federation/revoke-local
+ * Manually revoke local trust artifacts for a partner.
+ * Admin-only CLI fallback when cross-wire notification fails.
+ */
+router.post('/revoke-local', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { partnerInstanceCode } = req.body;
+
+        if (!partnerInstanceCode || typeof partnerInstanceCode !== 'string') {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'partnerInstanceCode is required',
+            });
+            return;
+        }
+
+        const { federationRevocationService } = await import('../services/federation-revocation.service');
+        const summary = await federationRevocationService.revokeLocalSide(partnerInstanceCode);
+
+        res.json({
+            success: true,
+            partnerInstanceCode: partnerInstanceCode.toUpperCase(),
+            summary,
+            message: `Local trust artifacts removed for ${partnerInstanceCode.toUpperCase()}.`,
+        });
+    } catch (error) {
+        logger.error('Local revocation failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Local trust revocation failed',
+        });
+    }
+});
+
+// ============================================
 // LEGACY V1 REGISTRATION (preserved for backward compatibility)
 // ============================================
 

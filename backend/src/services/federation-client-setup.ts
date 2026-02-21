@@ -544,3 +544,53 @@ export async function ensureFederationClientCore(
     throw error;
   }
 }
+
+/**
+ * Delete a federation OIDC client from Keycloak.
+ *
+ * Used during revocation to remove the partner's OIDC client.
+ * Non-throwing if client not found (returns false).
+ *
+ * @param ctx - Initialized Keycloak context
+ * @param clientId - The client ID to delete (e.g., 'dive-v3-broker-gbr')
+ * @returns true if deleted, false if not found
+ */
+export async function deleteFederationClientCore(
+  ctx: KeycloakContext,
+  clientId: string,
+): Promise<boolean> {
+  try {
+    const existingClients = await ctx.kcAdmin.clients.find({
+      realm: ctx.realm,
+      clientId,
+    });
+
+    if (!existingClients || existingClients.length === 0) {
+      logger.info('Federation client not found (already deleted or never created)', {
+        realm: ctx.realm,
+        clientId,
+      });
+      return false;
+    }
+
+    const client = existingClients[0];
+    if (client.id) {
+      await ctx.kcAdmin.clients.del({ realm: ctx.realm, id: client.id });
+      logger.info('Federation client deleted', {
+        realm: ctx.realm,
+        clientId,
+        internalId: client.id,
+      });
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    logger.error('Failed to delete federation client', {
+      realm: ctx.realm,
+      clientId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
+}

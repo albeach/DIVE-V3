@@ -1668,34 +1668,33 @@ cmd_federation_suspend() {
 
 ##
 # Revoke a spoke (permanent removal from federation)
-# Usage: ./dive federation revoke <CODE> [--confirm]
+# Usage: ./dive federation revoke <CODE> [--confirm] [--reason "..."]
 ##
 cmd_federation_revoke() {
     local code="${1:-}"
     local confirmed=false
-    [ "${2:-}" = "--confirm" ] && confirmed=true
+    local reason="Revoked via CLI"
+    shift || true
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --confirm) confirmed=true ;;
+            --reason) shift; reason="${1:-Revoked via CLI}" ;;
+            *) ;;
+        esac
+        shift
+    done
 
     if [ -z "$code" ]; then
-        log_error "Usage: ./dive federation revoke <CODE> [--confirm]"
+        log_error "Usage: ./dive federation revoke <CODE> [--confirm] [--reason \"...\"]"
         return 1
     fi
 
     code=$(echo "$code" | tr '[:lower:]' '[:upper:]')
 
-    # Resolve spokeId
-    local spoke_data
-    spoke_data=$(_fed_api_call GET "/api/federation/spokes")
-    local spoke_id
-    spoke_id=$(echo "$spoke_data" | jq -r --arg code "$code" '.spokes[] | select(.instanceCode == $code) | .spokeId' 2>/dev/null)
-
-    if [ -z "$spoke_id" ] || [ "$spoke_id" = "null" ]; then
-        log_error "Spoke not found: ${code}"
-        return 1
-    fi
-
     if [ "$confirmed" = false ] && is_interactive; then
         log_warn "This will PERMANENTLY revoke ${code} from the federation."
-        log_warn "The spoke's certificates and tokens will be invalidated."
+        log_warn "All trust artifacts (IdP, OIDC client, KAS, OPA trust) will be removed."
         read -rp "  Type 'yes' to confirm: " answer
         if [ "$answer" != "yes" ]; then
             log_info "Cancelled."
@@ -1705,10 +1704,48 @@ cmd_federation_revoke() {
         log_warn "Non-interactive mode: auto-confirming spoke revocation"
     fi
 
-    log_warn "Revoking spoke ${code} (${spoke_id})..."
+    # Try V2 enrollment revocation first
+    local enrollments_data
+    enrollments_data=$(_fed_api_call GET "/api/federation/enrollments" 2>/dev/null)
+    local enrollment_id
+    enrollment_id=$(echo "$enrollments_data" | jq -r --arg code "$code" \
+        '.enrollments[]? | select(.requesterInstanceCode == $code and (.status == "active" or .status == "credentials_exchanged" or .status == "approved")) | .enrollmentId' \
+        2>/dev/null | head -1)
+
+    if [ -n "$enrollment_id" ] && [ "$enrollment_id" != "null" ]; then
+        log_warn "Revoking V2 enrollment ${enrollment_id} for ${code}..."
+
+        local response
+        response=$(_fed_api_call POST "/api/federation/enrollment/${enrollment_id}/revoke" \
+            -d "{\"reason\": \"${reason}\"}")
+
+        if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+            log_success "Enrollment ${enrollment_id} revoked for ${code}"
+            log_info "Trust cascade initiated — IdP, OIDC client, KAS, OPA trust being cleaned up"
+            return 0
+        else
+            local err
+            err=$(echo "$response" | jq -r '.error // .message // "Unknown error"' 2>/dev/null)
+            log_error "V2 revocation failed: ${err}"
+            return 1
+        fi
+    fi
+
+    # Fall back to V1 spoke revocation
+    local spoke_data
+    spoke_data=$(_fed_api_call GET "/api/federation/spokes")
+    local spoke_id
+    spoke_id=$(echo "$spoke_data" | jq -r --arg code "$code" '.spokes[] | select(.instanceCode == $code) | .spokeId' 2>/dev/null)
+
+    if [ -z "$spoke_id" ] || [ "$spoke_id" = "null" ]; then
+        log_error "No enrollment or spoke registration found for: ${code}"
+        return 1
+    fi
+
+    log_warn "Revoking V1 spoke ${code} (${spoke_id})..."
 
     local response
-    response=$(_fed_api_call POST "/api/federation/spokes/${spoke_id}/revoke" -d "{\"reason\": \"Revoked via CLI\"}")
+    response=$(_fed_api_call POST "/api/federation/spokes/${spoke_id}/revoke" -d "{\"reason\": \"${reason}\"}")
 
     if echo "$response" | jq -e '.spoke.status == "revoked"' >/dev/null 2>&1; then
         log_success "Spoke ${code} revoked from federation"
