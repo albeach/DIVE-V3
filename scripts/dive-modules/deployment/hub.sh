@@ -28,6 +28,14 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load guided framework + messages (no-ops in Pro mode)
+if [ -f "${MODULES_DIR}/guided/framework.sh" ]; then
+    source "${MODULES_DIR}/guided/framework.sh"
+fi
+if [ -f "${MODULES_DIR}/guided/messages.sh" ]; then
+    source "${MODULES_DIR}/guided/messages.sh"
+fi
+
 # Load orchestration framework (includes state, errors, circuit-breaker, dependencies)
 if [ -f "${MODULES_DIR}/orchestration/framework.sh" ]; then
     source "${MODULES_DIR}/orchestration/framework.sh"

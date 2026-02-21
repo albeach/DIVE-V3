@@ -32,6 +32,14 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh"
 fi
 
+# Load guided mode framework (all calls are no-ops in Pro mode)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../guided/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../guided/framework.sh"
+fi
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../guided/messages.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../guided/messages.sh"
+fi
+
 # =============================================================================
 # PIPELINE CONSTANTS
 # =============================================================================
@@ -62,6 +70,7 @@ _spoke_pipeline_load_modules() {
         "spoke-secrets.sh"
         "spoke-containers.sh"
         "spoke-federation.sh"
+        "spoke-vault.sh"
         "spoke-compose-generator.sh"
         "spoke-checkpoint.sh"
         "spoke-preflight.sh"
@@ -363,6 +372,7 @@ _spoke_pipeline_execute_internal() {
     if _spoke_should_skip_phase "$PIPELINE_PHASE_PREFLIGHT"; then
         spoke_phase_times+=("Phase 1 (Preflight): skipped")
     else
+        guided_progress "PREFLIGHT" "${GUIDED_MSG_PHASE_PREFLIGHT:-Checking system requirements...}"
         log_verbose "Executing phase 1: PREFLIGHT"
         local _ps
         _ps=$(date +%s)
@@ -389,6 +399,7 @@ _spoke_pipeline_execute_internal() {
         if _spoke_should_skip_phase "$PIPELINE_PHASE_INITIALIZATION"; then
             spoke_phase_times+=("Phase 2 (Initialization): skipped")
         else
+            guided_progress "INITIALIZATION" "${GUIDED_MSG_PHASE_INITIALIZATION:-Setting up the workspace...}"
             log_verbose "Executing phase 2: INITIALIZATION"
             local _ps
             _ps=$(date +%s)
@@ -415,6 +426,7 @@ _spoke_pipeline_execute_internal() {
         if _spoke_should_skip_phase "$PIPELINE_PHASE_DEPLOYMENT"; then
             spoke_phase_times+=("Phase 3 (Deployment): skipped")
         else
+            guided_progress "DEPLOYMENT" "${GUIDED_MSG_PHASE_DEPLOYMENT:-Starting all services...}"
             log_verbose "Executing phase 3: DEPLOYMENT"
             local _ps
             _ps=$(date +%s)
@@ -444,6 +456,7 @@ _spoke_pipeline_execute_internal() {
         if _spoke_should_skip_phase "$PIPELINE_PHASE_CONFIGURATION"; then
             spoke_phase_times+=("Phase 4 (Configuration): skipped")
         else
+            guided_progress "CONFIGURATION" "${GUIDED_MSG_PHASE_CONFIGURATION:-Connecting to the Hub...}"
             log_verbose "Executing phase 4: CONFIGURATION"
             local _ps
             _ps=$(date +%s)
@@ -468,6 +481,7 @@ _spoke_pipeline_execute_internal() {
         if _spoke_should_skip_phase "SEEDING"; then
             spoke_phase_times+=("Phase 5 (Seeding): skipped")
         else
+            guided_progress "SEEDING" "${GUIDED_MSG_PHASE_SEEDING:-Loading initial data...}"
             log_verbose "Executing phase 5: SEEDING"
             local _ps
             _ps=$(date +%s)
@@ -497,6 +511,7 @@ _spoke_pipeline_execute_internal() {
         if _spoke_should_skip_phase "$PIPELINE_PHASE_VERIFICATION"; then
             spoke_phase_times+=("Phase 6 (Verification): skipped")
         else
+            guided_progress "VERIFICATION" "${GUIDED_MSG_PHASE_VERIFICATION:-Running health checks...}"
             log_verbose "Executing phase 6: VERIFICATION"
             local _ps
             _ps=$(date +%s)
@@ -570,6 +585,7 @@ _spoke_pipeline_execute_internal() {
         fi
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
+        guided_success "${GUIDED_MSG_SPOKE_DEPLOY_SUCCESS:-Your spoke is deployed!}"
 
         # Health sentinel report (if any alerts during configuration phases)
         if type health_sentinel_report &>/dev/null; then
@@ -614,6 +630,9 @@ _spoke_pipeline_execute_internal() {
         fi
 
         spoke_pipeline_print_failure "$code_upper" "$instance_name" "$duration"
+        guided_error "Deployment failed" \
+            "${GUIDED_MSG_ERR_REGISTRATION_FAILED:-The deployment encountered an error.}" \
+            "Check the logs above for details, then retry: ./dive spoke deploy $code_upper"
 
         # Show log file location
         if type deployment_log_path &>/dev/null; then

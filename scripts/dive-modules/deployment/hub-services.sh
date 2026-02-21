@@ -767,6 +767,9 @@ hub_verify_realm() {
 # Verify hub deployment with automated tests
 ##
 hub_verify() {
+    guided_explain "Hub Verification" \
+        "Running health checks on all Hub services to make sure everything is working correctly." 2>/dev/null
+
     log_info "Running hub deployment validation..."
 
     if [ ! -f "${DIVE_ROOT}/tests/validate-hub-deployment.sh" ]; then
@@ -774,8 +777,17 @@ hub_verify() {
         return 1
     fi
 
-    bash "${DIVE_ROOT}/tests/validate-hub-deployment.sh"
-    return $?
+    local _rc=0
+    bash "${DIVE_ROOT}/tests/validate-hub-deployment.sh" || _rc=$?
+
+    if [ $_rc -eq 0 ]; then
+        guided_success "All Hub verification checks passed!" 2>/dev/null
+    else
+        guided_error "Some verification checks failed" \
+            "One or more Hub services are not responding correctly." \
+            "Try: ./dive hub logs to see what went wrong" 2>/dev/null
+    fi
+    return $_rc
 }
 
 ##

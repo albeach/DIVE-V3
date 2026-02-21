@@ -186,6 +186,27 @@ spoke_phase_deployment() {
         return 1
     fi
 
+    # Step 2c: Start and initialize spoke-local Vault (data sovereignty)
+    # Only for remote/federated deployments where spoke needs its own secret store
+    if type spoke_vault_start &>/dev/null; then
+        log_step "Setting up spoke-local Vault..."
+        if spoke_vault_start "$instance_code"; then
+            if spoke_vault_init "$instance_code"; then
+                if spoke_vault_unseal "$instance_code"; then
+                    spoke_vault_setup "$instance_code" || log_warn "Vault KV setup had issues (non-fatal)"
+                    spoke_vault_sync_env "$instance_code" || log_warn "Vault env sync had issues (non-fatal)"
+                    log_success "Spoke Vault ready (initialized + unsealed + KV mounted)"
+                else
+                    log_warn "Vault unseal failed (non-fatal — secrets will use .env fallback)"
+                fi
+            else
+                log_warn "Vault init failed (non-fatal — secrets will use .env fallback)"
+            fi
+        else
+            log_warn "Vault container start failed (non-fatal — secrets will use .env fallback)"
+        fi
+    fi
+
     # Step 3: Create admin user for Terraform/Keycloak operations (deploy mode only)
     # CRITICAL FIX (2026-02-11): Check return code and fail deployment if admin setup fails
     if [ "$pipeline_mode" = "deploy" ]; then
