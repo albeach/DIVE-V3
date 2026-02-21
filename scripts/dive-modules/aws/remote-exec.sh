@@ -80,6 +80,12 @@ remote_sync() {
 
     log_info "Syncing code to ${target_ip}..."
 
+    # Ensure remote directory exists (fresh EC2 instance or after wipe)
+    ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
+        "${REMOTE_USER}@${target_ip}" \
+        "sudo mkdir -p ${REMOTE_DIVE_DIR} && sudo chown -R ${REMOTE_USER}:${REMOTE_USER} ${REMOTE_DIVE_DIR}" \
+        2>/dev/null || true
+
     if [ "$sync_method" = "git" ]; then
         # Get the LOCAL commit hash we want to deploy
         local local_commit
@@ -93,16 +99,30 @@ remote_sync() {
             remote_has_commit=$(git -C "${DIVE_ROOT}" branch -r --contains "$local_commit" 2>/dev/null | grep -c "origin/" || echo "0")
 
             if [ "$remote_has_commit" -gt 0 ]; then
-                # Remote has this commit — tell EC2 to fetch and reset to it
                 log_info "Syncing to commit ${local_commit:0:8} via git..."
-                if ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
+
+                # If remote has no git repo, do a fresh clone
+                if ! ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
                     "${REMOTE_USER}@${target_ip}" \
-                    "cd ${REMOTE_DIVE_DIR} && git fetch origin && git reset --hard ${local_commit}" \
+                    "test -d ${REMOTE_DIVE_DIR}/.git" 2>/dev/null; then
+                    log_info "No git repo on remote — performing fresh clone..."
+                    if ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
+                        "${REMOTE_USER}@${target_ip}" \
+                        "rm -rf ${REMOTE_DIVE_DIR}/* && git clone https://github.com/albeach/DIVE-V3.git ${REMOTE_DIVE_DIR} && cd ${REMOTE_DIVE_DIR} && git checkout ${_branch} && git reset --hard ${local_commit}" \
+                        2>/dev/null; then
+                        log_success "Code synced via fresh clone (commit ${local_commit:0:8})."
+                        return 0
+                    fi
+                    log_warn "Fresh clone failed, falling back to rsync..."
+                elif ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
+                    "${REMOTE_USER}@${target_ip}" \
+                    "cd ${REMOTE_DIVE_DIR} && git fetch origin && git checkout ${_branch} && git reset --hard ${local_commit}" \
                     2>/dev/null; then
                     log_success "Code synced via git (commit ${local_commit:0:8})."
                     return 0
+                else
+                    log_warn "Git sync failed, falling back to rsync..."
                 fi
-                log_warn "Git sync failed, falling back to rsync..."
             else
                 log_warn "Local commit ${local_commit:0:8} not pushed to origin — using rsync..."
             fi
