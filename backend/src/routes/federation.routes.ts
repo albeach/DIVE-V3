@@ -1546,6 +1546,107 @@ router.post('/create-local-client', requireAdmin, async (req: Request, res: Resp
 });
 
 // ============================================
+// V2 PHASE C: FEDERATION ACTIVATION
+// ============================================
+
+/**
+ * POST /api/federation/enrollment/:enrollmentId/activate
+ * Manually activate federation after credential exchange.
+ * Hub admin-only. Fallback for when auto-activation fails.
+ * Creates IdP, runs trust cascade, transitions enrollment to active.
+ */
+router.post('/enrollment/:enrollmentId/activate', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { enrollmentId } = req.params;
+        const enrollment = await enrollmentService.getEnrollment(enrollmentId);
+
+        if (enrollment.status !== 'credentials_exchanged') {
+            res.status(409).json({
+                error: 'InvalidState',
+                message: `Cannot activate — enrollment is ${enrollment.status}, expected credentials_exchanged`,
+            });
+            return;
+        }
+
+        const { federationActivationService } = await import('../services/federation-activation.service');
+        await federationActivationService.activateHubSide(enrollment);
+
+        res.json({
+            success: true,
+            enrollmentId: enrollment.enrollmentId,
+            status: 'active',
+            requesterInstanceCode: enrollment.requesterInstanceCode,
+            message: 'Federation activation complete — IdPs created, trust cascade published.',
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('not found')) {
+            res.status(404).json({ error: 'NotFound', message });
+        } else if (message.includes('Cannot activate') || message.includes('Invalid state')) {
+            res.status(409).json({ error: 'InvalidState', message });
+        } else {
+            logger.error('Federation activation failed', { error: message });
+            res.status(500).json({ error: 'InternalError', message: 'Federation activation failed' });
+        }
+    }
+});
+
+/**
+ * POST /api/federation/activate-local
+ * Activate federation on the local (spoke) side.
+ * Creates IdP from partner credentials and runs local trust cascade.
+ * Called by CLI after credential exchange completes.
+ */
+const activateLocalSchema = z.object({
+    partnerInstanceCode: z.string().min(2).max(5),
+    partnerCredentials: z.object({
+        oidcClientId: z.string().min(1),
+        oidcClientSecret: z.string().min(1),
+        oidcIssuerUrl: z.string().url(),
+        oidcDiscoveryUrl: z.string().url(),
+    }),
+    partnerKasUrl: z.string().url().optional(),
+});
+
+router.post('/activate-local', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const parsed = activateLocalSchema.safeParse(req.body);
+        if (!parsed.success) {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'Invalid request body',
+                details: parsed.error.issues,
+            });
+            return;
+        }
+
+        const { partnerInstanceCode, partnerCredentials, partnerKasUrl } = parsed.data;
+
+        const { federationActivationService } = await import('../services/federation-activation.service');
+        const result = await federationActivationService.activateSpokeSide(
+            partnerInstanceCode,
+            partnerCredentials,
+            partnerKasUrl,
+        );
+
+        res.json({
+            success: true,
+            idpAlias: result.alias,
+            partnerInstanceCode: partnerInstanceCode.toUpperCase(),
+            message: `Local IdP "${result.alias}" created. Trust cascade complete.`,
+        });
+    } catch (error) {
+        logger.error('Local federation activation failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Local federation activation failed',
+        });
+    }
+});
+
+// ============================================
 // LEGACY V1 REGISTRATION (preserved for backward compatibility)
 // ============================================
 

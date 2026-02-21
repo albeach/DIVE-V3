@@ -895,6 +895,35 @@ class FederationBootstrapService {
         }
       });
 
+      // Auto-activate Hub side when credentials are fully exchanged (V2 Phase C)
+      enrollmentService.on('enrollment', async (event: {
+        type: string;
+        enrollment: {
+          enrollmentId: string;
+          requesterInstanceCode: string;
+          status: string;
+        };
+      }) => {
+        if (event.type !== 'enrollment:credentials_exchanged') return;
+
+        try {
+          const { federationActivationService } = await import('./federation-activation.service');
+          const { enrollmentService: enrService } = require('./enrollment.service');
+          const fullEnrollment = await enrService.getEnrollment(event.enrollment.enrollmentId);
+          await federationActivationService.activateHubSide(fullEnrollment);
+
+          logger.info('Hub-side federation activated automatically', {
+            enrollmentId: event.enrollment.enrollmentId,
+            requesterInstanceCode: event.enrollment.requesterInstanceCode,
+          });
+        } catch (error) {
+          logger.error('Hub-side auto-activation failed (manual activation available via POST /enrollment/:id/activate)', {
+            enrollmentId: event.enrollment.enrollmentId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      });
+
       logger.debug('Enrollment event handlers registered');
     } catch (error) {
       logger.warn('Failed to register enrollment event handlers', {
