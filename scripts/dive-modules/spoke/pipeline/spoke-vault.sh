@@ -84,20 +84,44 @@ spoke_vault_start() {
         return 1
     }
 
-    # Wait for container to be running (not necessarily healthy yet — init needed first)
+    # Phase 1: Wait for container to enter Running state
     local container
     container=$(_spoke_vault_container "$code")
     local waited=0
     while [ $waited -lt 30 ]; do
         if docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
             log_verbose "Vault container running (${waited}s)"
-            return 0
+            break
         fi
         sleep 2
         waited=$((waited + 2))
     done
 
-    log_error "Vault container failed to start within 30s"
+    if [ $waited -ge 30 ]; then
+        log_error "Vault container failed to start within 30s"
+        return 1
+    fi
+
+    # Phase 2: Wait for the Vault process to actually be listening on port 8200.
+    # Container Running != process accepting connections. vault status returns:
+    #   0 = unsealed, 1 = sealed, 2 = uninitialized, 3 = error/not-listening
+    # We accept exit codes 0, 1, and 2 as "vault is listening". Exit 3 means not ready.
+    log_verbose "Waiting for Vault process to accept connections..."
+    local vault_waited=0
+    while [ $vault_waited -lt 60 ]; do
+        local vault_status_exit
+        _spoke_vault_exec "$code" status -tls-skip-verify >/dev/null 2>&1
+        vault_status_exit=$?
+        # Exit 3 = connection refused / not listening yet
+        if [ "$vault_status_exit" -ne 3 ]; then
+            log_verbose "Vault process listening (${vault_waited}s, exit=${vault_status_exit})"
+            return 0
+        fi
+        sleep 2
+        vault_waited=$((vault_waited + 2))
+    done
+
+    log_error "Vault process failed to start listening within 60s"
     return 1
 }
 
