@@ -1,607 +1,254 @@
-# DIVE V3 - Coalition-Friendly ICAM Web Application
+# DIVE V3
 
-**Version:** 3.0  
-**Status:** Production Ready  
-**Last Updated:** February 9, 2026
+Distributed Identity and Verification Engine for coalition-style ICAM, federated trust, and policy-driven access control.
 
----
+[![CI - Comprehensive](https://img.shields.io/github/actions/workflow/status/albeach/DIVE-V3/ci-comprehensive.yml?branch=main&label=CI%20Comprehensive)](https://github.com/albeach/DIVE-V3/actions/workflows/ci-comprehensive.yml)
+[![E2E Tests](https://img.shields.io/github/actions/workflow/status/albeach/DIVE-V3/test-e2e.yml?branch=main&label=E2E)](https://github.com/albeach/DIVE-V3/actions/workflows/test-e2e.yml)
+[![Security Scanning](https://img.shields.io/github/actions/workflow/status/albeach/DIVE-V3/security.yml?branch=main&label=Security)](https://github.com/albeach/DIVE-V3/actions/workflows/security.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/albeach/DIVE-V3/codeql.yml?branch=main&label=CodeQL)](https://github.com/albeach/DIVE-V3/actions/workflows/codeql.yml)
+[![Last Commit](https://img.shields.io/github/last-commit/albeach/DIVE-V3)](https://github.com/albeach/DIVE-V3/commits/main)
+[![Open Issues](https://img.shields.io/github/issues/albeach/DIVE-V3)](https://github.com/albeach/DIVE-V3/issues)
+[![Stars](https://img.shields.io/github/stars/albeach/DIVE-V3?style=social)](https://github.com/albeach/DIVE-V3/stargazers)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
-## 🚀 Overview
+## Table of Contents
 
-DIVE V3 is a coalition-friendly Identity, Credential, and Access Management (ICAM) web application demonstrating federated identity management across USA/NATO partners with policy-driven Attribute-Based Access Control (ABAC) authorization.
+- [Why DIVE V3](#why-dive-v3)
+- [Architecture at a Glance](#architecture-at-a-glance)
+- [Tech Stack](#tech-stack)
+- [Quick Start](#quick-start)
+- [CLI Cheat Sheet](#cli-cheat-sheet)
+- [Repository Layout](#repository-layout)
+- [Development and Testing](#development-and-testing)
+- [Security Model](#security-model)
+- [CI/CD and Automation](#cicd-and-automation)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Project Status](#project-status)
 
-**Key Features:**
-- 🔐 **Federated Identity**: Multi-IdP support (USA, France, Canada, Industry)
-- 🛡️ **ABAC Authorization**: Policy-driven access control with Open Policy Agent (OPA)
-- 🌐 **Hub-Spoke Architecture**: Distributed deployment model for coalition environments
-- 🔑 **Key Access Service (KAS)**: Policy-bound encryption for sensitive resources
-- ⚡ **Modern UI**: Phase 3 enhancements with micro-interactions and real-time collaboration
-- ♿ **Accessible**: WCAG 2.1 AA compliant interface
+## Why DIVE V3
 
----
+DIVE V3 is a hub-spoke federation platform for secure identity and authorization workflows across independent domains. It combines:
 
-## 🏗️ Architecture
+- Federated identity with Keycloak across hub and spoke instances.
+- ABAC authorization with OPA/OPAL and signed policy bundle workflows.
+- Deployment orchestration through a unified `./dive` CLI.
+- Multi-service runtime with Next.js frontend, Express backend, and data/control-plane services.
+- Operator tooling for diagnostics, federation verification, policy lifecycle, and environment management.
 
-### Tech Stack
+## Architecture at a Glance
 
-**Frontend:**
-- Next.js 15+ (App Router)
-- NextAuth.js v5 (Authentication)
-- TypeScript
-- Tailwind CSS
-- Framer Motion (Animations)
-
-**Backend:**
-- Node.js 20+
-- Express.js 4.18
-- TypeScript
-- MongoDB 7 (Resource metadata)
-- Redis (Session management, blacklist)
-
-**Identity & Authorization:**
-- Keycloak (IdP broker)
-- Open Policy Agent (OPA) v0.68.0+
-- JWT (RS256) tokens
-
-**Infrastructure:**
-- Docker Compose
-- Terraform (Keycloak IaC)
-- HashiCorp Vault 1.21 (Secrets management, primary)
-- Google Cloud Platform (Secrets management, legacy fallback)
-
-**Monitoring:**
-- Grafana (Dashboards)
-- Prometheus (Metrics)
-- Loki (Logs)
-
-### PEP/PDP Pattern
-
-```
-IdPs (USA/FRA/CAN) → Keycloak Broker → Next.js + NextAuth
-                                           ↓
-                                    Backend API (PEP)
-                                           ↓
-                                      OPA (PDP) ← Rego Policies
-                                           ↓
-                                    Authorization Decision
-                                           ↓
-                                    MongoDB (Resources)
-                                           ↓
-                                    KAS (Key Release)
+```mermaid
+flowchart LR
+    A[External IdPs / Spoke IdPs] --> B[Keycloak Federation]
+    B --> C[Frontend: Next.js + NextAuth]
+    C --> D[Backend API / PEP]
+    D --> E[OPA PDP]
+    F[Policy Bundles + OPAL] --> E
+    D --> G[(MongoDB)]
+    D --> H[(PostgreSQL)]
+    D --> I[(Redis)]
+    J[Vault / Secrets Provider] --> D
+    K[Hub-Spoke Orchestration CLI] --> B
+    K --> C
+    K --> D
 ```
 
----
+## Tech Stack
 
-## 🎨 What's New in Phase 3
+- Frontend: Next.js, React, TypeScript, Tailwind, Framer Motion
+- Backend: Node.js, Express, TypeScript, MongoDB, PostgreSQL, Redis
+- Identity and Authorization: Keycloak, OPA, OPAL, JWT (RS256)
+- Infra and Ops: Docker Compose, Terraform, Vault, Cloudflare tooling
+- Testing and Quality: Jest, Playwright, OPA tests, shell test framework, GitHub Actions
 
-Phase 3 introduced modern UI/UX enhancements across the entire admin interface:
-
-- ✨ **100+ Animated Buttons** - Smooth micro-interactions on all admin pages
-- 🎬 **Seamless Page Transitions** - Fade/slide animations for navigation
-- 👥 **Real-Time Presence** - Live collaboration indicators on Analytics and Logs pages
-- ♿ **Full Accessibility** - WCAG 2.1 AA compliant with `prefers-reduced-motion` support
-- 🚀 **60fps Performance** - GPU-accelerated animations
-
-### Phase 3 Components
-
-#### AnimatedButton
-
-Modern button component with micro-interactions using Framer Motion.
-
-```typescript
-import { AnimatedButton } from '@/components/admin/shared';
-
-<AnimatedButton
-  onClick={handleClick}
-  className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-  intensity="normal"
->
-  Click Me
-</AnimatedButton>
-```
-
-**Features:**
-- 3 intensity levels: `subtle`, `normal`, `strong`
-- Respects `prefers-reduced-motion` automatically
-- Full TypeScript support
-- Variants: `AnimatedIconButton`, `AnimatedLinkButton`, `AnimatedCardButton`
-
-#### AdminPageTransition
-
-Page-level transition wrapper for smooth navigation between admin pages.
-
-```typescript
-import { AdminPageTransition } from '@/components/admin/shared';
-
-<AdminPageTransition pageKey="/admin/dashboard">
-  {/* Your page content */}
-</AdminPageTransition>
-```
-
-**Features:**
-- 3 animation variants: `slideUp`, `fadeIn`, `scale`
-- Automatic focus management
-- GPU-accelerated transitions
-- Zero layout shift
-
-#### PresenceIndicator
-
-Real-time user presence tracking for collaborative admin pages.
-
-```typescript
-import { PresenceIndicator } from '@/components/admin/shared';
-
-<PresenceIndicator page="analytics" />
-```
-
-**Features:**
-- Cross-tab synchronization (Broadcast Channel API)
-- Avatar stacking with tooltips
-- Automatic heartbeat and cleanup
-- Glassmorphism design
-
-### Documentation
-
-- **[Component API Reference](./docs/PHASE3_COMPONENTS.md)** - Complete documentation with examples
-- **[Testing Guide](./docs/PHASE3_TESTING_GUIDE.md)** - Comprehensive testing strategy
-- **[Phase 3 Summary](./docs/PHASE3_FINAL_SUMMARY.md)** - Accomplishments and lessons learned
-
----
-
-## 📦 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- Node.js 20+
-- Git
+- Docker + Docker Compose v2
+- Node.js 20+ and npm 10+
+- Bash, `jq`, `curl`, and `git`
 
-### Installation
+### 1) Clone and bootstrap
 
 ```bash
-# Clone repository
-git clone https://github.com/dive25/DIVE-V3.git
+git clone https://github.com/albeach/DIVE-V3.git
 cd DIVE-V3
-
-# Start all services
-./scripts/dive-start.sh
-
-# Services will be available at:
-# Frontend: http://localhost:3000
-# Backend: http://localhost:4000
-# Keycloak: http://localhost:8081
-# Grafana: http://localhost:3001
+./dive setup
 ```
 
-### Configuration
-
-DIVE V3 uses HashiCorp Vault for secrets management. No cloud provider account required.
+### 2) Deploy hub
 
 ```bash
-# 1. Start Vault container
-docker compose -f docker-compose.hub.yml up -d vault
-
-# 2. Initialize and unseal Vault (one-time)
-./dive vault init
-./dive vault unseal
-
-# 3. Configure mount points and policies
-./dive vault setup
-
-# 4. Deploy
 ./dive hub deploy
-./dive spoke deploy deu
+./dive hub status
 ```
 
-See [Vault Integration Guide](./docs/VAULT_INTEGRATION.md) for full documentation.
-
-**⚠️ CRITICAL:** Never hardcode secrets! Always use Vault for secret storage.
-
----
-
-## 🔐 Security Features
-
-### Authentication
-
-- **Multi-IdP Support**: USA (OIDC), France (SAML), Canada (OIDC), Industry (OIDC)
-- **JWT Validation**: RS256 signature verification with Keycloak JWKS
-- **Short Token Lifetime**: 15 minutes (access), 8 hours (refresh)
-- **Single-Use Refresh Tokens**: Rotation prevents replay attacks
-- **Token Blacklist**: Redis-backed revocation on logout
-
-### Authorization (ABAC)
-
-- **Default Deny**: OPA policies start with `default allow := false`
-- **Fail-Secure Pattern**: Use `is_not_a_*` violation checks
-- **Clearance-Based**: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
-- **Country-Based**: ISO 3166-1 alpha-3 codes (USA, FRA, CAN, GBR)
-- **COI-Based**: Community of Interest tags (NATO-COSMIC, FVEY)
-- **Comprehensive Logging**: All decisions logged with reason
-
-### Compliance
-
-- **ACP-240**: NATO access control policy
-- **STANAG 4774/5636**: NATO security labeling
-- **ISO 3166-1 alpha-3**: Country codes
-- **WCAG 2.1 AA**: Accessibility compliance
-- **90-day Audit Trail**: All authorization decisions logged
-
----
-
-## 🛠️ Development
-
-### Project Structure
-
-```
-dive-v3/
-├── frontend/              # Next.js application
-│   ├── src/
-│   │   ├── app/          # Next.js App Router pages
-│   │   │   └── admin/    # Admin pages (16 total)
-│   │   ├── components/   # React components
-│   │   │   └── admin/shared/  # Phase 3 components
-│   │   ├── lib/          # Utilities and helpers
-│   │   └── types/        # TypeScript definitions
-├── backend/              # Express.js API
-│   ├── src/
-│   │   ├── controllers/  # Route controllers
-│   │   ├── middleware/   # PEP, logging, validation
-│   │   ├── services/     # Business logic
-│   │   ├── models/       # MongoDB schemas
-│   │   └── utils/        # Helpers
-├── kas/                  # Key Access Service
-├── policies/             # OPA Rego policies
-├── terraform/            # Keycloak IaC
-├── scripts/              # Utility scripts
-└── docs/                 # Documentation
-```
-
-### Running Tests
+### 3) Deploy a spoke
 
 ```bash
-# Backend tests
-cd backend && npm test
-
-# OPA policy tests
-opa test policies/
-
-# Frontend tests
-cd frontend && npm test
-
-# E2E tests
-cd frontend && npm run test:e2e
+./dive spoke deploy FRA
+./dive spoke status FRA
 ```
 
-### Code Conventions
-
-- **Files**: kebab-case (`authz.middleware.ts`)
-- **Components**: PascalCase (`AnimatedButton.tsx`)
-- **Functions/Variables**: camelCase (`getResourceMetadata`)
-- **Constants**: UPPER_SNAKE_CASE (`OPA_URL`)
-- **Commits**: Conventional Commits (`feat(auth): add France SAML IdP`)
-
-See [.cursorrules](./.cursorrules) for complete conventions.
-
----
-
-## 📚 Documentation
-
-### Quick Start Guides
-
-- **[Hub-Spoke 101 Deployment](./docs/HUB_SPOKE_101_DEPLOYMENT.md)** - Dynamic NATO coalition deployment
-- **[Browser Access Guide](./docs/BROWSER_ACCESS_GUIDE.md)** - How to access services
-- **[Pilot Quick Start](./docs/PILOT-QUICK-START.md)** - Quick start for pilot deployment
-
-### Architecture
-
-- **[Hub-Spoke Architecture](./docs/HUB_SPOKE_ARCHITECTURE.md)** - Comprehensive architecture guide
-- **[Federation Implementation](./docs/FEDERATION-IMPLEMENTATION-RUNBOOK.md)** - Federation setup
-- **[Security Architecture](./docs/SECURE-DEPLOYMENT.md)** - Production security guidelines
-
-### Phase 3 Documentation
-
-- **[Component Documentation](./docs/PHASE3_COMPONENTS.md)** - API reference with examples
-- **[Testing Guide](./docs/PHASE3_TESTING_GUIDE.md)** - Testing strategy and results
-- **[Final Summary](./docs/PHASE3_FINAL_SUMMARY.md)** - Phase 3 accomplishments
-
-### Complete Documentation Index
-
-See [docs/README.md](./docs/README.md) for the complete documentation index organized by topic.
-
----
-
-## 🎯 Admin Pages (Phase 3 Enhanced)
-
-All 16 admin pages feature modern micro-interactions and seamless transitions:
-
-| Page | Route | Features |
-|------|-------|----------|
-| Dashboard | `/admin/dashboard` | Overview, metrics, quick actions |
-| Users | `/admin/users` | User management, CRUD operations |
-| Analytics | `/admin/analytics` | Real-time analytics + PresenceIndicator |
-| Security & Compliance | `/admin/security-compliance` | Security posture, compliance status |
-| Logs | `/admin/logs` | System logs + PresenceIndicator (23 animated buttons) |
-| Clearance Management | `/admin/clearance-management` | Clearance level administration |
-| Approvals | `/admin/approvals` | Workflow approvals |
-| IdP Management | `/admin/idp` | Identity provider configuration |
-| Certificates | `/admin/certificates` | SSL/TLS certificate management (11 buttons) |
-| OPA Policy | `/admin/opa-policy` | Policy editor and testing |
-| Compliance | `/admin/compliance` | Compliance reporting |
-| Spoke | `/admin/spoke` | Spoke instance management |
-| SP Registry | `/admin/sp-registry` | Service provider registry |
-| Tenants | `/admin/tenants` | Multi-tenant administration |
-| Debug | `/admin/debug` | System diagnostics |
-| Onboarding | `/admin/onboarding` | New user onboarding wizard |
-
----
-
-## 🚀 Deployment
-
-### Hub Deployment
+### 4) Federate and verify
 
 ```bash
-# Deploy USA hub instance
-cd terraform/hub
-terraform init
-terraform apply -var="instance=usa"
-
-# Start services
-./scripts/dive-start.sh
+./dive spoke federate FRA --auth-code <UUID>
+./dive federation verify FRA
+./dive federation status
 ```
 
-### Spoke Deployment
+### 5) Validate core endpoints (typical local)
+
+- Frontend: `https://localhost:3000`
+- Backend health: `https://localhost:4000/health`
+- Hub Keycloak: `https://localhost:8443`
+
+Use `./dive hub status` and `./dive spoke status <CODE>` as the source of truth for your active ports and services.
+
+## CLI Cheat Sheet
 
 ```bash
-# Deploy France spoke instance
-cd templates/spoke
-./scripts/spoke-init/spoke-init.sh fra
+# Hub lifecycle
+./dive hub deploy
+./dive hub up
+./dive hub down
+./dive hub verify
+./dive hub logs
 
-# Start spoke services
-cd ../../spoke-instances/fra
-docker-compose up -d
+# Spoke lifecycle
+./dive spoke deploy <CODE>
+./dive spoke up <CODE>
+./dive spoke down <CODE>
+./dive spoke verify <CODE>
+./dive spoke logs <CODE>
+
+# Federation
+./dive federation link <CODE>
+./dive federation unlink <CODE>
+./dive federation verify <CODE>
+./dive federation status
+
+# Policy
+./dive policy build --sign
+./dive policy push
+./dive policy test
+./dive policy status
+
+# Config and recovery
+./dive config show
+./dive config validate
+./dive orch-db status
+./dive nuke --confirm
 ```
 
-### Production Checklist
+## Repository Layout
 
-- [ ] All secrets stored in HashiCorp Vault (or GCP Secret Manager)
-- [ ] SSL/TLS certificates configured
-- [ ] Monitoring and logging enabled
-- [ ] OPA policies tested and deployed
-- [ ] Federation links established
-- [ ] Backup and disaster recovery configured
-- [ ] Security scanning completed
-- [ ] Load testing performed
+```text
+.
+├── backend/              # Express API, controllers, services, models, scripts
+├── frontend/             # Next.js app router UI + admin APIs
+├── policies/             # OPA Rego policies and policy tooling
+├── scripts/              # DIVE CLI modules, automation, operational scripts
+├── instances/            # Hub/spoke instance configs
+├── keycloak/             # Realms, themes, mappers, profile templates
+├── monitoring/           # Prometheus, Grafana, alerting configuration
+├── terraform/            # IaC modules and deployment infrastructure
+├── docs/                 # Operational, architecture, and API documentation
+└── docker-compose*.yml   # Runtime stack definitions
+```
 
-See [Deployment Runbook](./docs/RUNBOOK-DEPLOYMENT.md) for complete procedures.
+## Development and Testing
 
----
-
-## 📊 Monitoring
-
-### Grafana Dashboards
-
-Access Grafana at `http://localhost:3001`:
-
-- **System Overview**: CPU, memory, disk usage
-- **Application Metrics**: Request rates, response times, error rates
-- **Authorization Metrics**: OPA decisions, policy evaluation times
-- **Session Metrics**: Active sessions, token lifecycle
-
-### Logs
-
-View aggregated logs with Loki:
+### Local development
 
 ```bash
-# View backend logs
-docker-compose logs -f backend
+# Backend
+cd backend
+npm ci
+npm run dev
 
-# View frontend logs
-docker-compose logs -f frontend
-
-# View OPA decision logs
-docker-compose logs -f opa
+# Frontend
+cd ../frontend
+npm ci
+npm run dev
 ```
 
----
+### Core test commands
 
-## 🧪 Testing
+```bash
+# Shell tests for CLI/modules
+./scripts/tests/run-shell-tests.sh
 
-### Comprehensive Test Coverage
+# Backend unit/integration
+cd backend
+npm test
+npm run test:unit
+npm run test:integration
 
-- **Unit Tests**: Jest (backend), React Testing Library (frontend)
-- **Integration Tests**: API endpoint tests, OPA policy tests
-- **E2E Tests**: Playwright (user flows, federation scenarios)
-- **Accessibility Tests**: axe DevTools, keyboard navigation
-- **Performance Tests**: Lighthouse, Chrome DevTools profiling
+# Frontend unit/e2e
+cd ../frontend
+npm test
+npm run test:e2e
 
-### Test Results (Phase 3)
+# OPA policy suite
+cd ../policies
+opa test . -v
+```
 
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| Lighthouse Performance | ≥90 | 90-95 ✅ |
-| Lighthouse Accessibility | ≥95 | 95-100 ✅ |
-| Animation FPS | 60 | 58-60 ✅ |
-| WCAG 2.1 AA Compliance | 100% | 100% ✅ |
-| Cross-Browser Support | 4 browsers | 4/4 ✅ |
+## Security Model
 
----
+- Default-deny ABAC evaluation in OPA with explicit allow conditions.
+- Identity brokering and federation through Keycloak realms and mappers.
+- Secrets-first operation model with Vault as default provider (`SECRETS_PROVIDER=vault`).
+- Continuous security scanning in CI (CodeQL, dependency scanning, secret scanning, container scanning).
+- Auditable federation and policy operations with diagnostics and verification flows in CLI modules.
 
-## 🤝 Contributing
+## CI/CD and Automation
 
-### Workflow
+Primary workflow pipelines:
 
-1. Create feature branch: `git checkout -b feat/my-feature`
-2. Make changes following [code conventions](./.cursorrules)
-3. Write tests for new features
-4. Run linters: `npm run lint`
-5. Commit with conventional commit message
-6. Push and create pull request
-7. Wait for CI checks to pass
-8. Request review
+- `CI - Comprehensive Test Suite` (`.github/workflows/ci-comprehensive.yml`)
+- `E2E Tests` (`.github/workflows/test-e2e.yml`)
+- `Security Scanning` (`.github/workflows/security.yml`)
+- `CodeQL Analysis` (`.github/workflows/codeql.yml`)
+- Deployment and packaging workflows under `.github/workflows/`
 
-### Code Review Checklist
+Open GitHub Actions runs:
 
-- [ ] Tests pass
-- [ ] TypeScript compilation succeeds
-- [ ] Accessibility validated (WCAG 2.1 AA)
-- [ ] Documentation updated
-- [ ] No hardcoded secrets
-- [ ] OPA policies tested
-- [ ] Performance impact assessed
+- https://github.com/albeach/DIVE-V3/actions
 
----
+## Documentation
 
-## 🎓 Training Resources
+Start here:
 
-### New Developer Onboarding
+- Full docs index: [`docs/README.md`](docs/README.md)
+- Hub-spoke deployment guide: [`docs/HUB_SPOKE_101_DEPLOYMENT.md`](docs/HUB_SPOKE_101_DEPLOYMENT.md)
+- Deployment quick reference: [`DEPLOYMENT_QUICK_REFERENCE.md`](DEPLOYMENT_QUICK_REFERENCE.md)
+- Testing guide: [`TESTING_GUIDE.md`](TESTING_GUIDE.md)
+- CLI modules reference: [`scripts/dive-modules/README.md`](scripts/dive-modules/README.md)
+- Architecture review docs: [`docs/architecture/README.md`](docs/architecture/README.md)
+- OpenAPI spec (SP registry): [`docs/api/sp-registry-openapi.yaml`](docs/api/sp-registry-openapi.yaml)
+- Postman collection docs: [`docs/postman/README.md`](docs/postman/README.md)
 
-1. Read [Project Overview](./docs/ARCHITECTURE-GUIDE.md)
-2. Review [Code Conventions](./.cursorrules)
-3. Complete [Phase 3 Component Tutorial](./docs/PHASE3_COMPONENTS.md)
-4. Run through [Quick Start](#quick-start)
-5. Deploy local development environment
-6. Complete "Hello World" PR (add test page)
+## Contributing
 
-### Advanced Topics
+1. Create a feature branch from `main`.
+2. Make targeted changes with tests.
+3. Run local checks (shell, backend, frontend, policy tests as applicable).
+4. Open a PR and ensure GitHub Actions are green.
+5. Include docs updates for any behavior or interface change.
 
-- **OPA Policy Development**: [OPA Policy Editor Quick Reference](./docs/opa-policy-editor-quick-reference.md)
-- **Federation Setup**: [Federation Implementation Runbook](./docs/FEDERATION-IMPLEMENTATION-RUNBOOK.md)
-- **KAS Integration**: [ZTDF KAS Federation](./docs/ZTDF-KAS-FEDERATION-QUICK-REFERENCE.md)
-- **Hub-Spoke Deployment**: [Hub-Spoke 101](./docs/HUB_SPOKE_101_DEPLOYMENT.md)
+Issue tracker:
 
----
+- https://github.com/albeach/DIVE-V3/issues
 
-## 📞 Support & Contact
+## Project Status
 
-### Issue Reporting
-
-File issues on GitHub: [DIVE V3 Issues](https://github.com/dive25/DIVE-V3/issues)
-
-**Include:**
-- Environment details (OS, browser, Node version)
-- Steps to reproduce
-- Expected vs actual behavior
-- Screenshots or logs
-- Phase 3 component (if UI-related)
-
-### Documentation Feedback
-
-Found an error in documentation? Submit a PR or file an issue with:
-- Document name and location
-- Incorrect information
-- Suggested correction
-
----
-
-## 🏆 Acknowledgments
-
-### Phase 3 Team
-
-**Primary Contributors:**
-- AI Assistant (Claude Sonnet 4.5) - Component implementation
-- Aubrey Beach - Project oversight and requirements
-
-**Technologies:**
-- [Framer Motion](https://www.framer.com/motion/) - Animation library
-- [Next.js](https://nextjs.org/) - React framework
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS
-- [Open Policy Agent](https://www.openpolicyagent.org/) - Policy engine
-- [Keycloak](https://www.keycloak.org/) - Identity broker
-
----
-
-## 📜 License
-
-**Classification:** UNCLASSIFIED  
-**Distribution:** Public Release
-
-DIVE V3 is developed for NATO coalition demonstration purposes. See [LICENSE](./LICENSE) for details.
-
----
-
-## 🗺️ Roadmap
-
-### Completed Phases
-
-- ✅ **Phase 1**: Federation & Identity (Q4 2025)
-- ✅ **Phase 2**: ABAC Authorization (Q4 2025)
-- ✅ **Phase 3**: Modern UI/UX Enhancements (Q1 2026)
-
-### Upcoming Phases
-
-- 🔜 **Phase 4**: Enhanced Collaboration (Q1 2026)
-  - Expand presence indicators to more pages
-  - Real-time notifications
-  - Storybook component library
-  - Automated animation testing
-
-- 🔮 **Phase 5**: Mobile Experience (Q2 2026)
-  - Progressive Web App (PWA)
-  - Mobile-optimized admin interface
-  - Offline capability
-
-- 🔮 **Phase 6**: Advanced Analytics (Q2 2026)
-  - ML-powered access pattern detection
-  - Anomaly detection
-  - Predictive policy recommendations
-
----
-
-## 🔗 Related Projects
-
-- [Keycloak](https://github.com/keycloak/keycloak) - Open Source Identity and Access Management
-- [Open Policy Agent](https://github.com/open-policy-agent/opa) - Policy-based control for cloud native environments
-- [OPAL](https://github.com/permitio/opal) - Open Policy Administration Layer
-
----
-
-## 📈 Statistics
-
-**Project Metrics (as of February 6, 2026):**
-- Lines of Code: ~50,000
-- Components: 50+
-- Admin Pages: 16 (all Phase 3 enhanced)
-- OPA Policies: 10+ (with 41+ tests)
-- Supported IdPs: 4 (USA, France, Canada, Industry)
-- Deployment Targets: 7+ (Hub + Spokes)
-- Documentation Files: 100+
-
----
-
-## ❓ FAQ
-
-### General
-
-**Q: What is DIVE V3?**  
-A: DIVE V3 is a coalition-friendly ICAM web application demonstrating federated identity and ABAC authorization for NATO environments.
-
-**Q: Is DIVE V3 production-ready?**  
-A: Yes, as of Phase 3 completion (February 2026), DIVE V3 is production-ready with full accessibility, performance validation, and comprehensive documentation.
-
-### Phase 3
-
-**Q: How do I use AnimatedButton in my page?**  
-A: Import from shared components and use like a regular button. See [Component Documentation](./docs/PHASE3_COMPONENTS.md) for examples.
-
-**Q: Do animations work on all browsers?**  
-A: Yes, Phase 3 components are tested on Chrome, Firefox, Safari, and Edge. See [Testing Guide](./docs/PHASE3_TESTING_GUIDE.md).
-
-**Q: What if users prefer reduced motion?**  
-A: All Phase 3 components automatically respect the `prefers-reduced-motion` setting. Animations are disabled when users enable this preference.
-
-### Technical
-
-**Q: How do I add a new IdP?**  
-A: See [Federation Implementation Runbook](./docs/FEDERATION-IMPLEMENTATION-RUNBOOK.md) for step-by-step instructions.
-
-**Q: How do I modify OPA policies?**  
-A: Edit `.rego` files in `policies/` directory. Run `opa test` to validate. See [OPA Policy Editor Quick Reference](./docs/opa-policy-editor-quick-reference.md).
-
-**Q: Where are secrets stored?**
-A: Secrets are stored in HashiCorp Vault (primary, `SECRETS_PROVIDER=vault`) or GCP Secret Manager (legacy fallback). Never hardcode secrets in code or config files. See [Vault Integration Guide](./docs/VAULT_INTEGRATION.md) and `.cursorrules` for complete guidelines.
-
----
-
-**DIVE V3** - Demonstrating modern, accessible, and secure coalition identity management.
-
-*Last Updated: February 9, 2026*
+- Status: Active development
+- Runtime target: Hub-spoke federation with policy-driven authorization
+- Language/runtime baseline: Node.js 20+, npm 10+
+- Package license declaration: MIT (see `package.json`, `backend/package.json`, `frontend/package.json`)
+- Classification intent in project docs: UNCLASSIFIED / public-release demonstration context
