@@ -102,6 +102,12 @@ spoke_vault_start() {
         return 1
     fi
 
+    # Phase 1.5: Fix data directory ownership — named Docker volumes are created with
+    # root ownership but Vault runs as the 'vault' user (UID 100). Chown before init.
+    log_verbose "Ensuring Vault data directory ownership..."
+    docker exec -u 0 "$container" sh -c \
+        'chown -R vault:vault /vault/data /vault/logs 2>/dev/null || true'
+
     # Phase 2: Wait for the Vault process to actually be listening on port 8200.
     # Container Running != process accepting connections. vault status returns:
     #   0 = unsealed, 1 = sealed, 2 = uninitialized, 3 = error/not-listening

@@ -836,7 +836,8 @@ services:
     healthcheck:
       # vault status exit codes: 0=healthy+unsealed, 2=uninitialized (both are "vault is running")
       # Exit 1=sealed, 3=error. Accept 0 and 2 as healthy during bootstrap.
-      test: ["CMD-SHELL", "vault status -tls-skip-verify; s=$?; [ $s -eq 0 ] || [ $s -eq 2 ]"]
+      # $$s / $$? use double-$ so Docker Compose passes literal $s/$? to the shell.
+      test: ["CMD-SHELL", "vault status -tls-skip-verify; s=$$?; [ $$s -eq 0 ] || [ $$s -eq 2 ]"]
       interval: 30s
       timeout: 10s
       retries: 3

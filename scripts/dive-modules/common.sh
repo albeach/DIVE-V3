@@ -655,8 +655,25 @@ fi
 # Derived hub URLs for cross-instance communication (set when hub is remote)
 if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
     export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
-    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
-    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+    # For Caddy-fronted Hub deployments, OPAL and Vault use dedicated subdomains
+    # (not raw ports). If HUB_EXTERNAL_ADDRESS is an API domain (e.g. dev-usa-api.dive25.com),
+    # derive -opal. and -vault. subdomains. Otherwise fall back to raw ports.
+    if [ -z "${HUB_OPAL_URL:-}" ]; then
+        _opal_candidate=$(echo "https://${HUB_EXTERNAL_ADDRESS}" | sed 's/-api\./-opal./g')
+        if [ "$_opal_candidate" != "https://${HUB_EXTERNAL_ADDRESS}" ]; then
+            export HUB_OPAL_URL="$_opal_candidate"
+        else
+            export HUB_OPAL_URL="https://${HUB_EXTERNAL_ADDRESS}:7002"
+        fi
+    fi
+    if [ -z "${HUB_VAULT_URL:-}" ]; then
+        _vault_candidate=$(echo "https://${HUB_EXTERNAL_ADDRESS}" | sed 's/-api\./-vault./g')
+        if [ "$_vault_candidate" != "https://${HUB_EXTERNAL_ADDRESS}" ]; then
+            export HUB_VAULT_URL="$_vault_candidate"
+        else
+            export HUB_VAULT_URL="https://${HUB_EXTERNAL_ADDRESS}:8200"
+        fi
+    fi
 fi
 
 # =============================================================================
