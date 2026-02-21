@@ -442,9 +442,19 @@ terraform_apply_spoke() {
     local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
 
     if [ ! -f "$tfvars_file" ]; then
-        log_error "Country tfvars file not found: $tfvars_file"
-        log_error "Spoke Terraform requires country-specific configuration"
-        return 1
+        log_warn "Country tfvars not found: $tfvars_file"
+        log_info "Auto-generating tfvars for ${code_upper}..."
+        local generator="${DIVE_ROOT}/scripts/generate-country-tfvars.sh"
+        if [ -x "$generator" ]; then
+            "$generator" "$code_upper" || {
+                log_error "Failed to generate tfvars for ${code_upper}"
+                return 1
+            }
+        else
+            log_error "tfvars generator not found: $generator"
+            log_error "Run: ./scripts/generate-country-tfvars.sh ${code_upper}"
+            return 1
+        fi
     fi
 
     # ==========================================================================
@@ -524,8 +534,18 @@ terraform_plan_spoke() {
     local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
 
     if [ ! -f "$tfvars_file" ]; then
-        log_error "Country tfvars file not found: $tfvars_file"
-        return 1
+        log_warn "Country tfvars not found: $tfvars_file"
+        log_info "Auto-generating tfvars for ${code_upper}..."
+        local generator="${DIVE_ROOT}/scripts/generate-country-tfvars.sh"
+        if [ -x "$generator" ]; then
+            "$generator" "$code_upper" || {
+                log_error "Failed to generate tfvars for ${code_upper}"
+                return 1
+            }
+        else
+            log_error "tfvars generator not found: $generator"
+            return 1
+        fi
     fi
 
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
