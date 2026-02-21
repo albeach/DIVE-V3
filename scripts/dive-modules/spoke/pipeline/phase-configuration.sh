@@ -217,6 +217,35 @@ spoke_phase_configuration() {
         fi
     fi
 
+    # Step 0.7: Set up Caddy reverse proxy BEFORE any registration/federation
+    # Caddy must be running so external URLs (dev-fra-idp.dive25.com) are reachable
+    # when Hub validates the spoke's IdP endpoint during registration.
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ] || [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh" ]; then
+            source "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh"
+        fi
+        if type spoke_caddy_setup &>/dev/null; then
+            spoke_caddy_setup "$instance_code" || log_warn "Caddy setup had issues (non-fatal)"
+        fi
+
+        # Start Caddy container if not already running
+        local _caddy_name="dive-spoke-${code_lower}-caddy"
+        if ! docker ps --format '{{.Names}}' | grep -q "^${_caddy_name}$"; then
+            log_info "Starting Caddy reverse proxy..."
+            local _compose_file="${spoke_dir}/docker-compose.yml"
+            if [ -f "$_compose_file" ]; then
+                COMPOSE_PROFILES=caddy docker compose -f "$_compose_file" \
+                    -p "dive-spoke-${code_lower}" up -d "caddy-${code_lower}" 2>&1 || \
+                    log_warn "Caddy container start had issues (non-fatal)"
+                # Wait for Caddy to obtain TLS certs
+                log_info "Waiting for Caddy TLS certificate provisioning..."
+                sleep 10
+            fi
+        else
+            log_verbose "Caddy already running"
+        fi
+    fi
+
     # Step 1: NATO Localization (soft failure - non-essential)
     if [ "$pipeline_mode" = "deploy" ]; then
         spoke_config_nato_localization "$instance_code"
@@ -411,17 +440,8 @@ spoke_phase_configuration() {
         return 1
     fi
 
-    # ==========================================================================
-    # CADDY INTEGRATION: Set up reverse proxy and DNS for spoke (EC2 only)
-    # ==========================================================================
-    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
-        if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh" ]; then
-            source "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh"
-        fi
-        if type spoke_caddy_setup &>/dev/null; then
-            spoke_caddy_setup "$instance_code" || log_warn "Caddy setup had issues (non-fatal)"
-        fi
-    fi
+    # NOTE: Caddy setup moved to Step 0.7 (before registration/federation steps)
+    # so spoke URLs are reachable when Hub validates IdP endpoint.
 
     # CRITICAL FIX: Validate configuration BEFORE creating checkpoint
     # Previous issue: Checkpoint created before validation, so failed configurations were marked complete
