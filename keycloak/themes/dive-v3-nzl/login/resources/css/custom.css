@@ -1,120 +1,20 @@
 /**
- * New Zealand Keycloak Theme
- * Auto-generated from NATO countries database
- * Generated: 2026-01-03T12:58:21Z
- * 
- * Primary: #00247D
- * Secondary: #CC142B
- * Accent: #ffffff
+ * dive-v3-nzl palette tokens (2026 refresh)
+ * Generated from login/theme.properties
  */
 
-/* CSS Variables for this instance */
 :root {
     --instance-primary: #00247D;
     --instance-secondary: #CC142B;
     --instance-accent: #ffffff;
     --instance-primary-rgb: 0, 36, 125;
     --instance-secondary-rgb: 204, 20, 43;
+    --instance-accent-rgb: 255, 255, 255;
+    --country-focus-x: 67%;
+    --country-focus-y: 39%;
 }
 
-/* Background gradient */
-.dive-background {
-    background: linear-gradient(135deg, #00247D 0%, #CC142B 100%);
-}
-
-/* Primary button styling */
-.dive-button-primary {
-    background: linear-gradient(135deg, #00247D 0%, #CC142B 100%);
-    transition: all 0.3s ease;
-}
-
-.dive-button-primary:hover {
-    box-shadow: 0 8px 25px rgba(0, 36, 125, 0.4);
-    transform: translateY(-2px);
-}
-
-/* Header styling */
-.dive-header h1 {
-    color: #00247D;
-}
-
-.dive-header .logo {
-    border-color: #00247D;
-}
-
-/* Input focus states */
-.dive-input:focus {
-    border-color: #00247D;
-    box-shadow: 0 0 0 3px rgba(0, 36, 125, 0.15);
-}
-
-/* Social/IdP link styling */
-.dive-social-link:hover {
-    border-color: #00247D;
-    background: rgba(0, 36, 125, 0.05);
-}
-
-.dive-social-link:focus {
-    border-color: #00247D;
-    box-shadow: 0 0 0 3px rgba(0, 36, 125, 0.15);
-}
-
-/* Links */
-.dive-link {
-    color: #00247D;
-}
-
-.dive-link:hover {
-    color: #CC142B;
-}
-
-/* Accent elements */
-.dive-accent {
-    color: #ffffff;
-}
-
-.dive-accent-bg {
-    background-color: #ffffff;
-}
-
-/* Instance badge */
-.dive-instance-badge {
-    background: rgba(0, 36, 125, 0.1);
-    border: 1px solid #00247D;
-    color: #00247D;
-}
-
-/* Alert/notification styling */
-.dive-alert-info {
-    border-left-color: #00247D;
-    background: rgba(0, 36, 125, 0.05);
-}
-
-/* OTP/WebAuthn specific styling */
-.otp-input:focus {
-    border-color: #00247D;
-    box-shadow: 0 0 0 3px rgba(0, 36, 125, 0.15);
-}
-
-.webauthn-button {
-    background: linear-gradient(135deg, #00247D 0%, #CC142B 100%);
-}
-
-/* Passkey/WebAuthn icon coloring */
-.passkey-icon {
-    color: #00247D;
-}
-
-/* Footer styling */
-.dive-footer a {
-    color: #00247D;
-}
-
-.dive-footer a:hover {
-    color: #CC142B;
-}
-
-/* Enhanced background prominence */
-.dive-background-image {
-    filter: blur(0.5px) saturate(1.6) brightness(0.95) contrast(1.2);
+.dive-body {
+    --country-focus-x: 67%;
+    --country-focus-y: 39%;
 }

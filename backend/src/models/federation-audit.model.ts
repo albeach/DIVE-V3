@@ -50,7 +50,9 @@ export type FederationEventType =
     | 'ENROLLMENT_REJECTED'
     | 'CREDENTIALS_EXCHANGED'
     | 'FEDERATION_ACTIVATED_V2'
-    | 'ENROLLMENT_REVOKED';
+    | 'ENROLLMENT_REVOKED'
+    | 'POLICY_SYNC_SENT'
+    | 'POLICY_SYNC_RECEIVED';
 
 /**
  * Federation audit entry

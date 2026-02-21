@@ -171,6 +171,15 @@ class OpalCdcService {
           // Non-fatal: SSE may not be initialized yet
           logger.debug('Could not notify SSE clients (service may not be initialized)', { topic });
         }
+
+        // Phase G1: Queue cross-instance policy notification for federation partners
+        try {
+          const { federationPolicyNotifyService } = await import('./federation-policy-notify.service');
+          federationPolicyNotifyService.queueTopicChange(topic);
+        } catch (error) {
+          // Non-fatal: federation notification is optional
+          logger.debug('Federation policy notification unavailable', { topic });
+        }
       } else {
         logger.error('CDC: Failed to publish to OPAL', {
           topic,

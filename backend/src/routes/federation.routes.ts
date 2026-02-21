@@ -1908,6 +1908,173 @@ router.post('/notify-revocation', strictRateLimiter, async (req: Request, res: R
     }
 });
 
+// ============================================
+// PHASE G: DYNAMIC POLICY SYNC
+// ============================================
+
+/**
+ * POST /api/federation/notify-policy-update
+ * Cross-wire policy update notification from a federation partner.
+ * When a partner's trust-related data changes, they send this notification
+ * so the local side can trigger an OPAL refresh.
+ * Rate-limited. Self-authenticating via ECDSA signature.
+ */
+router.post('/notify-policy-update', apiRateLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { senderInstanceCode, changedTopics, topicHashes, signature, signerCertPEM, timestamp, nonce } = req.body;
+
+        if (!senderInstanceCode || typeof senderInstanceCode !== 'string') {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'senderInstanceCode is required',
+            });
+            return;
+        }
+
+        if (!Array.isArray(changedTopics) || changedTopics.length === 0) {
+            res.status(400).json({
+                error: 'ValidationFailed',
+                message: 'changedTopics must be a non-empty array',
+            });
+            return;
+        }
+
+        // Verify ECDSA signature if present (backward-compatible: unsigned accepted with warning)
+        if (signature && signerCertPEM) {
+            const { instanceIdentityService } = await import('../services/instance-identity.service');
+            const signedFields: Record<string, string> = {
+                senderInstanceCode,
+                changedTopics: JSON.stringify(changedTopics),
+            };
+            if (timestamp) signedFields.timestamp = timestamp;
+            if (nonce) signedFields.nonce = nonce;
+
+            const canonical = JSON.stringify(
+                Object.keys(signedFields).sort().reduce((acc, key) => { acc[key] = signedFields[key]; return acc; }, {} as Record<string, string>),
+            );
+
+            const isValid = instanceIdentityService.verifySignature(canonical, signature, signerCertPEM);
+            if (!isValid) {
+                logger.warn('Policy update notification signature verification failed', { senderInstanceCode });
+                res.status(401).json({
+                    error: 'InvalidSignature',
+                    message: 'Policy update notification signature verification failed',
+                });
+                return;
+            }
+
+            logger.info('Policy update notification signature verified', { senderInstanceCode });
+        } else {
+            logger.warn('Unsigned policy update notification received (legacy client)', { senderInstanceCode });
+        }
+
+        logger.info('Received cross-wire policy update notification', {
+            senderInstanceCode,
+            changedTopics,
+        });
+
+        // Trigger local OPAL refresh
+        let refreshTriggered = false;
+        try {
+            const { opalCdcService } = await import('../services/opal-cdc.service');
+            const result = await opalCdcService.forcePublishAll();
+            refreshTriggered = result.success;
+        } catch (error) {
+            logger.warn('Failed to trigger OPAL refresh from policy notification', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+
+        // Audit trail
+        const localInstanceCode = process.env.INSTANCE_CODE || 'USA';
+        try {
+            const { federationAuditStore } = await import('../models/federation-audit.model');
+            await federationAuditStore.create({
+                eventType: 'POLICY_SYNC_RECEIVED',
+                actorId: 'system',
+                actorInstance: senderInstanceCode,
+                targetInstanceCode: localInstanceCode,
+                correlationId: `policy-sync-recv-${Date.now()}`,
+                timestamp: new Date(),
+                compliantWith: ['ACP-240', 'ADatP-5663'],
+                metadata: {
+                    changedTopics,
+                    topicHashes: topicHashes || {},
+                    refreshTriggered,
+                },
+            });
+        } catch (error) {
+            logger.debug('Could not create policy sync audit entry', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+
+        res.json({
+            acknowledged: true,
+            senderInstanceCode,
+            refreshTriggered,
+        });
+    } catch (error) {
+        logger.error('Cross-wire policy update notification processing failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to process policy update notification',
+        });
+    }
+});
+
+/**
+ * GET /api/federation/policy-summary
+ * Returns SHA256 hashes of trust-related policy data topics.
+ * Used by federation partners for drift detection (Phase G2).
+ * No auth required — hashes reveal no sensitive data.
+ */
+router.get('/policy-summary', apiRateLimiter, async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const { federationPolicyNotifyService } = await import('../services/federation-policy-notify.service');
+        const hashes = await federationPolicyNotifyService.computeAllHashes();
+        const instanceCode = process.env.INSTANCE_CODE || 'USA';
+
+        res.json({
+            instanceCode,
+            hashes,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error) {
+        logger.error('Failed to compute policy summary', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to compute policy summary',
+        });
+    }
+});
+
+/**
+ * GET /api/federation/policy-drift
+ * Admin endpoint: Detect policy drift across federation partners.
+ * Queries each active partner's /policy-summary and compares hashes.
+ */
+router.get('/policy-drift', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const { federationPolicyDriftService } = await import('../services/federation-policy-drift.service');
+        const report = await federationPolicyDriftService.detectDrift();
+
+        res.json(report);
+    } catch (error) {
+        logger.error('Policy drift detection failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to detect policy drift',
+        });
+    }
+});
+
 /**
  * POST /api/federation/revoke-local
  * Manually revoke local trust artifacts for a partner.

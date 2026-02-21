@@ -87,6 +87,18 @@ class FederationBootstrapService {
       // Both Hub and Spoke need these for auto-activation and revocation cascade
       this.registerEnrollmentEventHandlers();
 
+      // UNIVERSAL: G1 Policy Notification Service (mesh federation)
+      try {
+        const { federationPolicyNotifyService } = await import('./federation-policy-notify.service');
+        await federationPolicyNotifyService.initialize();
+        logger.info('Federation policy notification service initialized');
+      } catch (error) {
+        logger.warn('Federation policy notification service unavailable', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Non-blocking: notification is an enhancement, not a requirement
+      }
+
       this.initialized = true;
       this.bootstrapComplete = true;
 
