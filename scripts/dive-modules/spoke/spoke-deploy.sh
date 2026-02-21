@@ -64,14 +64,29 @@ export DIVE_SPOKE_DEPLOY_LOADED=1
 # and derives HUB_API_URL, HUB_OPAL_URL, HUB_KC_URL, HUB_VAULT_URL consistently.
 ##
 spoke_remote_normalize_hub_endpoints() {
-    # Determine source host (prefer explicit HUB_EXTERNAL_ADDRESS)
-    local hub_host="${HUB_EXTERNAL_ADDRESS:-}"
+    # If all Hub URLs are explicitly set, skip normalization entirely
+    if [ -n "${HUB_API_URL:-}" ] && [ -n "${HUB_IDP_URL:-}${HUB_KC_URL:-}" ]; then
+        # Ensure HUB_KC_URL is set (alias for HUB_IDP_URL)
+        export HUB_KC_URL="${HUB_KC_URL:-${HUB_IDP_URL:-}}"
+        export HUB_OPAL_URL="${HUB_OPAL_URL:-}"
+        export HUB_VAULT_URL="${HUB_VAULT_URL:-}"
+        log_info "Hub endpoints explicitly configured — skipping normalization"
+        log_info "  API:  ${HUB_API_URL}"
+        log_info "  IdP:  ${HUB_KC_URL}"
+        log_info "  OPAL: ${HUB_OPAL_URL:-not set}"
+        return 0
+    fi
 
-    # Fallback: derive host from HUB_API_URL when provided
-    if [ -z "$hub_host" ] && [ -n "${HUB_API_URL:-}" ]; then
+    # Determine source host: prefer explicit HUB_API_URL over HUB_EXTERNAL_ADDRESS
+    # (HUB_EXTERNAL_ADDRESS may be auto-detected from EC2 metadata, which on a spoke
+    # instance returns the SPOKE's IP, not the hub's)
+    local hub_host=""
+    if [ -n "${HUB_API_URL:-}" ]; then
         hub_host="${HUB_API_URL#https://}"
         hub_host="${hub_host#http://}"
         hub_host="${hub_host%%/*}"
+    elif [ -n "${HUB_EXTERNAL_ADDRESS:-}" ]; then
+        hub_host="${HUB_EXTERNAL_ADDRESS}"
     fi
 
     [ -z "$hub_host" ] && return 0
